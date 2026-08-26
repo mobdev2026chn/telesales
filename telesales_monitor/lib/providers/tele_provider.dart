@@ -246,6 +246,7 @@ class TeleProvider extends ChangeNotifier {
         _callLogs.clear();
         _callLogs.addAll(realLogs);
         _syncLeadsFromCallLogs();
+        _syncCallbacksFromCallLogs();
         ApiService.syncCallLogs(_callLogs, callerName: _callerName, callerPhone: _verifiedTrackingNumber);
         notifyListeners();
       }
@@ -545,39 +546,30 @@ class TeleProvider extends ChangeNotifier {
     }
   }
 
-  // Scheduled Callbacks
-  final List<ScheduledCallback> _callbacks = [
-    ScheduledCallback(
-      id: 'cb_1',
-      name: 'Keval Patel Traders',
-      phone: '+91 98980 11223',
-      scheduledTime: DateTime.now().add(const Duration(hours: 2)),
-      note: 'Was busy twice today — confirmed slot for pricing talk.',
-    ),
-    ScheduledCallback(
-      id: 'cb_2',
-      name: 'Sarfaraj Mitsubishi Technician',
-      phone: '+91 88663 20145',
-      scheduledTime: DateTime.now().add(const Duration(days: 1, hours: 1)),
-      note: 'Comparing AMC quotes. Bring competitor price sheet.',
-    ),
-    ScheduledCallback(
-      id: 'cb_3',
-      name: 'Yudhir Agarwal',
-      phone: '+91 97234 56789',
-      scheduledTime: DateTime.now().add(const Duration(days: 4)),
-      note: 'Renewal due — he will visit the shop and place order.',
-    ),
-    ScheduledCallback(
-      id: 'cb_4',
-      name: 'Megha Textiles',
-      phone: '+91 94260 88990',
-      scheduledTime: DateTime.now().add(const Duration(days: 17)),
-      note: 'Revisit at renewal season with fresh pricing.',
-    ),
-  ];
+  // Scheduled Callbacks (100% Dynamic)
+  final List<ScheduledCallback> _callbacks = [];
 
   List<ScheduledCallback> get callbacks => _callbacks;
+
+  void _syncCallbacksFromCallLogs() {
+    final Set<String> existingPhones = _callbacks.map((c) => c.phone).toSet();
+    for (var call in _callLogs) {
+      if ((call.type == CallType.missed || call.type == CallType.rejected) &&
+          call.phoneNumber.isNotEmpty &&
+          !existingPhones.contains(call.phoneNumber)) {
+        _callbacks.add(
+          ScheduledCallback(
+            id: 'cb_${call.id}',
+            name: call.contactName != 'Unknown' ? call.contactName : call.phoneNumber,
+            phone: call.phoneNumber,
+            scheduledTime: DateTime.now().add(Duration(hours: (_callbacks.length + 1) * 2)),
+            note: 'Missed call follow-up required',
+          ),
+        );
+        existingPhones.add(call.phoneNumber);
+      }
+    }
+  }
 
   void addScheduledCallback({
     required String name,
