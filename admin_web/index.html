@@ -634,7 +634,11 @@
 
   <!-- JAVASCRIPT LOGIC -->
   <script>
-    const API_BASE = '/api';
+    let API_BASE = '/api';
+    if (window.location.protocol === 'file:') {
+      API_BASE = 'https://telesales.askeva.io/api';
+    }
+
 
     function switchTab(tabId) {
       document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
