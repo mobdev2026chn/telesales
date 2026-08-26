@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/neo_card.dart';
-import '../../widgets/neo_button.dart';
+import '../../widgets/top_header.dart';
 import '../../providers/tele_provider.dart';
 
 class ManagerDashboard extends StatelessWidget {
@@ -15,71 +14,45 @@ class ManagerDashboard extends StatelessWidget {
     final tele = Provider.of<TeleProvider>(context);
     final stats = tele.backendStats;
 
-    final totalCalls = stats != null
-        ? (stats['totalCalls'] as int? ?? tele.trackedTotalCalls)
-        : tele.trackedTotalCalls;
-    final connectedCalls = stats != null
-        ? (stats['connectedCalls'] as int? ?? tele.trackedConnectedCalls)
-        : tele.trackedConnectedCalls;
-    final talkTimeFormatted = stats != null
-        ? (stats['talkTimeFormatted'] as String? ?? tele.trackedTalkTimeFormatted)
-        : tele.trackedTalkTimeFormatted;
-    final uniqueClients = stats != null
-        ? (stats['uniqueClients'] as int? ?? tele.simTrackedCallLogs.map((c) => c.phoneNumber).toSet().length)
-        : tele.simTrackedCallLogs.map((c) => c.phoneNumber).toSet().length;
-    final teamCount = stats != null
-        ? (stats['teamCount'] as int? ?? tele.employees.length)
-        : tele.employees.length;
-    final incoming = stats != null
-        ? (stats['incoming'] as int? ?? tele.trackedIncomingCalls)
-        : tele.trackedIncomingCalls;
-    final outgoing = stats != null
-        ? (stats['outgoing'] as int? ?? tele.trackedOutgoingCalls)
-        : tele.trackedOutgoingCalls;
-    final missed = stats != null
-        ? (stats['missed'] as int? ?? tele.trackedMissedCalls)
-        : tele.trackedMissedCalls;
-    final neverAttended = stats != null
-        ? (stats['neverAttended'] as int? ?? tele.trackedNeverAttendedCalls)
-        : tele.trackedNeverAttendedCalls;
+    final logs = tele.simTrackedCallLogs;
+    final totalCalls = stats != null ? (stats['totalCalls'] as int? ?? tele.trackedTotalCalls) : tele.trackedTotalCalls;
+    final connectedCalls = stats != null ? (stats['connectedCalls'] as int? ?? tele.trackedConnectedCalls) : tele.trackedConnectedCalls;
+    final talkTimeFormatted = stats != null ? (stats['talkTimeFormatted'] as String? ?? tele.trackedTalkTimeFormatted) : tele.trackedTalkTimeFormatted;
+    final uniqueClients = stats != null ? (stats['uniqueClients'] as int? ?? logs.map((c) => c.phoneNumber).where((p) => p.isNotEmpty).toSet().length) : logs.map((c) => c.phoneNumber).where((p) => p.isNotEmpty).toSet().length;
+    final incoming = stats != null ? (stats['incoming'] as int? ?? tele.trackedIncomingCalls) : tele.trackedIncomingCalls;
+    final outgoing = stats != null ? (stats['outgoing'] as int? ?? tele.trackedOutgoingCalls) : tele.trackedOutgoingCalls;
+    final missed = stats != null ? (stats['missed'] as int? ?? tele.trackedMissedCalls) : tele.trackedMissedCalls;
+    final neverAttended = stats != null ? (stats['neverAttended'] as int? ?? tele.trackedNeverAttendedCalls) : tele.trackedNeverAttendedCalls;
 
-    final topTalkTimeName = stats != null && stats['topPerformer'] is Map
-        ? stats['topPerformer']['name'] ?? tele.callerName.toUpperCase()
-        : (stats != null && stats['topTalkTime'] is Map
-            ? stats['topTalkTime']['name'] ?? tele.callerName.toUpperCase()
-            : tele.callerName.toUpperCase());
+    final topTalkTimeName = tele.callerName.isNotEmpty ? tele.callerName.toUpperCase().split(' ').first : 'PRIYANKA';
+    final topTalkTimeDuration = tele.trackedTalkTimeFormatted.toUpperCase();
 
-    final topTalkTimeDuration = stats != null && stats['topPerformer'] is Map
-        ? stats['topPerformer']['duration'] ?? tele.trackedTalkTimeFormatted.toUpperCase()
-        : (stats != null && stats['topTalkTime'] is Map
-            ? stats['topTalkTime']['duration'] ?? tele.trackedTalkTimeFormatted.toUpperCase()
-            : tele.trackedTalkTimeFormatted.toUpperCase());
+    // Dynamic Hourly Bar Pattern (9AM - 6PM)
+    final List<int> hourCounts = List.filled(10, 0);
+    for (var c in logs) {
+      final h = c.timestamp.hour;
+      if (h >= 9 && h <= 18) {
+        hourCounts[h - 9]++;
+      }
+    }
+    int maxHourCount = 1;
+    for (var cnt in hourCounts) {
+      if (cnt > maxHourCount) maxHourCount = cnt;
+    }
 
-    final currentDateStr = DateFormat('d MMM yyyy').format(DateTime.now()).toUpperCase();
+    final List<String> hourLabels = ['9AM', '10AM', '11AM', '12PM', '1PM', '2PM', '3PM', '4PM', '5PM', '6PM'];
+    final List<Map<String, dynamic>> hourlyData = List.generate(10, (i) {
+      final cnt = hourCounts[i];
+      final val = cnt > 0 ? (cnt / maxHourCount).clamp(0.15, 1.0) : 0.08;
+      return {
+        'hour': hourLabels[i],
+        'val': val,
+        'calls': '$cnt',
+        'isPeak': cnt > 0 && cnt == maxHourCount,
+      };
+    });
 
-    final List<Map<String, dynamic>> hourlyData = (stats != null && stats['hourlyCalls'] is List)
-        ? (stats['hourlyCalls'] as List).map((h) {
-            final c = h['calls'] as int? ?? 0;
-            final isPeak = h['isPeak'] as bool? ?? false;
-            final val = totalCalls > 0 ? (c / (totalCalls > 0 ? totalCalls : 1)).clamp(0.1, 1.0) : 0.1;
-            return {
-              'hour': h['hour']?.toString() ?? '',
-              'val': val,
-              'isPeak': isPeak,
-            };
-          }).toList()
-        : [
-            {'hour': '9A', 'val': 0.15, 'isPeak': false},
-            {'hour': '10A', 'val': 0.35, 'isPeak': false},
-            {'hour': '11A', 'val': 0.55, 'isPeak': false},
-            {'hour': '12P', 'val': 0.45, 'isPeak': false},
-            {'hour': '1P', 'val': 0.70, 'isPeak': false},
-            {'hour': '2P', 'val': 0.90, 'isPeak': true},
-            {'hour': '3P', 'val': 0.60, 'isPeak': false},
-            {'hour': '4P', 'val': 0.45, 'isPeak': false},
-            {'hour': '5P', 'val': 0.35, 'isPeak': false},
-            {'hour': '6P', 'val': 0.20, 'isPeak': false},
-          ];
+    final targetProgress = totalCalls > 0 ? (totalCalls / 300).clamp(0.01, 1.0) : 0.0;
 
     return RefreshIndicator(
       color: AppTheme.greenNeon,
@@ -94,52 +67,14 @@ class ManagerDashboard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Top Header
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'DASHBOARD',
-                          style: AppTheme.headline(size: 30, color: AppTheme.ink900),
-                        ),
-                        Text(
-                          '.',
-                          style: AppTheme.headline(size: 30, color: AppTheme.greenNeon),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'ASKEVA · TEAM VIEW · $currentDateStr',
-                      style: AppTheme.mono(size: 10, color: AppTheme.muted),
-                    ),
-                  ],
-                ),
-                NeoButton.pill(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  onTap: () => tele.logout(),
-                  child: Row(
-                    children: [
-                      Text(
-                        'MANAGER',
-                        style: AppTheme.label(size: 9, color: AppTheme.ink900, letterSpacing: 0.12),
-                      ),
-                      const SizedBox(width: 4),
-                      const Icon(Icons.close, size: 12, color: AppTheme.ink900),
-                    ],
-                  ),
-                ),
-              ],
+            const TopHeader(
+              title: 'DASHBOARD',
+              userName: 'RASMI DESAI',
+              selectedSimIndex: 1,
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 16),
 
-            // Card 01: Total Calls Today
+            // Card 01: REALTIME TEAM CALL METRICS
             NeoCard(
               backgroundColor: AppTheme.ink900,
               shadowColor: AppTheme.ink900,
@@ -151,124 +86,140 @@ class ManagerDashboard extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        '01 · TOTAL CALLS TODAY',
+                        '01 · REALTIME TEAM CALL METRICS',
                         style: AppTheme.label(size: 9, color: AppTheme.limeYellow, letterSpacing: 0.18),
                       ),
                       Text(
-                        'TEAM OF $teamCount',
+                        tele.activeSimLabel,
                         style: AppTheme.label(size: 9, color: AppTheme.muted, letterSpacing: 0.14),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.baseline,
                     textBaseline: TextBaseline.alphabetic,
                     children: [
                       Text(
                         '$totalCalls',
-                        style: AppTheme.headline(size: 48, color: AppTheme.white),
+                        style: AppTheme.headline(size: 56, color: AppTheme.white),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 12),
                       Text(
-                        'connected $connectedCalls',
-                        style: AppTheme.italicSerif(size: 17, color: AppTheme.limeYellow),
+                        '$talkTimeFormatted talk',
+                        style: AppTheme.italicSerif(size: 20, color: AppTheme.greenGrass),
                       ),
                     ],
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '$talkTimeFormatted talk time · $uniqueClients unique clients',
+                    '$connectedCalls connected · $uniqueClients unique clients · target 300',
                     style: AppTheme.body(size: 11, color: AppTheme.lightMuted),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Green Progress Bar
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(999),
+                    child: Container(
+                      height: 8,
+                      color: AppTheme.ink800,
+                      child: FractionallySizedBox(
+                        alignment: Alignment.centerLeft,
+                        widthFactor: targetProgress,
+                        child: Container(
+                          decoration: const BoxDecoration(color: AppTheme.greenNeon),
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 12),
 
-            // 2x2 Telemetry Grid
-            Row(
+            // 2x2 Quick Metrics Grid
+            Column(
               children: [
-                Expanded(
-                  child: NeoCard(
-                    backgroundColor: AppTheme.white,
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('02 · INCOMING', style: AppTheme.label(size: 9, color: AppTheme.muted)),
-                        const SizedBox(height: 4),
-                        Text('$incoming', style: AppTheme.headline(size: 32, color: AppTheme.greenDark)),
-                        const SizedBox(height: 2),
-                        Text('$incoming calls', style: AppTheme.body(size: 11, color: AppTheme.ink700)),
-                      ],
+                Row(
+                  children: [
+                    Expanded(
+                      child: NeoCard(
+                        backgroundColor: AppTheme.white,
+                        shadowColor: AppTheme.ink900,
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('02 · OUTGOING', style: AppTheme.label(size: 9, color: AppTheme.muted)),
+                            const SizedBox(height: 4),
+                            Text('$outgoing', style: AppTheme.headline(size: 28, color: AppTheme.orangePill)),
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: NeoCard(
+                        backgroundColor: AppTheme.white,
+                        shadowColor: AppTheme.ink900,
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('03 · INCOMING', style: AppTheme.label(size: 9, color: AppTheme.muted)),
+                            const SizedBox(height: 4),
+                            Text('$incoming', style: AppTheme.headline(size: 28, color: AppTheme.greenDark)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: NeoCard(
-                    backgroundColor: AppTheme.white,
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('03 · OUTGOING', style: AppTheme.label(size: 9, color: AppTheme.muted)),
-                        const SizedBox(height: 4),
-                        Text('$outgoing', style: AppTheme.headline(size: 32, color: AppTheme.ink900)),
-                        const SizedBox(height: 2),
-                        Text('$outgoing calls', style: AppTheme.body(size: 11, color: AppTheme.ink700)),
-                      ],
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: NeoCard(
+                        backgroundColor: AppTheme.greenNeon,
+                        shadowColor: AppTheme.ink900,
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('04 · MISSED', style: AppTheme.label(size: 9, color: AppTheme.white)),
+                            const SizedBox(height: 4),
+                            Text('$missed', style: AppTheme.headline(size: 28, color: AppTheme.white)),
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            Row(
-              children: [
-                Expanded(
-                  child: NeoCard(
-                    backgroundColor: AppTheme.greenNeon,
-                    shadowColor: AppTheme.ink900,
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('04 · MISSED', style: AppTheme.label(size: 9, color: AppTheme.ink900)),
-                        const SizedBox(height: 4),
-                        Text('$missed', style: AppTheme.headline(size: 32, color: AppTheme.ink900)),
-                        const SizedBox(height: 2),
-                        Text('needs callback', style: AppTheme.bodyBold(size: 11, color: AppTheme.ink900)),
-                      ],
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: NeoCard(
+                        backgroundColor: AppTheme.white,
+                        shadowColor: AppTheme.ink900,
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('05 · NEVER ATTENDED', style: AppTheme.label(size: 9, color: AppTheme.muted)),
+                            const SizedBox(height: 4),
+                            Text('$neverAttended', style: AppTheme.headline(size: 28, color: AppTheme.redMissed)),
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: NeoCard(
-                    backgroundColor: AppTheme.white,
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('05 · NEVER ATTENDED', style: AppTheme.label(size: 9, color: AppTheme.muted)),
-                        const SizedBox(height: 4),
-                        Text('$neverAttended', style: AppTheme.headline(size: 32, color: AppTheme.ink900)),
-                        const SizedBox(height: 2),
-                        Text('by client', style: AppTheme.body(size: 11, color: AppTheme.ink700)),
-                      ],
-                    ),
-                  ),
+                  ],
                 ),
               ],
             ),
             const SizedBox(height: 14),
 
-            // Hourly Calls Bar Chart
+            // Hourly Distribution Bar Chart Card
             NeoCard(
               backgroundColor: AppTheme.white,
+              shadowColor: AppTheme.ink900,
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -277,30 +228,55 @@ class ManagerDashboard extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'HOURLY CALLS',
-                        style: AppTheme.label(size: 10, color: AppTheme.ink900, letterSpacing: 0.18),
+                        'HOURLY CALL DISTRIBUTION',
+                        style: AppTheme.label(size: 9, color: AppTheme.ink900, letterSpacing: 0.18),
                       ),
-                      Text(
-                        'peak 1–2 PM',
-                        style: AppTheme.mono(size: 9, color: AppTheme.muted),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppTheme.white,
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: AppTheme.ink900, width: 1),
+                        ),
+                        child: Text(
+                          'TODAY',
+                          style: AppTheme.label(size: 8, color: AppTheme.ink900),
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 18),
+
                   SizedBox(
-                    height: 90,
+                    height: 100,
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: hourlyData.map((item) {
                         final val = item['val'] as double;
                         final isPeak = item['isPeak'] as bool;
+                        final calls = item['calls'] as String;
+
                         return Column(
                           mainAxisAlignment: MainAxisAlignment.end,
                           children: [
+                            if (isPeak) ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.ink900,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  '$calls calls',
+                                  style: AppTheme.mono(size: 7.5, color: AppTheme.limeYellow),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                            ],
                             Container(
                               width: 22,
-                              height: (val * 65).clamp(12.0, 65.0),
+                              height: (val * 60).clamp(6.0, 60.0),
                               decoration: BoxDecoration(
                                 color: isPeak ? AppTheme.greenNeon : AppTheme.ink900,
                                 borderRadius: BorderRadius.circular(4),
@@ -309,7 +285,7 @@ class ManagerDashboard extends StatelessWidget {
                             const SizedBox(height: 6),
                             Text(
                               item['hour'] as String,
-                              style: AppTheme.mono(size: 8, color: AppTheme.muted),
+                              style: AppTheme.mono(size: 7.5, color: AppTheme.muted),
                             ),
                           ],
                         );
@@ -321,22 +297,36 @@ class ManagerDashboard extends StatelessWidget {
             ),
             const SizedBox(height: 14),
 
-            // Top Talk Time Banner
-            GestureDetector(
+            // Top Talk Time Action Banner (Green Bar)
+            NeoCard(
+              backgroundColor: AppTheme.greenNeon,
+              shadowColor: AppTheme.ink900,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               onTap: onNavigateToBoard,
-              child: NeoCard(
-                gradient: AppTheme.greenGradient,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'TOP TALK TIME · $topTalkTimeName — $topTalkTimeDuration',
-                      style: AppTheme.label(size: 10, color: AppTheme.ink900, letterSpacing: 0.14),
-                    ),
-                    const Icon(Icons.arrow_forward, size: 16, color: AppTheme.ink900),
-                  ],
-                ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      const Text('🏆 ', style: TextStyle(fontSize: 16)),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'TOP TALK TIME: $topTalkTimeName ($topTalkTimeDuration)',
+                            style: AppTheme.label(size: 10, color: AppTheme.white, letterSpacing: 0.12),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Tap to view team leaderboard & rankings',
+                            style: AppTheme.body(size: 11, color: AppTheme.white.withValues(alpha: 0.85)),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const Icon(Icons.arrow_forward, size: 18, color: AppTheme.white),
+                ],
               ),
             ),
           ],

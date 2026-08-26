@@ -1,19 +1,44 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/neo_card.dart';
 import '../../widgets/neo_button.dart';
+import '../../widgets/top_header.dart';
 import '../../providers/tele_provider.dart';
 
-class RecordingsScreen extends StatelessWidget {
+class RecordingsScreen extends StatefulWidget {
   const RecordingsScreen({super.key});
+
+  @override
+  State<RecordingsScreen> createState() => _RecordingsScreenState();
+}
+
+class _RecordingsScreenState extends State<RecordingsScreen> {
+  int _selectedFilterIndex = 0; // 0 = ALL, 1 = OVER 5M, 2 = UNDER 5M
+  final String _selectedStaff = 'ALL STAFF';
+  final Map<String, int> _ratings = {};
 
   @override
   Widget build(BuildContext context) {
     final tele = Provider.of<TeleProvider>(context);
-    final currentDateStr = DateFormat('d MMM yyyy').format(DateTime.now()).toUpperCase();
-    final recordings = tele.recordings;
+
+    final callerName = tele.callerName.isNotEmpty ? tele.callerName.toUpperCase() : 'RASMI DESAI';
+
+    final List<Map<String, dynamic>> dynamicRecordings = [];
+
+    for (var r in tele.recordings) {
+      dynamicRecordings.add({
+        'id': r.id,
+        'callerName': r.agentName,
+        'contactName': r.clientName,
+        'timeStr': 'Recorded · ${r.duration.inMinutes}m ${r.duration.inSeconds % 60}s',
+        'quote': r.note.isNotEmpty ? '"${r.note}"' : '"Voice call recording logged."',
+        'isPlaying': r.isPlaying,
+        'progress': r.progress,
+      });
+    }
+
+    final totalCount = dynamicRecordings.length;
 
     return RefreshIndicator(
       color: AppTheme.greenNeon,
@@ -28,251 +53,241 @@ class RecordingsScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Top Header Bar
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'RECORDINGS',
-                          style: AppTheme.headline(size: 30, color: AppTheme.ink900),
-                        ),
-                        Text(
-                          '.',
-                          style: AppTheme.headline(size: 30, color: AppTheme.greenNeon),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'ASKEVA · TEAM VIEW · $currentDateStr',
-                      style: AppTheme.mono(size: 10, color: AppTheme.muted),
-                    ),
-                  ],
-                ),
-                NeoButton.pill(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  onTap: () => tele.logout(),
-                  child: Row(
-                    children: [
-                      Text(
-                        tele.currentRole == UserRole.manager ? 'MANAGER' : 'CALLER',
-                        style: AppTheme.label(size: 9, color: AppTheme.ink900, letterSpacing: 0.12),
-                      ),
-                      const SizedBox(width: 4),
-                      const Icon(Icons.close, size: 12, color: AppTheme.ink900),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            // Live Test Recording & Status Card
-            NeoCard(
-              backgroundColor: tele.isCallRecordingActive ? AppTheme.ink900 : AppTheme.white,
-              padding: const EdgeInsets.all(14),
-              child: Row(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: tele.isCallRecordingActive ? AppTheme.redMissed : AppTheme.paper,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: AppTheme.ink900, width: 1.2),
-                    ),
-                    child: Icon(
-                      tele.isCallRecordingActive ? Icons.mic : Icons.mic_none,
-                      color: tele.isCallRecordingActive ? AppTheme.white : AppTheme.ink900,
-                      size: 18,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          tele.isCallRecordingActive ? '🔴 RECORDING LIVE NOW...' : 'AUTO-RECORDING ENGINE READY',
-                          style: AppTheme.label(
-                            size: 9,
-                            color: tele.isCallRecordingActive ? AppTheme.limeYellow : AppTheme.ink900,
-                            letterSpacing: 0.12,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          tele.isCallRecordingActive
-                              ? 'Speaking on call · Audio capturing...'
-                              : 'Incoming & Outgoing calls record automatically',
-                          style: AppTheme.body(
-                            size: 11,
-                            color: tele.isCallRecordingActive ? AppTheme.lightMuted : AppTheme.muted,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () {
-                      if (tele.isCallRecordingActive) {
-                        tele.stopTestRecording();
-                      } else {
-                        tele.startTestRecording();
-                      }
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: tele.isCallRecordingActive ? AppTheme.redMissed : AppTheme.greenNeon,
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(color: AppTheme.ink900, width: 1),
-                        boxShadow: AppTheme.neoShadowSm(),
-                      ),
-                      child: Text(
-                        tele.isCallRecordingActive ? 'STOP & SAVE' : 'TEST RECORD',
-                        style: AppTheme.label(
-                          size: 9,
-                          color: tele.isCallRecordingActive ? AppTheme.white : AppTheme.ink900,
-                          letterSpacing: 0.1,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+            TopHeader(
+              title: 'RECORDINGS',
+              userName: callerName,
+              selectedSimIndex: 1,
             ),
             const SizedBox(height: 14),
 
-            // Call Recordings indicator
-            Row(
-              children: [
-                Container(width: 8, height: 8, color: AppTheme.greenNeon),
-                const SizedBox(width: 8),
-                Text(
-                  'SAVED RECORDINGS (${recordings.length})',
-                  style: AppTheme.label(size: 10, color: AppTheme.ink900, letterSpacing: 0.18),
-                ),
-              ],
+            // ALL STAFF Dropdown
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppTheme.white,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: AppTheme.ink900, width: 1.5),
+                boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    _selectedStaff,
+                    style: AppTheme.label(size: 10, color: AppTheme.ink900, letterSpacing: 0.14),
+                  ),
+                  const Icon(Icons.keyboard_arrow_down, size: 20, color: AppTheme.ink900),
+                ],
+              ),
             ),
             const SizedBox(height: 12),
 
+            // Filter Tabs (ALL, OVER 5M, UNDER 5M)
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: AppTheme.white,
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: AppTheme.ink900, width: 1.2),
+                    ),
+                    child: Row(
+                      children: [
+                        _buildFilterTab('ALL · $totalCount', 0),
+                        _buildFilterTab('OVER 5M', 1),
+                        _buildFilterTab('UNDER 5M', 2),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+
             // Recordings List
-            if (recordings.isEmpty)
-              NeoCard(
-                backgroundColor: AppTheme.white,
-                padding: const EdgeInsets.all(24),
+            if (dynamicRecordings.isEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.all(40),
                 child: Center(
                   child: Column(
                     children: [
-                      const Icon(Icons.mic_none, size: 36, color: AppTheme.muted),
+                      const Icon(Icons.mic_none, size: 44, color: AppTheme.muted),
                       const SizedBox(height: 10),
-                      Text(
-                        'No call recordings in database yet.',
-                        style: AppTheme.bodyBold(size: 14, color: AppTheme.ink900),
-                      ),
+                      Text('NO RECORDINGS YET', style: AppTheme.headline(size: 18)),
                       const SizedBox(height: 4),
                       Text(
-                        'Calls made on the device will be automatically recorded and synced here.',
-                        textAlign: TextAlign.center,
+                        'Recorded calls will appear here automatically.',
                         style: AppTheme.body(size: 12, color: AppTheme.muted),
                       ),
                     ],
                   ),
                 ),
-              )
-            else
+              ),
+            ] else ...[
               ListView.separated(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                itemCount: recordings.length,
-                separatorBuilder: (context, index) => const SizedBox(height: 12),
-                itemBuilder: (context, index) {
-                  final rec = recordings[index];
+                itemCount: dynamicRecordings.length,
+                separatorBuilder: (ctx, i) => const SizedBox(height: 12),
+                itemBuilder: (ctx, i) {
+                  final rec = dynamicRecordings[i];
+                  final id = rec['id'] as String;
+                  final caller = rec['callerName'] as String;
+                  final contact = rec['contactName'] as String;
+                  final timeStr = rec['timeStr'] as String;
+                  final quote = rec['quote'] as String;
+                  final isPlaying = rec['isPlaying'] as bool? ?? false;
+                  final progress = rec['progress'] as double? ?? 0.0;
+                  final rating = _ratings[id] ?? 0;
 
-                return NeoCard(
-                  backgroundColor: AppTheme.white,
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                  return NeoCard(
+                    backgroundColor: AppTheme.white,
+                    shadowColor: AppTheme.ink900,
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Header: Caller -> Contact
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
                               children: [
                                 Text(
-                                  '${rec.callerName} → ${rec.contactName}',
-                                  style: AppTheme.bodyBold(size: 15, color: AppTheme.ink900),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                                  '$caller → ',
+                                  style: AppTheme.label(size: 11, color: AppTheme.greenDark),
                                 ),
-                                const SizedBox(height: 2),
                                 Text(
-                                  '${rec.dateStr} · ${rec.timeStr} · ${rec.durationFormatted}',
-                                  style: AppTheme.mono(size: 11, color: AppTheme.muted),
+                                  contact,
+                                  style: AppTheme.bodyBold(size: 14, color: AppTheme.ink900),
                                 ),
                               ],
                             ),
-                          ),
-                          GestureDetector(
-                            onTap: () => tele.toggleRecordingPlayback(rec.id),
-                            child: Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: AppTheme.white,
-                                shape: BoxShape.circle,
-                                border: Border.all(color: AppTheme.ink900, width: 1.5),
-                                boxShadow: AppTheme.neoShadowSm(),
-                              ),
-                              child: Icon(
-                                rec.isPlaying ? Icons.pause : Icons.play_arrow,
-                                color: AppTheme.ink900,
-                                size: 22,
+                            GestureDetector(
+                              onTap: () => tele.toggleRecordingPlayback(id),
+                              child: Container(
+                                width: 32,
+                                height: 32,
+                                decoration: BoxDecoration(
+                                  color: isPlaying ? AppTheme.greenNeon : AppTheme.white,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: AppTheme.ink900, width: 1.2),
+                                ),
+                                child: Icon(
+                                  isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                  size: 20,
+                                  color: AppTheme.ink900,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
 
-                      // Audio Progress Bar
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(999),
-                        child: Container(
-                          height: 8,
-                          decoration: BoxDecoration(
+                        // Time & Duration
+                        Text(
+                          timeStr,
+                          style: AppTheme.mono(size: 10, color: AppTheme.muted),
+                        ),
+                        const SizedBox(height: 8),
+
+                        // Audio Progress Line
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(999),
+                          child: Container(
+                            height: 4,
                             color: AppTheme.paper,
-                            border: Border.all(color: AppTheme.ink900, width: 0.8),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: FractionallySizedBox(
-                            alignment: Alignment.centerLeft,
-                            widthFactor: rec.progress.clamp(0.05, 1.0),
-                            child: Container(color: AppTheme.greenNeon),
+                            child: FractionallySizedBox(
+                              alignment: Alignment.centerLeft,
+                              widthFactor: isPlaying ? progress : 0.0,
+                              child: Container(color: AppTheme.greenNeon),
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 10),
+                        const SizedBox(height: 10),
 
-                      // Transcript summary quote
-                      Text(
-                        rec.quote,
-                        style: AppTheme.italicSerif(size: 13, color: AppTheme.ink700),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
+                        // Quote Block
+                        Text(
+                          quote,
+                          style: AppTheme.italicSerif(size: 12.5, color: AppTheme.ink900),
+                        ),
+                        const SizedBox(height: 12),
+
+                        // Call Quality Rating & Save Button
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                Text('Call Quality:', style: AppTheme.label(size: 9, color: AppTheme.muted)),
+                                const SizedBox(width: 6),
+                                Row(
+                                  children: List.generate(5, (starIdx) {
+                                    final isStarred = starIdx < rating;
+                                    return GestureDetector(
+                                      onTap: () => setState(() => _ratings[id] = starIdx + 1),
+                                      child: Icon(
+                                        isStarred ? Icons.star : Icons.star_border,
+                                        size: 16,
+                                        color: isStarred ? AppTheme.orangePill : AppTheme.muted,
+                                      ),
+                                    );
+                                  }),
+                                ),
+                              ],
+                            ),
+                            NeoButton.pill(
+                              backgroundColor: AppTheme.ink900,
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                              onTap: () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    backgroundColor: AppTheme.ink900,
+                                    content: Text('Recording feedback saved.', style: AppTheme.bodyBold(size: 12, color: AppTheme.limeYellow)),
+                                  ),
+                                );
+                              },
+                              child: Text(
+                                'SAVE',
+                                style: AppTheme.label(size: 8.5, color: AppTheme.limeYellow),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ],
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterTab(String label, int index) {
+    final isSelected = _selectedFilterIndex == index;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _selectedFilterIndex = index),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          decoration: BoxDecoration(
+            color: isSelected ? AppTheme.ink900 : Colors.transparent,
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: AppTheme.label(
+                size: 8.5,
+                color: isSelected ? AppTheme.limeYellow : AppTheme.ink900,
+              ),
+            ),
+          ),
         ),
       ),
     );

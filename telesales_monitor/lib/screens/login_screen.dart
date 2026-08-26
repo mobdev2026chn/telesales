@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
-import '../widgets/neo_card.dart';
 import '../widgets/neo_button.dart';
 import '../widgets/ticker_banner.dart';
 import '../providers/tele_provider.dart';
@@ -14,24 +13,58 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  int _selectedTab = 0; // 0 = Manager / Admin, 1 = Caller / Agent
-  final TextEditingController _adminEmailCtrl = TextEditingController(text: 'admin@askeva.com');
-  final TextEditingController _adminPassCtrl = TextEditingController(text: '••••••••');
+  final TextEditingController _usernameCtrl = TextEditingController();
+  final TextEditingController _passwordCtrl = TextEditingController();
   bool _obscurePass = true;
+  bool _isLoading = false;
+  UserRole _selectedRole = UserRole.manager;
 
   @override
   void dispose() {
-    _adminEmailCtrl.dispose();
-    _adminPassCtrl.dispose();
+    _usernameCtrl.dispose();
+    _passwordCtrl.dispose();
     super.dispose();
   }
 
-  void _loginAsAdmin(TeleProvider tele) {
-    tele.setRole(UserRole.manager);
+  void _selectRole(UserRole role) {
+    setState(() {
+      _selectedRole = role;
+    });
   }
 
-  void _loginAsCaller(TeleProvider tele) {
-    tele.setRole(UserRole.caller);
+  Future<void> _handleLogin(TeleProvider tele) async {
+    final userText = _usernameCtrl.text.trim();
+    final passText = _passwordCtrl.text.trim();
+
+    if (userText.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppTheme.ink900,
+          content: Text('Please enter a username or email', style: AppTheme.bodyBold(size: 12, color: AppTheme.limeYellow)),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    final success = await tele.performLogin(
+      username: userText,
+      password: passText,
+      role: _selectedRole,
+    );
+
+    if (mounted) {
+      setState(() => _isLoading = false);
+      if (!success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppTheme.ink900,
+            content: Text('Authentication failed. Please check credentials.', style: AppTheme.bodyBold(size: 12, color: AppTheme.redMissed)),
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -43,289 +76,308 @@ class _LoginScreenState extends State<LoginScreen> {
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
+            constraints: const BoxConstraints(maxWidth: 480),
             child: Column(
               children: [
                 Expanded(
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const SizedBox(height: 12),
-                        Text(
-                          'ASKEVA · TELEMONITOR',
-                          style: AppTheme.label(size: 10, color: AppTheme.muted, letterSpacing: 0.18),
-                        ),
-                        const SizedBox(height: 14),
-                        RichText(
-                          text: TextSpan(
-                            children: [
-                              TextSpan(
-                                text: 'EVERY CALL\nIS A ',
-                                style: AppTheme.headline(size: 44, color: AppTheme.ink900),
-                              ),
-                              TextSpan(
-                                text: 'lead',
-                                style: AppTheme.italicSerif(size: 42, color: AppTheme.greenDark),
-                              ),
-                              TextSpan(
-                                text: '.',
-                                style: AppTheme.headline(size: 44, color: AppTheme.greenNeon),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          'Real-time call monitoring, automated call recording and team analytics connected to MongoDB.',
-                          style: AppTheme.body(size: 13, color: AppTheme.ink700),
-                        ),
-                        const SizedBox(height: 20),
-                        const TickerBanner(),
-                        const SizedBox(height: 24),
-
-                        // Tab Switcher
+                        // Top Dark Hero Header Card
                         Container(
-                          padding: const EdgeInsets.all(4),
+                          margin: const EdgeInsets.all(12),
+                          padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
                           decoration: BoxDecoration(
-                            color: AppTheme.white,
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(color: AppTheme.ink900, width: 1.5),
+                            color: AppTheme.ink900,
+                            borderRadius: BorderRadius.circular(20),
                           ),
-                          child: Row(
+                          child: Stack(
                             children: [
-                              Expanded(
-                                child: GestureDetector(
-                                  onTap: () => setState(() => _selectedTab = 0),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(vertical: 10),
-                                    decoration: BoxDecoration(
-                                      color: _selectedTab == 0 ? AppTheme.ink900 : Colors.transparent,
-                                      borderRadius: BorderRadius.circular(999),
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        'ADMIN LOGIN',
-                                        style: AppTheme.label(
-                                          size: 11,
-                                          color: _selectedTab == 0 ? AppTheme.limeYellow : AppTheme.ink700,
-                                          letterSpacing: 0.12,
-                                        ),
-                                      ),
-                                    ),
+                              // Watermark '01'
+                              Positioned(
+                                right: 0,
+                                top: -10,
+                                child: Text(
+                                  '01',
+                                  style: AppTheme.headline(
+                                    size: 96,
+                                    color: AppTheme.white.withValues(alpha: 0.06),
                                   ),
                                 ),
                               ),
-                              Expanded(
-                                child: GestureDetector(
-                                  onTap: () => setState(() => _selectedTab = 1),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(vertical: 10),
-                                    decoration: BoxDecoration(
-                                      color: _selectedTab == 1 ? AppTheme.ink900 : Colors.transparent,
-                                      borderRadius: BorderRadius.circular(999),
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        'CALLER AGENT',
-                                        style: AppTheme.label(
-                                          size: 11,
-                                          color: _selectedTab == 1 ? AppTheme.greenNeon : AppTheme.ink700,
-                                          letterSpacing: 0.12,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-
-                        // Tab 0: Admin Login
-                        if (_selectedTab == 0) ...[
-                          NeoCard(
-                            backgroundColor: AppTheme.white,
-                            padding: const EdgeInsets.all(20),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      'ADMINISTRATOR ACCESS',
-                                      style: AppTheme.label(size: 10, color: AppTheme.ink900, letterSpacing: 0.16),
-                                    ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: AppTheme.limeYellow,
-                                        borderRadius: BorderRadius.circular(999),
-                                        border: Border.all(color: AppTheme.ink900, width: 1),
-                                      ),
-                                      child: Text(
-                                        'MONGODB',
-                                        style: AppTheme.label(size: 8, color: AppTheme.ink900),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 16),
-                                Text('EMAIL ADDRESS', style: AppTheme.label(size: 9, color: AppTheme.muted)),
-                                const SizedBox(height: 6),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.paper,
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(color: AppTheme.ink900, width: 1.2),
-                                  ),
-                                  child: TextField(
-                                    controller: _adminEmailCtrl,
-                                    style: AppTheme.bodyBold(size: 13),
-                                    decoration: const InputDecoration(
-                                      border: InputBorder.none,
-                                      prefixIcon: Icon(Icons.email_outlined, size: 18, color: AppTheme.ink900),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 14),
-                                Text('PASSWORD / PASSCODE', style: AppTheme.label(size: 9, color: AppTheme.muted)),
-                                const SizedBox(height: 6),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.paper,
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(color: AppTheme.ink900, width: 1.2),
-                                  ),
-                                  child: TextField(
-                                    controller: _adminPassCtrl,
-                                    obscureText: _obscurePass,
-                                    style: AppTheme.bodyBold(size: 13),
-                                    decoration: InputDecoration(
-                                      border: InputBorder.none,
-                                      prefixIcon: const Icon(Icons.lock_outline, size: 18, color: AppTheme.ink900),
-                                      suffixIcon: IconButton(
-                                        icon: Icon(_obscurePass ? Icons.visibility_off : Icons.visibility, size: 18, color: AppTheme.ink900),
-                                        onPressed: () => setState(() => _obscurePass = !_obscurePass),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 20),
-                                NeoButton(
-                                  backgroundColor: AppTheme.ink900,
-                                  shadowColor: AppTheme.greenNeon,
-                                  onTap: () => _loginAsAdmin(tele),
-                                  child: Center(
-                                    child: Text(
-                                      'SIGN IN AS ADMIN / MANAGER →',
-                                      style: AppTheme.label(size: 11, color: AppTheme.white, letterSpacing: 0.12),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-
-                        // Tab 1: Caller Agent Login
-                        if (_selectedTab == 1) ...[
-                          NeoCard(
-                            backgroundColor: AppTheme.white,
-                            padding: const EdgeInsets.all(20),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      'CALLER / AGENT ACCESS',
-                                      style: AppTheme.label(size: 10, color: AppTheme.ink900, letterSpacing: 0.16),
-                                    ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: AppTheme.greenNeon,
-                                        borderRadius: BorderRadius.circular(999),
-                                        border: Border.all(color: AppTheme.ink900, width: 1),
-                                      ),
-                                      child: Text(
-                                        'DEVICE SIM',
-                                        style: AppTheme.label(size: 8, color: AppTheme.ink900),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 14),
-                                Text(
-                                  tele.verifiedTrackingNumber.isNotEmpty
-                                      ? 'DEVICE PHONE: ${tele.verifiedTrackingNumber}'
-                                      : 'ACTIVE SIM: ${tele.activeSimLabel}',
-                                  style: AppTheme.headline(size: 18, color: AppTheme.ink900),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Automatic background call sync & lead capture enabled.',
-                                  style: AppTheme.body(size: 12, color: AppTheme.muted),
-                                ),
-                                const SizedBox(height: 16),
-
-                                // Auto Record Toggle Row
-                                Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.paper,
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(color: AppTheme.ink900, width: 1.2),
-                                  ),
-                                  child: Row(
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Official ASK EVA Logo Image & Badge
+                                  Row(
                                     children: [
-                                      const Icon(Icons.mic, color: AppTheme.greenDark, size: 22),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              'ALWAYS AUTO-RECORD CALLS',
-                                              style: AppTheme.label(size: 9, color: AppTheme.ink900, letterSpacing: 0.1),
+                                      Container(
+                                        width: 54,
+                                        height: 54,
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(color: AppTheme.white, width: 1.5),
+                                          boxShadow: AppTheme.neoShadowSm(color: AppTheme.greenNeon),
+                                        ),
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(10),
+                                          child: Image.asset(
+                                            'assets/images/ask_eva_logo.jpg',
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (ctx, err, stack) => Container(
+                                              color: AppTheme.greenNeon,
+                                              child: Center(
+                                                child: Text('ASK EVA', style: AppTheme.headline(size: 10, color: AppTheme.white)),
+                                              ),
                                             ),
-                                            Text(
-                                              'Automatically records audio during ongoing calls',
-                                              style: AppTheme.body(size: 11, color: AppTheme.muted),
-                                            ),
-                                          ],
+                                          ),
                                         ),
                                       ),
-                                      Switch(
-                                        value: tele.autoRecordEnabled,
-                                        activeThumbColor: AppTheme.greenNeon,
-                                        activeTrackColor: AppTheme.ink900,
-                                        onChanged: (_) => tele.toggleAutoRecord(),
+                                      const SizedBox(width: 12),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.greenNeon,
+                                          borderRadius: const BorderRadius.only(
+                                            topLeft: Radius.circular(8),
+                                            topRight: Radius.circular(8),
+                                            bottomRight: Radius.circular(8),
+                                            bottomLeft: Radius.circular(0),
+                                          ),
+                                          border: Border.all(color: AppTheme.ink900, width: 1.5),
+                                        ),
+                                        child: Text(
+                                          'ASK EVA',
+                                          style: AppTheme.headline(size: 16, color: AppTheme.white),
+                                        ),
                                       ),
                                     ],
                                   ),
+                                  const SizedBox(height: 20),
+
+                                  // EVERY CALL IS A lead.
+                                  RichText(
+                                    text: TextSpan(
+                                      children: [
+                                        TextSpan(
+                                          text: 'EVERY CALL\nIS A ',
+                                          style: AppTheme.headline(size: 40, color: AppTheme.white),
+                                        ),
+                                        TextSpan(
+                                          text: 'lead',
+                                          style: AppTheme.italicSerif(size: 40, color: AppTheme.greenGrass),
+                                        ),
+                                        TextSpan(
+                                          text: '.',
+                                          style: AppTheme.headline(size: 40, color: AppTheme.greenNeon),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    'Monitor telesales calls, track lead status and coach your callers from one dashboard.',
+                                    style: AppTheme.body(size: 12, color: AppTheme.white.withValues(alpha: 0.7)),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Ticker Banner Strip
+                        const TickerBanner(),
+                        const SizedBox(height: 16),
+
+                        // Sign In Form Container
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Section Title
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(width: 8, height: 8, color: AppTheme.greenNeon),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'SELECT ROLE & SIGN IN',
+                                        style: AppTheme.label(size: 11, color: AppTheme.ink900, letterSpacing: 0.18),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+
+                              // ROLE SELECTOR TOGGLE BAR
+                              Container(
+                                padding: const EdgeInsets.all(3),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.white,
+                                  borderRadius: BorderRadius.circular(999),
+                                  border: Border.all(color: AppTheme.ink900, width: 1.5),
+                                  boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
                                 ),
-                                const SizedBox(height: 20),
-                                NeoButton.accent(
-                                  onTap: () => _loginAsCaller(tele),
-                                  child: Center(
-                                    child: Text(
-                                      'CONTINUE AS CALLER AGENT →',
-                                      style: AppTheme.label(size: 11, color: AppTheme.ink900, letterSpacing: 0.12),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: GestureDetector(
+                                        onTap: () => _selectRole(UserRole.manager),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(vertical: 10),
+                                          decoration: BoxDecoration(
+                                            color: _selectedRole == UserRole.manager ? AppTheme.ink900 : Colors.transparent,
+                                            borderRadius: BorderRadius.circular(999),
+                                          ),
+                                          child: Center(
+                                            child: Text(
+                                              '👔 MANAGER',
+                                              style: AppTheme.label(
+                                                size: 10,
+                                                color: _selectedRole == UserRole.manager ? AppTheme.limeYellow : AppTheme.ink900,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: GestureDetector(
+                                        onTap: () => _selectRole(UserRole.caller),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(vertical: 10),
+                                          decoration: BoxDecoration(
+                                            color: _selectedRole == UserRole.caller ? AppTheme.ink900 : Colors.transparent,
+                                            borderRadius: BorderRadius.circular(999),
+                                          ),
+                                          child: Center(
+                                            child: Text(
+                                              '📱 CALLER AGENT',
+                                              style: AppTheme.label(
+                                                size: 10,
+                                                color: _selectedRole == UserRole.caller ? AppTheme.limeYellow : AppTheme.ink900,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+
+                              // Username Input
+                              Text('USERNAME OR PHONE', style: AppTheme.label(size: 9, color: AppTheme.muted)),
+                              const SizedBox(height: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.white,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: AppTheme.ink900, width: 1.5),
+                                  boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+                                ),
+                                child: TextField(
+                                  controller: _usernameCtrl,
+                                  style: AppTheme.mono(size: 14, color: AppTheme.ink900),
+                                  decoration: const InputDecoration(
+                                    hintText: 'Enter username or phone number...',
+                                    hintStyle: TextStyle(color: AppTheme.muted, fontSize: 12),
+                                    border: InputBorder.none,
+                                    isDense: true,
+                                    contentPadding: EdgeInsets.symmetric(vertical: 10),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+
+                              // Password Input
+                              Text('PASSWORD', style: AppTheme.label(size: 9, color: AppTheme.muted)),
+                              const SizedBox(height: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.white,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: AppTheme.ink900, width: 1.5),
+                                  boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+                                ),
+                                child: TextField(
+                                  controller: _passwordCtrl,
+                                  obscureText: _obscurePass,
+                                  style: AppTheme.mono(size: 14, color: AppTheme.ink900),
+                                  decoration: InputDecoration(
+                                    hintText: 'Enter password...',
+                                    hintStyle: const TextStyle(color: AppTheme.muted, fontSize: 12),
+                                    border: InputBorder.none,
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                                    suffixIcon: IconButton(
+                                      icon: Icon(
+                                        _obscurePass ? Icons.remove_red_eye_outlined : Icons.visibility,
+                                        size: 18,
+                                        color: AppTheme.ink900,
+                                      ),
+                                      onPressed: () => setState(() => _obscurePass = !_obscurePass),
                                     ),
                                   ),
                                 ),
-                              ],
-                            ),
+                              ),
+                              const SizedBox(height: 20),
+
+                              // Sign In Button
+                              NeoButton(
+                                backgroundColor: AppTheme.ink900,
+                                shadowColor: AppTheme.greenNeon,
+                                onTap: () {
+                                  if (!_isLoading) {
+                                    _handleLogin(tele);
+                                  }
+                                },
+                                child: Center(
+                                  child: _isLoading
+                                      ? const SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            valueColor: AlwaysStoppedAnimation<Color>(AppTheme.limeYellow),
+                                          ),
+                                        )
+                                      : Text(
+                                          _selectedRole == UserRole.manager
+                                              ? 'SIGN IN AS MANAGER →'
+                                              : 'SIGN IN AS CALLER →',
+                                          style: AppTheme.label(size: 11.5, color: AppTheme.limeYellow, letterSpacing: 0.14),
+                                        ),
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+
+                              // Forgot Password Link
+                              Center(
+                                child: TextButton(
+                                  onPressed: () {},
+                                  child: Text(
+                                    'FORGOT PASSWORD?',
+                                    style: AppTheme.label(
+                                      size: 10,
+                                      color: AppTheme.greenDark,
+                                      letterSpacing: 0.12,
+                                    ).copyWith(decoration: TextDecoration.underline),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                            ],
                           ),
-                        ],
+                        ),
                       ],
                     ),
                   ),

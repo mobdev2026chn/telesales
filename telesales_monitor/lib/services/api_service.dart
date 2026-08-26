@@ -253,4 +253,37 @@ class ApiService {
       return false;
     }
   }
+
+  // 7. Login Admin / Manager via Backend API
+  static Future<Map<String, dynamic>?> loginAdmin(String emailOrUsername, String password) async {
+    try {
+      final res = await _postWithFallback('/auth/admin-login', {
+        'email': emailOrUsername,
+        'username': emailOrUsername,
+        'password': password,
+      });
+      if (res != null && (res.statusCode == 200 || res.statusCode == 201)) {
+        return jsonDecode(res.body) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      debugPrint('ApiService.loginAdmin error: $e');
+    }
+    return null;
+  }
+
+  // 8. Verify Caller via Backend API
+  static Future<Map<String, dynamic>?> verifyCaller(String phoneOrUsername, {int simSlot = 1}) async {
+    try {
+      final res = await _postWithFallback('/auth/caller-verify', {
+        'phoneNumber': phoneOrUsername,
+        'simSlot': simSlot,
+      });
+      if (res != null && (res.statusCode == 200 || res.statusCode == 201)) {
+        return jsonDecode(res.body) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      debugPrint('ApiService.verifyCaller error: $e');
+    }
+    return null;
+  }
 }
