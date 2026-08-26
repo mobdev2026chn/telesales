@@ -1,0 +1,32 @@
+:root{
+/* Base palette */
+--green-600:#2E9E2B;
+--green-500:#3DC838; /* brand green */
+--green-400:#7FD63B;
+--lime-400:#C8FF4A;
+--ink-900:#10180C; /* near-black green ink */
+--ink-800:#1A2314;
+--paper:#EFECE3;
+--white:#FFFFFF;
+/* WhatsApp chat palette */
+--wa-canvas:#E7DFD4;
+--wa-bubble-in:#FFFFFF;
+--wa-bubble-out:#D9FDD3;
+--wa-action:#1DA559;
+--wa-meta:#8A9285;
+/* Signature gradient (135°) */
+--gradient-signature:linear-gradient(135deg,#3DC838 0%,#7FD63B 55%,#C8FF4A 100%); /* @kind color */
+/* Semantic aliases */
+--surface-page:var(--paper);
+--surface-card:var(--white);
+--surface-inverse:var(--ink-800);
+--surface-accent:var(--green-500);
+--surface-highlight:var(--lime-400);
+--text-heading:var(--ink-900);
+--text-body:#3A4033;
+--text-muted:#7A8172;
+--text-on-accent:var(--white);
+--text-on-inverse:var(--paper);
+--text-accent:var(--green-600);
+--border-ink:var(--ink-900);
+}

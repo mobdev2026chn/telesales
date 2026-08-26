@@ -1,0 +1,20 @@
+:root{
+--font-display:'Anton',Impact,sans-serif; /* headlines, ALL CAPS */
+--font-accent:'Playfair Display',Georgia,serif; /* italic accent words, lowercase */
+--font-body:'Archivo',Helvetica,sans-serif;
+--font-mono:'Space Mono',monospace;
+/* Scale */
+--text-hero:88px;
+--text-h1:56px;
+--text-h2:40px;
+--text-stat:44px;
+--text-body-lg:18px;
+--text-body-md:15px;
+--text-body-sm:13px;
+--text-label:12px;
+/* Label treatment: uppercase + tracking */
+--tracking-label:0.18em;
+--tracking-display:0.01em;
+--leading-display:0.95;
+--leading-body:1.5;
+}

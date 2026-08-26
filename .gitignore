@@ -1,58 +1,27 @@
-# Node.js & Dependencies
+# Dependencies & Build artifacts
 node_modules/
 **/node_modules/
-.env
-**/.env
-.env.local
-.env.*.local
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-uploads/
-**/uploads/
-
-# Flutter & Dart
+build/
+**/build/
 .dart_tool/
 **/.dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
-/build/
-**/build/
-**/ephemeral/
-android/app/debug/
-android/app/profile/
-android/app/release/
+android/.gradle/
+**/android/.gradle/
+android/.kotlin/
+**/android/.kotlin/
 *.apk
 *.aab
-*.symbols
-*.map.json
 
-# IDE & System Files
+# IDE & System
 .idea/
 **/.idea/
 .vscode/
 **/.vscode/
 *.iml
 **/*.iml
-*.ipr
-*.iws
 .DS_Store
 Thumbs.db
-.thumbnail
-*.thumbnail
-*.log
-
-# Workspace root standalone / duplicate folders & files
-server/
-candidates/
-_ds/
-Telesales Monitor App.dc.html
-icon.svg
-ios-frame.jsx
-manifest.json
-support.js
-sw.js
-package.json
-package-lock.json

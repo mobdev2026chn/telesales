@@ -5,8 +5,39 @@ const Employee = require('../models/Employee');
 const Lead = require('../models/Lead');
 const Recording = require('../models/Recording');
 
-// 1. GET /api/admin/dashboard - 100% Real dynamically aggregated team telemetry from MongoDB
-router.get('/dashboard', async (req, res) => {
+// 1. POST /api/calls/sync - Mobile device pushes batch call logs
+router.post('/calls/sync', async (req, res) => {
+  try {
+    const { callerId, callerName, callerPhone, calls } = req.body;
+    if (!Array.isArray(calls)) {
+      return res.status(400).json({ success: false, message: 'Calls array expected' });
+    }
+
+    const inserted = [];
+    for (const call of calls) {
+      const log = await CallLog.create({
+        callerId: callerId || 'caller_1',
+        callerName: callerName || 'Priyanka Panchal',
+        callerPhone: callerPhone || '+91 98250 12340',
+        contactName: call.contactName || 'Unknown',
+        phoneNumber: call.phoneNumber,
+        type: call.type || 'outgoing',
+        timestamp: call.timestamp ? new Date(call.timestamp) : new Date(),
+        durationSeconds: call.durationSeconds || 0,
+        simSlot: call.simSlot || 1,
+        note: call.note || '',
+      });
+      inserted.push(log);
+    }
+
+    res.json({ success: true, count: inserted.length, message: 'Calls synchronized with MongoDB' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 2. GET /api/dashboard/stats - Admin aggregated telemetry (100% Real Live Data)
+router.get('/dashboard/stats', async (req, res) => {
   try {
     const totalCalls = await CallLog.countDocuments();
     const connectedCalls = await CallLog.countDocuments({ durationSeconds: { $gt: 0 } });
@@ -96,7 +127,7 @@ router.get('/dashboard', async (req, res) => {
 
     res.json({
       success: true,
-      data: {
+      stats: {
         totalCalls,
         connectedCalls,
         talkTimeFormatted,
@@ -106,7 +137,7 @@ router.get('/dashboard', async (req, res) => {
         outgoing,
         missed,
         neverAttended,
-        topPerformer,
+        topTalkTime: topPerformer,
         hourlyCalls,
       }
     });
@@ -115,87 +146,8 @@ router.get('/dashboard', async (req, res) => {
   }
 });
 
-// 2. GET & POST /api/admin/users - User Management (Add / List Users)
-router.get('/users', async (req, res) => {
-  try {
-    let users = await Employee.find().sort({ createdAt: -1 });
-
-    // Seed sample admin and initial users if empty
-    if (users.length === 0) {
-      const initialUsers = [
-        {
-          id: 'admin_1',
-          name: 'Rasmi Desai',
-          phone: '+91 98250 00000',
-          role: 'admin',
-          team: 'Management',
-          dailyTarget: 150,
-        },
-        {
-          id: 'caller_1',
-          name: 'Priyanka Panchal',
-          phone: '+91 98250 12340',
-          role: 'caller',
-          team: 'Telesales Mumbai',
-          dailyTarget: 100,
-        },
-      ];
-      users = await Employee.insertMany(initialUsers);
-    }
-
-    res.json({ success: true, count: users.length, users });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-router.post('/users', async (req, res) => {
-  try {
-    const { name, phone, role, team, dailyTarget } = req.body;
-    if (!name || !phone) {
-      return res.status(400).json({ success: false, message: 'Name and phone are required' });
-    }
-
-    const newUser = await Employee.create({
-      id: `user_${Date.now()}`,
-      name,
-      phone,
-      role: role || 'caller',
-      team: team || 'Telesales Team',
-      dailyTarget: dailyTarget || 100,
-    });
-
-    res.status(201).json({ success: true, user: newUser, message: 'User created successfully' });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-router.put('/users/:id', async (req, res) => {
-  try {
-    const { name, phone, role, team, dailyTarget } = req.body;
-    const updated = await Employee.findOneAndUpdate(
-      { id: req.params.id },
-      { $set: { name, phone, role, team, dailyTarget } },
-      { new: true }
-    );
-    res.json({ success: true, user: updated, message: 'User updated successfully' });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-router.delete('/users/:id', async (req, res) => {
-  try {
-    await Employee.findOneAndDelete({ id: req.params.id });
-    res.json({ success: true, message: 'User deleted successfully' });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// 3. GET /api/admin/leaderboard - Real live leaderboard
-router.get('/leaderboard', async (req, res) => {
+// 3. GET /api/employees/leaderboard - Real live leaderboard aggregated directly from synced calls
+router.get('/employees/leaderboard', async (req, res) => {
   try {
     const liveLeaderboard = await CallLog.aggregate([
       {
@@ -217,7 +169,7 @@ router.get('/leaderboard', async (req, res) => {
         name: item._id.callerName || item._id.callerPhone || `Caller ${index + 1}`,
         phone: item._id.callerPhone || '+91 98250 12340',
         role: 'caller',
-        team: 'Active Team',
+        team: 'Telesales Team',
         totalCalls: item.totalCalls,
         connectedCalls: item.connectedCalls,
         talkTimeSeconds: item.talkTimeSeconds,
@@ -227,13 +179,38 @@ router.get('/leaderboard', async (req, res) => {
     }
 
     const employees = await Employee.find().sort({ rank: 1 });
-    res.json({ success: true, count: employees.length, employees });
+    res.json({ success: true, employees });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// 4. GET & POST /api/admin/recordings - Real live audio recordings in MongoDB
+// 4. GET /api/leads - Real live CRM pipeline leads from MongoDB
+router.get('/leads', async (req, res) => {
+  try {
+    const leads = await Lead.find().sort({ updatedAt: -1 });
+    const won = leads.filter(l => l.status === 'won').length;
+    const interested = leads.filter(l => l.status === 'interested').length;
+    const followUp = leads.filter(l => l.status === 'followUp').length;
+    const other = leads.length - (won + interested + followUp);
+
+    res.json({
+      success: true,
+      pipeline: {
+        total: leads.length,
+        won,
+        interested,
+        followUp,
+        other: Math.max(other, 0),
+      },
+      leads,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 5. GET & POST /api/recordings - Real live audio recordings in MongoDB
 router.get('/recordings', async (req, res) => {
   try {
     const recordings = await Recording.find().sort({ createdAt: -1 });
@@ -246,7 +223,6 @@ router.get('/recordings', async (req, res) => {
         usedGB: Math.max(usedGB, 0.05),
         totalGB: 5.0,
         freeGB: +(5.0 - Math.max(usedGB, 0.05)).toFixed(2),
-        count: recordings.length,
       },
       recordings,
     });
@@ -274,41 +250,6 @@ router.post('/recordings', async (req, res) => {
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
-});
-
-// 5. GET /api/admin/leads - Real live CRM pipeline leads from MongoDB
-router.get('/leads', async (req, res) => {
-  try {
-    const leads = await Lead.find().sort({ updatedAt: -1 });
-    const won = leads.filter(l => l.status === 'won').length;
-    const interested = leads.filter(l => l.status === 'interested').length;
-    const followUp = leads.filter(l => l.status === 'followUp').length;
-    const other = leads.length - (won + interested + followUp);
-
-    res.json({
-      success: true,
-      pipeline: {
-        total: leads.length,
-        won,
-        interested,
-        followUp,
-        other: Math.max(other, 0),
-      },
-      leads,
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// 6. GET /api/admin/export/daily - Export daily report
-router.get('/export/daily', (req, res) => {
-  res.json({
-    success: true,
-    fileName: `telesales_report_${new Date().toISOString().slice(0, 10)}.xlsx`,
-    downloadUrl: '/api/admin/export/download',
-    generatedAt: new Date().toISOString(),
-  });
 });
 
 module.exports = router;

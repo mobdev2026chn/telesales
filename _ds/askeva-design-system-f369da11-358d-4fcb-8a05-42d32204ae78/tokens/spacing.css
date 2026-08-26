@@ -1,0 +1,11 @@
+:root{
+--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;
+--radius-card:16px;
+--radius-bubble:12px;
+--radius-pill:999px;
+--border-w:1px;
+/* Hard offset shadow — the signature card treatment */
+--shadow-card:4px 4px 0 var(--ink-900);
+--shadow-card-sm:2px 2px 0 var(--ink-900);
+--shadow-btn:3px 3px 0 var(--ink-900);
+}

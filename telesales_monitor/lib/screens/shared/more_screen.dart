@@ -47,6 +47,47 @@ class _MoreScreenState extends State<MoreScreen> {
               ),
               const SizedBox(height: 16),
 
+              // Card 0: ADMIN WEB PORTAL & USER MANAGEMENT
+              NeoCard(
+                backgroundColor: AppTheme.ink900,
+                shadowColor: AppTheme.ink900,
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('ADMIN WEB PORTAL', style: AppTheme.headline(size: 18, color: AppTheme.white)),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppTheme.greenNeon,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: AppTheme.ink900, width: 1),
+                          ),
+                          child: Text('WEB APP', style: AppTheme.label(size: 8.5, color: AppTheme.ink900)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text('Manage telesales team, add users/callers & view cloud telemetry.', style: AppTheme.body(size: 11, color: AppTheme.lightMuted)),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        const Icon(Icons.language, size: 14, color: AppTheme.limeYellow),
+                        const SizedBox(width: 6),
+                        Text(
+                          'https://telesales.askeva.io/admin',
+                          style: AppTheme.mono(size: 11, color: AppTheme.limeYellow),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+
               // Card 1: Employee detail
               GestureDetector(
                 onTap: widget.onNavigateToBoard,

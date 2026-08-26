@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ASK EVA · Telesales Admin Web Portal</title>
+  
+  <!-- Modern Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;600;700;800&family=Playfair+Display:ital@1&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --ink900: #10180C;
+      --paper: #EFECE3;
+      --green-neon: #3DC838;
+      --lime-yellow: #C8FF4A;
+      --green-grass: #7FD63B;
+      --white: #FFFFFF;
+      --muted: #64748B;
+      --border-dark: #10180C;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--paper);
+      color: var(--ink900);
+      font-family: 'Archivo', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* NEO SHADOWS */
+    .neo-shadow {
+      box-shadow: 4px 4px 0px var(--ink900);
+    }
+    .neo-shadow-sm {
+      box-shadow: 2.5px 2.5px 0px var(--ink900);
+    }
+    .neo-border {
+      border: 2px solid var(--ink900);
+    }
+
+    /* HEADER BAR */
+    header {
+      background-color: var(--ink900);
+      color: var(--white);
+      padding: 16px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 3px solid var(--ink900);
+    }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .brand-logo {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      border: 1.5px solid var(--white);
+      box-shadow: 2px 2px 0px var(--green-neon);
+      object-fit: cover;
+    }
+
+    .brand-title {
+      font-family: 'Anton', sans-serif;
+      font-size: 26px;
+      letter-spacing: 1px;
+    }
+
+    .brand-title span {
+      color: var(--green-neon);
+    }
+
+    .user-profile-pill {
+      background-color: var(--white);
+      color: var(--ink900);
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      font-weight: 700;
+      border: 1.5px solid var(--ink900);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      background-color: var(--green-neon);
+      border-radius: 50%;
+    }
+
+    /* NAVIGATION TABS */
+    nav {
+      background-color: var(--paper);
+      padding: 16px 32px 0 32px;
+      border-bottom: 2px solid var(--ink900);
+      display: flex;
+      gap: 12px;
+      overflow-x: auto;
+    }
+
+    .nav-btn {
+      padding: 10px 20px;
+      font-family: 'Space Mono', monospace;
+      font-size: 12px;
+      font-weight: 700;
+      border: 2px solid var(--ink900);
+      border-bottom: none;
+      border-radius: 12px 12px 0 0;
+      background-color: var(--white);
+      color: var(--ink900);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .nav-btn.active {
+      background-color: var(--ink900);
+      color: var(--lime-yellow);
+    }
+
+    /* MAIN CONTENT WRAPPER */
+    main {
+      padding: 28px 32px 60px 32px;
+      max-width: 1300px;
+      margin: 0 auto;
+      width: 100%;
+      flex: 1;
+    }
+
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
+
+    /* SECTION SUBHEADER */
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .section-title {
+      font-family: 'Space Mono', monospace;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .square-indicator {
+      width: 10px;
+      height: 10px;
+      background-color: var(--green-neon);
+    }
+
+    /* GRID & CARDS */
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1;));
+      gap: 18px;
+      margin-bottom: 24px;
+    }
+
+    .neo-card {
+      background-color: var(--white);
+      border: 2px solid var(--ink900);
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 4px 4px 0px var(--ink900);
+    }
+
+    .neo-card.dark {
+      background-color: var(--ink900);
+      color: var(--white);
+    }
+
+    .card-label {
+      font-family: 'Space Mono', monospace;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--muted);
+      letter-spacing: 1px;
+    }
+    .neo-card.dark .card-label {
+      color: var(--lime-yellow);
+    }
+
+    .card-value {
+      font-family: 'Anton', sans-serif;
+      font-size: 42px;
+      margin: 8px 0 4px 0;
+      line-height: 1;
+    }
+
+    .card-subtext {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .neo-card.dark .card-subtext {
+      color: #94A3B8;
+    }
+
+    /* BUTTONS */
+    .btn-action {
+      background-color: var(--ink900);
+      color: var(--lime-yellow);
+      font-family: 'Space Mono', monospace;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 12px 20px;
+      border: 2px solid var(--ink900);
+      border-radius: 14px;
+      box-shadow: 3px 3px 0px var(--green-neon);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: transform 0.1s ease;
+    }
+
+    .btn-action:hover {
+      transform: translate(-1px, -1px);
+    }
+    .btn-action:active {
+      transform: translate(2px, 2px);
+      box-shadow: 1px 1px 0px var(--green-neon);
+    }
+
+    .btn-secondary {
+      background-color: var(--white);
+      color: var(--ink900);
+      box-shadow: 3px 3px 0px var(--ink900);
+    }
+
+    /* DATA TABLE FOR USER MANAGEMENT */
+    .table-container {
+      background-color: var(--white);
+      border: 2px solid var(--ink900);
+      border-radius: 16px;
+      box-shadow: 4px 4px 0px var(--ink900);
+      overflow: hidden;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+
+    th {
+      background-color: var(--ink900);
+      color: var(--white);
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 14px 18px;
+      letter-spacing: 1px;
+    }
+
+    td {
+      padding: 14px 18px;
+      border-bottom: 1px solid #E2E8F0;
+      font-size: 13px;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    .badge-role {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-family: 'Space Mono', monospace;
+      font-size: 9px;
+      font-weight: 700;
+      border: 1px solid var(--ink900);
+    }
+    .badge-admin {
+      background-color: var(--ink900);
+      color: var(--lime-yellow);
+    }
+    .badge-manager {
+      background-color: #64748B;
+      color: var(--white);
+    }
+    .badge-caller {
+      background-color: var(--green-neon);
+      color: var(--ink900);
+    }
+
+    .btn-sm {
+      padding: 6px 12px;
+      font-size: 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-family: 'Space Mono', monospace;
+      font-weight: 700;
+      border: 1px solid var(--ink900);
+    }
+    .btn-edit {
+      background-color: var(--white);
+      color: var(--ink900);
+    }
+    .btn-delete {
+      background-color: #EF4444;
+      color: var(--white);
+    }
+
+    /* MODAL DIALOG */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: rgba(16, 24, 12, 0.75);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal-card {
+      background-color: var(--paper);
+      border: 2.5px solid var(--ink900);
+      border-radius: 20px;
+      width: 100%;
+      max-width: 500px;
+      padding: 28px;
+      box-shadow: 6px 6px 0px var(--ink900);
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-label {
+      font-family: 'Space Mono', monospace;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--muted);
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .form-control {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1.5px solid var(--ink900);
+      border-radius: 12px;
+      background-color: var(--white);
+      font-family: 'Space Mono', monospace;
+      font-size: 13px;
+      color: var(--ink900);
+      box-shadow: 2px 2px 0px var(--ink900);
+    }
+
+    /* PODIUM FOR LEADERBOARD */
+    .podium-container {
+      display: flex;
+      align-items: flex-end;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .podium-step {
+      flex: 1;
+      text-align: center;
+    }
+    .podium-block {
+      border: 2px solid var(--ink900);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 4px 4px 0px var(--ink900);
+    }
+    .podium-block.rank-1 {
+      height: 180px;
+      background-color: var(--ink900);
+      color: var(--white);
+    }
+    .podium-block.rank-2 {
+      height: 140px;
+      background-color: var(--white);
+    }
+    .podium-block.rank-3 {
+      height: 110px;
+      background-color: var(--white);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER BAR -->
+  <header>
+    <div class="brand-group">
+      <img src="/uploads/ask_eva_logo.jpg" onError="this.src='/assets/images/ask_eva_logo.jpg'" alt="ASK EVA" class="brand-logo" />
+      <div class="brand-title">ASK EVA <span>TELESALES ADMIN</span></div>
+    </div>
+
+    <div class="user-profile-pill">
+      <div class="status-dot"></div>
+      <span id="currentAdminName">RASMI DESAI (ADMIN)</span>
+    </div>
+  </header>
+
+  <!-- NAVIGATION TABS -->
+  <nav>
+    <button class="nav-btn active" onclick="switchTab('dashboard')">📊 DASHBOARD</button>
+    <button class="nav-btn" onclick="switchTab('users')">👥 USER MANAGEMENT</button>
+    <button class="nav-btn" onclick="switchTab('leaderboard')">🏆 LEADERBOARD</button>
+    <button class="nav-btn" onclick="switchTab('recordings')">🎙️ CALL RECORDINGS</button>
+    <button class="nav-btn" onclick="switchTab('leads')">🎯 LEADS PIPELINE</button>
+  </nav>
+
+  <!-- MAIN CONTAINER -->
+  <main>
+
+    <!-- 1. DASHBOARD TAB -->
+    <div id="tab-dashboard" class="tab-content active">
+      <div class="section-header">
+        <div class="section-title">
+          <div class="square-indicator"></div>
+          REALTIME TEAM TELEMETRY & CALL METRICS
+        </div>
+        <button class="btn-action btn-secondary" onclick="loadDashboardData()">🔄 REFRESH METRICS</button>
+      </div>
+
+      <div class="grid-4">
+        <div class="neo-card dark">
+          <div class="card-label">01 · TOTAL CALLS</div>
+          <div class="card-value" id="statTotalCalls">0</div>
+          <div class="card-subtext" id="statTalkTime">0h 00m total talk time</div>
+        </div>
+
+        <div class="neo-card">
+          <div class="card-label">02 · CONNECTED CALLS</div>
+          <div class="card-value" id="statConnected">0</div>
+          <div class="card-subtext" id="statUniqueClients">0 unique clients</div>
+        </div>
+
+        <div class="neo-card">
+          <div class="card-label">03 · OUTGOING CALLS</div>
+          <div class="card-value" id="statOutgoing" style="color: var(--green-grass);">0</div>
+          <div class="card-subtext">Active dialer dispatches</div>
+        </div>
+
+        <div class="neo-card">
+          <div class="card-label">04 · MISSED / UNATTENDED</div>
+          <div class="card-value" id="statMissed" style="color: #EF4444;">0</div>
+          <div class="card-subtext" id="statNeverAttended">0 never attended</div>
+        </div>
+      </div>
+
+      <!-- Top Performer Hero Card -->
+      <div class="neo-card dark" style="margin-bottom: 24px; border-color: var(--green-neon);">
+        <div class="section-title" style="color: var(--lime-yellow); margin-bottom: 8px;">
+          👑 TOP PERFORMING CALLER TODAY
+        </div>
+        <div style="font-family: 'Anton', sans-serif; font-size: 28px;" id="topPerformerName">PRIYANKA PANCHAL</div>
+        <div style="font-size: 13px; color: #94A3B8; margin-top: 4px;" id="topPerformerTalkTime">Talk Time: 4h 12m · 95 calls logged</div>
+      </div>
+    </div>
+
+    <!-- 2. USER MANAGEMENT TAB (CRUD) -->
+    <div id="tab-users" class="tab-content">
+      <div class="section-header">
+        <div class="section-title">
+          <div class="square-indicator"></div>
+          TELESALES TEAM USERS & SALES AGENTS
+        </div>
+        <button class="btn-action" onclick="openAddUserModal()">+ ADD NEW USER</button>
+      </div>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>USER NAME</th>
+              <th>PHONE / SIM NUMBER</th>
+              <th>ROLE</th>
+              <th>TEAM / DEPT</th>
+              <th>DAILY TARGET</th>
+              <th>STATUS</th>
+              <th>ACTIONS</th>
+            </tr>
+          </thead>
+          <tbody id="usersTableBody">
+            <!-- Dynamic Users Injected via JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 3. LEADERBOARD TAB -->
+    <div id="tab-leaderboard" class="tab-content">
+      <div class="section-header">
+        <div class="section-title">
+          <div class="square-indicator"></div>
+          TOP PERFORMERS PODIUM & CALLER RANKINGS
+        </div>
+      </div>
+
+      <div class="podium-container">
+        <div class="podium-step">
+          <div style="font-weight: 700; margin-bottom: 4px;" id="p2Name">Nimmy S.</div>
+          <div class="podium-block rank-2">
+            <span class="badge-role badge-manager">2ND SILVER</span>
+            <div style="font-family: 'Anton', sans-serif; font-size: 32px; margin-top: 12px;">#2</div>
+            <div style="font-size: 11px; margin-top: 4px;" id="p2Calls">78 calls</div>
+          </div>
+        </div>
+
+        <div class="podium-step">
+          <div style="font-size: 22px;">👑</div>
+          <div style="font-weight: 800; margin-bottom: 4px;" id="p1Name">Priyanka P.</div>
+          <div class="podium-block rank-1">
+            <span class="badge-role badge-caller">1ST GOLD 👑</span>
+            <div style="font-family: 'Anton', sans-serif; font-size: 42px; margin-top: 12px; color: var(--lime-yellow);">#1</div>
+            <div style="font-size: 12px; margin-top: 4px;" id="p1Calls">95 calls</div>
+          </div>
+        </div>
+
+        <div class="podium-step">
+          <div style="font-weight: 700; margin-bottom: 4px;" id="p3Name">Hardik V.</div>
+          <div class="podium-block rank-3">
+            <span class="badge-role badge-manager">3RD BRONZE</span>
+            <div style="font-family: 'Anton', sans-serif; font-size: 28px; margin-top: 8px;">#3</div>
+            <div style="font-size: 11px; margin-top: 4px;" id="p3Calls">64 calls</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. RECORDINGS TAB -->
+    <div id="tab-recordings" class="tab-content">
+      <div class="section-header">
+        <div class="section-title">
+          <div class="square-indicator"></div>
+          HARDWARE SIM AUDIO CALL RECORDINGS
+        </div>
+      </div>
+      <div id="recordingsList" class="grid-4" style="grid-template-columns: 1fr;">
+        <!-- Recordings Injected via JS -->
+      </div>
+    </div>
+
+    <!-- 5. LEADS PIPELINE TAB -->
+    <div id="tab-leads" class="tab-content">
+      <div class="section-header">
+        <div class="section-title">
+          <div class="square-indicator"></div>
+          CRM PIPELINE & LEAD STATUSES
+        </div>
+      </div>
+      <div id="leadsList" class="grid-4" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
+        <!-- Leads Injected via JS -->
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ADD / EDIT USER MODAL DIALOG -->
+  <div id="userModal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="section-header" style="margin-bottom: 16px;">
+        <div class="section-title" style="font-size: 16px;" id="modalTitle">ADD NEW SALES AGENT / USER</div>
+        <button onclick="closeAddUserModal()" style="background: none; border: none; font-size: 20px; cursor: pointer;">✕</button>
+      </div>
+
+      <form id="userForm" onsubmit="handleSaveUser(event)">
+        <input type="hidden" id="userId" />
+
+        <div class="form-group">
+          <label class="form-label">FULL USER NAME</label>
+          <input type="text" id="inputName" class="form-control" placeholder="e.g. Priyanka Panchal" required />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">PHONE / TRACKING SIM NUMBER</label>
+          <input type="text" id="inputPhone" class="form-control" placeholder="e.g. +91 98250 12340" required />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">USER ROLE</label>
+          <select id="inputRole" class="form-control" style="cursor: pointer;">
+            <option value="caller">📱 CALLER AGENT</option>
+            <option value="manager">👔 MANAGER</option>
+            <option value="admin">👑 ADMIN / SUPERVISOR</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">TEAM / DEPARTMENT</label>
+          <input type="text" id="inputTeam" class="form-control" placeholder="e.g. Telesales Mumbai" value="Telesales Team" />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">DAILY TARGET CALLS</label>
+          <input type="number" id="inputTarget" class="form-control" placeholder="100" value="100" />
+        </div>
+
+        <div style="display: flex; gap: 12px; margin-top: 24px;">
+          <button type="button" class="btn-action btn-secondary" style="flex: 1;" onclick="closeAddUserModal()">CANCEL</button>
+          <button type="submit" class="btn-action" style="flex: 1;">SAVE USER →</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- JAVASCRIPT LOGIC -->
+  <script>
+    const API_BASE = '/api';
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+      event.target.classList.add('active');
+      document.getElementById(`tab-${tabId}`).classList.add('active');
+
+      if (tabId === 'dashboard') loadDashboardData();
+      if (tabId === 'users') loadUsersData();
+      if (tabId === 'leaderboard') loadLeaderboardData();
+      if (tabId === 'recordings') loadRecordingsData();
+      if (tabId === 'leads') loadLeadsData();
+    }
+
+    async function loadDashboardData() {
+      try {
+        const res = await fetch(`${API_BASE}/admin/dashboard`);
+        const json = await res.json();
+        if (json.success) {
+          const d = json.data;
+          document.getElementById('statTotalCalls').innerText = d.totalCalls || 0;
+          document.getElementById('statTalkTime').innerText = `${d.talkTimeFormatted || '0h 00m'} total talk time`;
+          document.getElementById('statConnected').innerText = d.connectedCalls || 0;
+          document.getElementById('statUniqueClients').innerText = `${d.uniqueClients || 0} unique clients`;
+          document.getElementById('statOutgoing').innerText = d.outgoing || 0;
+          document.getElementById('statMissed').innerText = d.missed || 0;
+          document.getElementById('statNeverAttended').innerText = `${d.neverAttended || 0} never attended`;
+
+          if (d.topPerformer) {
+            document.getElementById('topPerformerName').innerText = d.topPerformer.name;
+            document.getElementById('topPerformerTalkTime').innerText = `Talk Time: ${d.topPerformer.duration}`;
+          }
+        }
+      } catch (err) {
+        console.error('Error loading dashboard stats:', err);
+      }
+    }
+
+    async function loadUsersData() {
+      try {
+        const res = await fetch(`${API_BASE}/admin/users`);
+        const json = await res.json();
+        const tbody = document.getElementById('usersTableBody');
+        tbody.innerHTML = '';
+
+        if (json.success && json.users) {
+          json.users.forEach(u => {
+            const roleClass = u.role === 'admin' ? 'badge-admin' : (u.role === 'manager' ? 'badge-manager' : 'badge-caller');
+            const row = `
+              <tr>
+                <td style="font-weight: 700;">${u.name}</td>
+                <td style="font-family: 'Space Mono', monospace;">${u.phone}</td>
+                <td><span class="badge-role ${roleClass}">${u.role.toUpperCase()}</span></td>
+                <td>${u.team || 'Telesales'}</td>
+                <td style="font-family: 'Space Mono', monospace;">${u.dailyTarget || 100} calls</td>
+                <td><span style="color: var(--green-neon); font-weight: 700;">● ACTIVE</span></td>
+                <td>
+                  <button class="btn-sm btn-edit" onclick="openEditUserModal('${u.id}', '${u.name}', '${u.phone}', '${u.role}', '${u.team}', ${u.dailyTarget})">EDIT</button>
+                  <button class="btn-sm btn-delete" onclick="handleDeleteUser('${u.id}')">DELETE</button>
+                </td>
+              </tr>
+            `;
+            tbody.innerHTML += row;
+          });
+        }
+      } catch (err) {
+        console.error('Error loading users:', err);
+      }
+    }
+
+    function openAddUserModal() {
+      document.getElementById('modalTitle').innerText = 'ADD NEW SALES AGENT / USER';
+      document.getElementById('userId').value = '';
+      document.getElementById('userForm').reset();
+      document.getElementById('userModal').classList.add('active');
+    }
+
+    function openEditUserModal(id, name, phone, role, team, target) {
+      document.getElementById('modalTitle').innerText = 'EDIT USER / SALES AGENT';
+      document.getElementById('userId').value = id;
+      document.getElementById('inputName').value = name;
+      document.getElementById('inputPhone').value = phone;
+      document.getElementById('inputRole').value = role;
+      document.getElementById('inputTeam').value = team;
+      document.getElementById('inputTarget').value = target;
+      document.getElementById('userModal').classList.add('active');
+    }
+
+    function closeAddUserModal() {
+      document.getElementById('userModal').classList.remove('active');
+    }
+
+    async function handleSaveUser(e) {
+      e.preventDefault();
+      const id = document.getElementById('userId').value;
+      const payload = {
+        name: document.getElementById('inputName').value,
+        phone: document.getElementById('inputPhone').value,
+        role: document.getElementById('inputRole').value,
+        team: document.getElementById('inputTeam').value,
+        dailyTarget: parseInt(document.getElementById('inputTarget').value) || 100,
+      };
+
+      const url = id ? `${API_BASE}/admin/users/${id}` : `${API_BASE}/admin/users`;
+      const method = id ? 'PUT' : 'POST';
+
+      try {
+        const res = await fetch(url, {
+          method: method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const json = await res.json();
+        if (json.success) {
+          closeAddUserModal();
+          loadUsersData();
+        }
+      } catch (err) {
+        alert('Error saving user: ' + err.message);
+      }
+    }
+
+    async function handleDeleteUser(id) {
+      if (!confirm('Are you sure you want to delete this user?')) return;
+      try {
+        const res = await fetch(`${API_BASE}/admin/users/${id}`, { method: 'DELETE' });
+        const json = await res.json();
+        if (json.success) {
+          loadUsersData();
+        }
+      } catch (err) {
+        alert('Error deleting user: ' + err.message);
+      }
+    }
+
+    async function loadLeaderboardData() {
+      try {
+        const res = await fetch(`${API_BASE}/admin/leaderboard`);
+        const json = await res.json();
+        if (json.success && json.employees && json.employees.length > 0) {
+          const emp = json.employees;
+          if (emp[0]) {
+            document.getElementById('p1Name').innerText = emp[0].name;
+            document.getElementById('p1Calls').innerText = `${emp[0].totalCalls || 0} calls`;
+          }
+          if (emp[1]) {
+            document.getElementById('p2Name').innerText = emp[1].name;
+            document.getElementById('p2Calls').innerText = `${emp[1].totalCalls || 0} calls`;
+          }
+          if (emp[2]) {
+            document.getElementById('p3Name').innerText = emp[2].name;
+            document.getElementById('p3Calls').innerText = `${emp[2].totalCalls || 0} calls`;
+          }
+        }
+      } catch (err) {
+        console.error('Error loading leaderboard:', err);
+      }
+    }
+
+    async function loadRecordingsData() {
+      try {
+        const res = await fetch(`${API_BASE}/admin/recordings`);
+        const json = await res.json();
+        const container = document.getElementById('recordingsList');
+        container.innerHTML = '';
+
+        if (json.success && json.recordings) {
+          json.recordings.forEach(r => {
+            const item = `
+              <div class="neo-card">
+                <div style="font-weight: 700; font-size: 14px;">${r.callerName} → ${r.contactName}</div>
+                <div style="font-family: 'Space Mono', monospace; font-size: 11px; color: var(--muted); margin-top: 2px;">Recorded · ${r.durationSeconds}s</div>
+                <div style="font-style: italic; margin-top: 8px; font-size: 12px;">"${r.transcript || 'Voice recording'}"</div>
+              </div>
+            `;
+            container.innerHTML += item;
+          });
+        }
+      } catch (err) {
+        console.error('Error loading recordings:', err);
+      }
+    }
+
+    async function loadLeadsData() {
+      try {
+        const res = await fetch(`${API_BASE}/admin/leads`);
+        const json = await res.json();
+        const container = document.getElementById('leadsList');
+        container.innerHTML = '';
+
+        if (json.success && json.leads) {
+          json.leads.forEach(l => {
+            const item = `
+              <div class="neo-card">
+                <div style="display: flex; justify-content: space-between;">
+                  <span style="font-weight: 700;">${l.name}</span>
+                  <span class="badge-role badge-caller">${(l.status || 'NEW').toUpperCase()}</span>
+                </div>
+                <div style="font-family: 'Space Mono', monospace; font-size: 11px; margin-top: 4px;">${l.phone}</div>
+              </div>
+            `;
+            container.innerHTML += item;
+          });
+        }
+      } catch (err) {
+        console.error('Error loading leads:', err);
+      }
+    }
+
+    // Initial Load
+    loadDashboardData();
+  </script>
+</body>
+</html>

@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ASKEVA Call Monitor</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#10180C">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ASKEVA Call Monitor">
+<link rel="icon" type="image/svg+xml" href="./icon.svg">
+<link rel="apple-touch-icon" href="./icon.svg">
+<script src="./support.js"></script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('./sw.js').catch(function(e) { console.log('SW error:', e); });
+  });
+}
+</script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/askeva-design-system-f369da11-358d-4fcb-8a05-42d32204ae78/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/askeva-design-system-f369da11-358d-4fcb-8a05-42d32204ae78/tokens/colors.css">
+<link rel="stylesheet" href="_ds/askeva-design-system-f369da11-358d-4fcb-8a05-42d32204ae78/tokens/typography.css">
+<link rel="stylesheet" href="_ds/askeva-design-system-f369da11-358d-4fcb-8a05-42d32204ae78/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/askeva-design-system-f369da11-358d-4fcb-8a05-42d32204ae78/styles.css">
+<script src="_ds/askeva-design-system-f369da11-358d-4fcb-8a05-42d32204ae78/_ds_bundle.js"></script>
+<style>
+body{margin:0;background:#EFECE3;font-family:'Archivo',Helvetica,sans-serif;display:flex;justify-content:center;padding:24px 0}
+a{color:#2E9E2B}a:hover{color:#10180C}
+*::-webkit-scrollbar{display:none}
+@keyframes tickmove{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+</style>
+</helmet>
+<x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" hint-size="390px,844px">
+<div style="height:100%;display:flex;flex-direction:column;background:#EFECE3;font-family:'Archivo',Helvetica,sans-serif;color:#10180C;position:relative;overflow:hidden;padding-top:54px;box-sizing:border-box">
+
+<!-- ================= LOGIN ================= -->
+<sc-if value="{{ isLogin }}" hint-placeholder-val="{{ true }}">
+<div style="flex:1;display:flex;flex-direction:column;padding:28px 24px 40px">
+  <div style="font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:#7A8172">ASKEVA · CALL MONITOR</div>
+  <div style="font-family:'Anton',Impact,sans-serif;font-size:44px;line-height:0.95;text-transform:uppercase;margin-top:14px">EVERY CALL<br>IS A <span style="font-family:'Playfair Display',Georgia,serif;font-style:italic;text-transform:lowercase;color:#2E9E2B">lead</span>.</div>
+  <div style="font-size:14px;line-height:1.5;color:#3A4033;margin-top:12px;max-width:280px">Monitor telesales calls, track lead status and coach your callers from one dashboard.</div>
+  <div style="background:linear-gradient(135deg,#3DC838 0%,#7FD63B 55%,#C8FF4A 100%);border-top:1px solid #10180C;border-bottom:1px solid #10180C;overflow:hidden;padding:5px 0;margin:22px -24px 0">
+    <div style="display:flex;white-space:nowrap;animation:tickmove 14s linear infinite;width:max-content">
+      <span style="font-size:10px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:#10180C;padding-right:24px">DIAL · TRACK · CONVERT — EVERY CALL COUNTS · DIAL · TRACK · CONVERT — EVERY CALL COUNTS ·&nbsp;</span>
+      <span style="font-size:10px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:#10180C;padding-right:24px">DIAL · TRACK · CONVERT — EVERY CALL COUNTS · DIAL · TRACK · CONVERT — EVERY CALL COUNTS ·&nbsp;</span>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:14px;margin-top:26px">
+    <div style="font-size:11px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;background:#3DC838"></span>SIGN IN AS</div>
+    <button onClick="{{ goManager }}" style="text-align:left;background:#10180C;color:#EFECE3;border:1px solid #10180C;border-radius:16px;box-shadow:4px 4px 0 #3DC838;padding:18px 16px;cursor:pointer;font-family:'Archivo',sans-serif" style-active="transform:translate(4px,4px);box-shadow:0 0 0 #3DC838">
+      <div style="font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:#C8FF4A">01 · MANAGER</div>
+      <div style="font-family:'Anton',Impact,sans-serif;font-size:24px;text-transform:uppercase;margin-top:4px">RASMI DESAI</div>
+      <div style="font-size:12px;color:#8A9285;margin-top:2px">Team dashboard · leaderboard · recordings</div>
+    </button>
+    <button onClick="{{ goAgent }}" style="text-align:left;background:#fff;color:#10180C;border:1px solid #10180C;border-radius:16px;box-shadow:4px 4px 0 #10180C;padding:18px 16px;cursor:pointer;font-family:'Archivo',sans-serif" style-active="transform:translate(4px,4px);box-shadow:0 0 0 #10180C">
+      <div style="font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:#2E9E2B">02 · CALLER</div>
+      <div style="font-family:'Anton',Impact,sans-serif;font-size:24px;text-transform:uppercase;margin-top:4px">PRIYANKA PANCHAL</div>
+      <div style="font-size:12px;color:#7A8172;margin-top:2px">My calls · leads · scheduled callbacks</div>
+    </button>
+  </div>
+</div>
+</sc-if>
+
+<!-- ================= APP SHELL ================= -->
+<sc-if value="{{ inApp }}" hint-placeholder-val="{{ false }}">
+
+  <div style="padding:6px 18px 10px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex:none">
+    <div>
+      <div style="font-family:'Anton',Impact,sans-serif;font-size:24px;line-height:0.95;text-transform:uppercase">{{ screenTitle }}<span style="color:#3DC838">.</span></div>
+      <div style="font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:#7A8172;margin-top:3px">{{ screenSub }}</div>
+    </div>
+    <button onClick="{{ logout }}" style="font-size:9px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;background:#fff;color:#10180C;border:1px solid #10180C;border-radius:999px;padding:7px 12px;box-shadow:3px 3px 0 #10180C;cursor:pointer;font-family:'Archivo',sans-serif" style-active="transform:translate(3px,3px);box-shadow:0 0 0 #10180C">{{ roleChip }}</button>
+  </div>
+
+  <div style="flex:1;overflow-y:auto;padding:8px 18px 96px">
+
+  <!-- ===== MANAGER DASHBOARD ===== -->
+  <sc-if value="{{ sMDash }}" hint-placeholder-val="{{ false }}">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div style="grid-column:1 / -1;background:#10180C;border:1px solid #10180C;border-radius:16px;box-shadow:4px 4px 0 #10180C;padding:16px;color:#EFECE3">
+        <div style="display:flex;justify-content:space-between"><span style="font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:#C8FF4A">01 · TOTAL CALLS TODAY</span><span style="font-size:9px;letter-spacing:0.14em;color:#7A8172">TEAM OF 8</span></div>
+        <div style="display:flex;align-items:baseline;gap:10px;margin-top:6px">
+          <div style="font-family:'Anton',Impact,sans-serif;font-size:48px;line-height:1">412</div>
+          <div style="font-family:'Playfair Display',Georgia,serif;font-style:italic;font-size:17px;color:#C8FF4A">connected 311</div>
+        </div>
+        <div style="font-size:11px;color:#8A9285;margin-top:4px">21h 06m talk time · 187 unique clients</div>
+      </div>
+      <div style="background:#fff;border:1px solid #10180C;border-radius:16px;box-shadow:4px 4px 0 #10180C;padding:13px">
+        <div style="font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:#7A8172">02 · INCOMING</div>
+        <div style="font-family:'Anton',Impact,sans-serif;font-size:30px;color:#2E9E2B;margin-top:3px">96</div>
+        <div style="font-size:11px;color:#3A4033">2h 41m</div>
+      </div>
+      <div style="background:#fff;border:1px solid #10180C;border-radius:16px;box-shadow:4px 4px 0 #10180C;padding:13px">
+        <div style="font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:#7A8172">03 · OUTGOING</div>
+        <div style="font-family:'Anton',Impact,sans-serif;font-size:30px;margin-top:3px">316</div>
+        <div style="font-size:11px;color:#3A4033">18h 25m</div>
+      </div>
+      <div style="background:#3DC838;border:1px solid #10180C;border-radius:16px;box-shadow:4px 4px 0 #10180C;padding:13px;color:#fff">
+        <div style="font-size:9px;letter-spacing:0.18em;text-transform:uppercase">04 · MISSED</div>
+        <div style="font-family:'Anton',Impact,sans-serif;font-size:30px;margin-top:3px">14</div>
+        <div style="font-size:11px">needs callback</div>
+      </div>
+      <div style="background:#fff;border:1px solid #10180C;border-radius:16px;box-shadow:4px 4px 0 #10180C;padding:13px">
+        <div style="font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:#7A8172">05 · NEVER ATTENDED</div>
+        <div style="font-family:'Anton',Impact,sans-serif;font-size:30px;margin-top:3px">9</div>
+        <div style="font-size:11px;color:#3A4033">by client</div>
+      </div>
+    </div>
+    <div style="background:#fff;border:1px solid #10180C;border-radius:16px;box-shadow:4px 4px 0 #10180C;padding:14px;margin-top:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:10px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase">HOURLY CALLS</span>
+        <span style="font-size:10px;color:#7A8172">peak 1–2 PM</span>
+      </div>
+      <div style="display:flex;align-items:flex-end;gap:7px;height:90px;margin-top:12px">
+        <sc-for list="{{ hourly }}" as="b" hint-placeholder-count="8">
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+            <div style="width:100%;border-radius:4px 4px 0 0;background:{{ b.c }};height:{{ b.h }}px"></div>
+            <div style="font-size:8px;letter-spacing:0.06em;color:#7A8172">{{ b.t }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <button onClick="{{ goBoard }}" style="width:100%;text-align:left;background:linear-gradient(135deg,#3DC838 0%,#7FD63B 55%,#C8FF4A 100%);border:1px solid #10180C;border-radius:16px;box-shadow:4px 4px 0 #10180C;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;margin-top:12px;cursor:pointer;font-family:'Archivo',sans-serif" style-active="transform:translate(4px,4px);box-shadow:0 0 0 #10180C">
+      <span style="font-size:11px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:#10180C">TOP TALK TIME · PRIYANKA — 4H 12M</span>
+      <span style="font-family:'Anton',sans-serif;font-size:18px;color:#10180C">→</span>
+    </button>
+  </sc-if>
+
+  <!-- ===== LEADERBOARD ===== -->
+  <sc-if value="{{ sBoard }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <span style="width:8px;height:8px;background:#3DC838"></span>
+      <span style="font-size:10px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase">RANKED BY TALK TIME · TODAY</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <sc-for list="{{ board }}" as="e" hint-placeholder-count="5">
+        <button onClick="{{ e.open }}" style="text-align:left;display:flex;align-items:center;gap:12px;background:{{ e.bg }};color:{{ e.fg }};border:1px solid #10180C;border-radius:16px;box-shadow:4px 4px 0 #10180C;padding:12px 14px;cursor:pointer;font-family:'Archivo',sans-serif" style-active="transform:translate(4px,4px);box-shadow:0 0 0 #10180C">
+          <span style="font-family:'Anton',Impact,sans-serif;font-size:22px;width:34px;color:{{ e.rankC }}">{{ e.rank }}</span>
+          <span style="flex:1">
+            <span style="display:block;font-weight:700;font-size:14px">{{ e.name }}</span>
+            <span style="display:block;font-size:11px;opacity:0.7;margin-top:1px">{{ e.calls }} calls · {{ e.conn }} connected</span>
+          </span>
+          <span style="text-align:right">
+            <span style="display:block;font-family:'Space Mono',monospace;font-size:14px;font-weight:700">{{ e.talk }}</span>
+            <span style="display:block;font-size:9px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.6">TALK TIME</span>
+          </span>
+        </button>
+      </sc-for>
+    </div>
+  </sc-if>
+
+  <!-- ===== EMPLOYEE DETAIL ===== -->
+  <sc-if value="{{ sEmp }}" hint-placeholder-val="{{ false }}">
+    <button onClick="{{ goBoard }}" style="background:none;border:none;padding:0;font-family:'Archivo',sans-serif;font-size:11px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:#2E9E2B;cursor:pointer;margin-bottom:10px">← LEADERBOARD</button>
+    <div style="background:#10180C;border:1px solid #10180C;border-radius:16px;box-shadow:4px 4px 0 #10180C;padding:16px;color:#EFECE3">
+      <div style="font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:#C8FF4A">CALLER · {{ emp.phone }}</div>
+      <div style="font-family:'Anton',Impact,sans-serif;font-size:30px;text-transform:uppercase;margin-top:4px">{{ emp.name }}</div>
+      <div style="display:flex;gap:18px;margin-top:12px">
+        <div><div style="font-family:'Anton',sans-serif;font-size:24px">{{ emp.calls }}</div><div style="font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:#8A9285">CALLS</div></div>
+        <div><div style="font-family:'Anton',sans-serif;font-size:24px;color:#7FD63B">{{ emp.conn }}</div><div style="font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:#8A9285">CONNECTED</div></div>
+        <div><div style="font-family:'Anton',sans-serif;font-size:24px;color:#C8FF4A">{{ emp.talk }}</div><div style="font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:#8A9285">TALK TIME</div></div>
+      </div>
+    </div>
+    <div style="background:#fff;border:1px solid #10180C;border-radius:16px;box-shadow:4px 4px 0 #10180C;padding:14px;margin-top:12px">
+      <div style="font-size:10px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;margin-bottom:10px">CALL BREAKDOWN</div>
+      <sc-for list="{{ empRows }}" as="r" hint-placeholder-count="4">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #EFECE3">
+          <span style="font-size:12px;font-weight:700;color:{{ r.c }}">{{ r.label }}</span>
+          <span style="font-family:'Space Mono',monospace;font-size:12px">{{ r.val }}</span>
+        </div>
+      </sc-for>
+    </div>
+    <div style="background:#fff;border:1px solid #10180C;border-radius:16px;box-shadow:4px 4px 0 #10180C;padding:14px;margin-top:12px">
+      <div style="font-size:10px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;margin-bottom:6px">RECENT CALLS</div>
+      <sc-for list="{{ empCalls }}" as="c" hint-placeholder-count="3">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #EFECE3">
+          <span><span style="display:block;font-size:12px;font-weight:700">{{ c.name }}</span><span style="display:block;font-size:10px;color:#7A8172">{{ c.time }}</span></span>
+          <span style="text-align:right"><span style="display:block;font-size:10px;font-weight:700;color:{{ c.tc }}">{{ c.type }}</span><span style="display:block;font-family:'Space Mono',monospace;font-size:10px;color:#3A4033">{{ c.dur }}</span></span>
+        </div>
+      </sc-for>
+    </div>
+  </sc-if>
+
+  <!-- ===== LEADS (shared list, manager + agent) ===== -->
+  <sc-if value="{{ sLeads }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+      <sc-for list="{{ filters }}" as="f" hint-placeholder-count="4">
+        <button onClick="{{ f.pick }}" style="font-family:'Archivo',sans-serif;font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:6px 11px;border-radius:999px;cursor:pointer;border:1px solid #10180C;background:{{ f.bg }};color:{{ f.fg }}">{{ f.label }}</button>
+      </sc-for>
+    </div>
+    <div style="background:#10180C;border:1px solid #10180C;border-radius:16px;box-shadow:4px 4px 0 #10180C;padding:14px;color:#EFECE3;display:flex;align-items:center;gap:16px;margin-bottom:12px">
+      <div style="width:74px;height:74px;border-radius:50%;flex:none;background:{{ donut }};display:flex;align-items:center;justify-content:center">
+        <div style="width:44px;height:44px;border-radius:50%;background:#10180C;display:flex;align-items:center;justify-content:center;font-family:'Anton',sans-serif;font-size:15px">{{ leadCount }}</div>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+        <div style="font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:#C8FF4A">PIPELINE STATUS</div>
+        <div style="font-size:11px;color:#EFECE3"><span style="color:#3DC838">●</span> Won 12 · <span style="color:#C8FF4A">●</span> Interested 18</div>
+        <div style="font-size:11px;color:#8A9285"><span style="color:#7FD63B">●</span> Follow-up 21 · <span style="color:#EFECE3">●</span> Other 33</div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <sc-for list="{{ leadsView }}" as="l" hint-placeholder-count="4">
+        <button onClick="{{ l.open }}" style="text-align:left;background:#fff;border:1px solid #10180C;border-radius:16px;box-shadow:4px 4px 0 #10180C;padding:12px 14px;cursor:pointer;font-family:'Archivo',sans-serif;display:flex;flex-direction:column;gap:6px" style-active="transform:translate(4px,4px);box-shadow:0 0 0 #10180C">
+          <span style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+            <span style="font-size:14px;font-weight:700;color:#10180C">{{ l.name }}</span>
+            <span style="font-size:9px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:4px 9px;border-radius:999px;border:1px solid #10180C;background:{{ l.pillBg }};color:{{ l.pillFg }}">{{ l.status }}</span>
+          </span>
+          <span style="display:flex;justify-content:space-between;font-size:11px;color:#7A8172">
+            <span style="font-family:'Space Mono',monospace">{{ l.phone }}</span>
+            <span>{{ l.attempts }} attempts · {{ l.last }}</span>
+          </span>
+        </button>
+      </sc-for>
+    </div>
+  </sc-if>
+
+  <!-- ===== RECORDINGS ===== -->
+  <sc-if value="{{ sRecs }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <span style="width:8px;height:8px;background:#3DC838"></span>
+      <span style="font-size:10px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase">CALL RECORDINGS · 1.87 GB OF 5 GB</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <sc-for list="{{ recsView }}" as="r" hint-placeholder-count="4">
+        <div style="background:#fff;border:1px solid #10180C;border-radius:16px;box-shadow:4px 4px 0 #10180C;padding:12px 14px">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+            <div>
+              <div style="font-size:13px;font-weight:700">{{ r.agent }} → {{ r.client }}</div>
+              <div style="font-size:10px;color:#7A8172;margin-top:2px">{{ r.date }} · <span style="font-family:'Space Mono',monospace">{{ r.dur }}</span></div>
+            </div>
+            <button onClick="{{ r.toggle }}" style="width:38px;height:38px;border-radius:50%;border:1px solid #10180C;background:{{ r.btnBg }};color:{{ r.btnFg }};font-size:13px;cursor:pointer;box-shadow:3px 3px 0 #10180C;flex:none;font-family:'Archivo',sans-serif" style-active="transform:translate(3px,3px);box-shadow:0 0 0 #10180C">{{ r.btnGlyph }}</button>
+          </div>
+          <div style="height:6px;background:#EFECE3;border:1px solid #10180C;border-radius:999px;margin-top:10px;overflow:hidden">
+            <div style="height:100%;background:linear-gradient(135deg,#3DC838,#C8FF4A);width:{{ r.pct }}%"></div>
+          </div>
+          <div style="font-size:10px;color:#3A4033;margin-top:8px;font-style:italic">“{{ r.note }}”</div>
+        </div>
+      </sc-for>
+    </div>
+  </sc-if>
+
+  <!-- ===== MORE (manager) ===== -->
+  <sc-if value="{{ sMore }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <button onClick="{{ goBoard }}" style="text-align:left;background:#fff;border:1px solid #10180C;border-radius:16px;box-shadow:4px 4px 0 #10180C;padding:14px;cursor:pointer;font-family:'Archivo',sans-serif;display:flex;justify-content:space-between;align-items:center" style-active="transform:translate(4px,4px);box-shadow:0 0 0 #10180C">
+        <span><span style="display:block;font-size:13px;font-weight:700">Employee detail</span><span style="display:block;font-size:11px;color:#7A8172;margin-top:2px">Per-caller breakdown via leaderboard</span></span>
+        <span style="font-family:'Anton',sans-serif">→</span>
+      </button>
+      <div style="background:#10180C;border:1px solid #10180C;border-radius:16px;box-shadow:4px 4px 0 #10180C;padding:14px;color:#EFECE3">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span><span style="display:block;font-size:13px;font-weight:700">Daily report · 24 Aug</span><span style="display:block;font-size:11px;color:#8A9285;margin-top:2px">Call log + lead status, XLSX & PDF</span></span>
+          <button onClick="{{ fakeExport }}" style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;background:#C8FF4A;color:#10180C;border:1px solid #C8FF4A;border-radius:999px;padding:8px 13px;cursor:pointer;box-shadow:3px 3px 0 #3DC838;font-family:'Archivo',sans-serif" style-active="transform:translate(3px,3px);box-shadow:0 0 0 #3DC838">{{ exportLabel }}</button>
+        </div>
+      </div>
+      <div style="background:#fff;border:1px solid #10180C;border-radius:16px;box-shadow:4px 4px 0 #10180C;padding:14px">
+        <div style="font-size:10px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase">RECORDING STORAGE</div>
+        <div style="height:8px;background:#EFECE3;border:1px solid #10180C;border-radius:999px;margin-top:10px;overflow:hidden"><div style="height:100%;width:37%;background:linear-gradient(135deg,#3DC838,#C8FF4A)"></div></div>
+        <div style="font-size:11px;color:#7A8172;margin-top:6px"><span style="font-family:'Space Mono',monospace">1.87 GB</span> used · 3.12 GB free of 5 GB</div>
+      </div>
+      <div style="background:#fff;border:1px solid #10180C;border-radius:16px;box-shadow:4px 4px 0 #10180C;padding:14px;display:flex;justify-content:space-between;align-items:center">
+        <span><span style="display:block;font-size:13px;font-weight:700">Sync device call log</span><span style="display:block;font-size:11px;color:#7A8172;margin-top:2px">Last synced 7:09 PM</span></span>
+        <span style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#2E9E2B">● LIVE</span>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ===== AGENT DASHBOARD ===== -->
+  <sc-if value="{{ sADash }}" hint-placeholder-val="{{ false }}">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div style="grid-column:1 / -1;background:#10180C;border:1px solid #10180C;border-radius:16px;box-shadow:4px 4px 0 #10180C;padding:16px;color:#EFECE3">
+        <div style="font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:#C8FF4A">01 · MY CALLS TODAY</div>
+        <div style="display:flex;align-items:baseline;gap:10px;margin-top:6px">
+          <div style="font-family:'Anton',Impact,sans-serif;font-size:48px;line-height:1">95</div>
+          <div style="font-family:'Playfair Display',Georgia,serif;font-style:italic;font-size:17px;color:#C8FF4A">4h 12m on calls</div>
+        </div>
+        <div style="font-size:11px;color:#8A9285;margin-top:4px">71 connected · 38 unique clients · target 100</div>
+        <div style="height:6px;background:#1A2314;border-radius:999px;margin-top:10px;overflow:hidden"><div style="height:100%;width:95%;background:linear-gradient(135deg,#3DC838,#C8FF4A)"></div></div>
+      </div>
+      <div style="background:#fff;border:1px solid #10180C;border-radius:16px;box-shadow:4px 4px 0 #10180C;padding:13px">
+        <div style="font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:#7A8172">02 · AVG / CALL</div>
+        <div style="font-family:'Anton',Impact,sans-serif;font-size:26px;margin-top:3px">2m 39s</div>
+      </div>
+      <div style="background:#fff;border:1px solid #10180C;border-radius:16px;box-shadow:4px 4px 0 #10180C;padding:13px">
+        <div style="font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:#7A8172">03 · MISSED</div>
+        <div style="font-family:'Anton',Impact,sans-serif;font-size:26px;color:#2E9E2B;margin-top:3px">3</div>
+      </div>
+    </div>
+    <div style="background:#fff;border:1px solid #10180C;border-radius:16px;box-shadow:4px 4px 0 #10180C;padding:14px;margin-top:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:10px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase">MY HOURLY PATTERN</span>
+        <span style="font-size:10px;color:#7A8172">today</span>
+      </div>
+      <div style="display:flex;align-items:flex-end;gap:7px;height:80px;margin-top:12px">
+        <sc-for list="{{ aHourly }}" as="b" hint-placeholder-count="8">
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+            <div style="width:100%;border-radius:4px 4px 0 0;background:{{ b.c }};height:{{ b.h }}px"></div>
+            <div style="font-size:8px;color:#7A8172">{{ b.t }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
+      <div style="background:#3DC838;border:1px solid #10180C;border-radius:16px;box-shadow:4px 4px 0 #10180C;padding:13px;color:#fff">
+        <div style="font-size:9px;letter-spacing:0.18em;text-transform:uppercase">LONGEST CALL</div>
+        <div style="font-family:'Anton',sans-serif;font-size:22px;margin-top:4px">25m 21s</div>
+        <div style="font-size:11px;margin-top:2px">Dolat Yadav · order talk</div>
+      </div>
+      <div style="background:#fff;border:1px solid #10180C;border-radius:16px;box-shadow:4px 4px 0 #10180C;padding:13px">
+        <div style="font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:#7A8172">MOST TALKED</div>
+        <div style="font-family:'Anton',sans-serif;font-size:22px;margin-top:4px">Keval P.</div>
+        <div style="font-size:11px;color:#3A4033;margin-top:2px">6 calls · 41m total</div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ===== AGENT CALL HISTORY ===== -->
+  <sc-if value="{{ sACalls }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+      <sc-for list="{{ callFilters }}" as="f" hint-placeholder-count="4">
+        <button onClick="{{ f.pick }}" style="font-family:'Archivo',sans-serif;font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:6px 11px;border-radius:999px;cursor:pointer;border:1px solid #10180C;background:{{ f.bg }};color:{{ f.fg }}">{{ f.label }}</button>
+      </sc-for>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <sc-for list="{{ callsView }}" as="c" hint-placeholder-count="5">
+        <button onClick="{{ c.open }}" style="text-align:left;width:100%;font-family:'Archivo',sans-serif;color:#10180C;background:#fff;border:1px solid #10180C;border-radius:16px;box-shadow:4px 4px 0 #10180C;padding:12px 14px;cursor:pointer" style-active="transform:translate(4px,4px);box-shadow:0 0 0 #10180C">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+            <span><span style="display:block;font-size:13px;font-weight:700">{{ c.name }}</span><span style="display:block;font-size:10px;color:#7A8172;font-family:'Space Mono',monospace;margin-top:2px">{{ c.phone }}</span></span>
+            <span style="text-align:right"><span style="display:block;font-size:10px;font-weight:700;color:{{ c.tc }}">{{ c.glyph }} {{ c.type }}</span><span style="display:block;font-size:10px;color:#3A4033;font-family:'Space Mono',monospace;margin-top:2px">{{ c.time }} · {{ c.dur }}</span></span>
+          </div>
+          <sc-if value="{{ c.note }}" hint-placeholder-val="{{ false }}">
+            <span style="display:block;font-size:11px;color:#3A4033;background:#EFECE3;border-radius:8px;padding:7px 10px;margin-top:8px">✎ {{ c.note }}</span>
+          </sc-if>
+        </button>
+      </sc-for>
+    </div>
+  </sc-if>
+
+  <!-- ===== AGENT SCHEDULED ===== -->
+  <sc-if value="{{ sASched }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <span style="width:8px;height:8px;background:#3DC838"></span>
+      <span style="font-size:10px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase">FOLLOW-UP CALLS · {{ schedCount }}</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <sc-for list="{{ schedView }}" as="s" hint-placeholder-count="3">
+        <div style="background:{{ s.bg }};border:1px solid #10180C;border-radius:16px;box-shadow:4px 4px 0 #10180C;padding:12px 14px;color:{{ s.fg }}">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:13px;font-weight:700">{{ s.name }}</span>
+            <span style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;font-family:'Space Mono',monospace">{{ s.time }}</span>
+          </div>
+          <div style="font-size:11px;opacity:0.75;margin-top:3px">{{ s.note }}</div>
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button style="flex:1;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;padding:8px;border-radius:999px;border:1px solid #10180C;background:#C8FF4A;color:#10180C;cursor:pointer;box-shadow:3px 3px 0 #10180C;font-family:'Archivo',sans-serif" style-active="transform:translate(3px,3px);box-shadow:0 0 0 #10180C">☎ CALL NOW</button>
+            <button onClick="{{ s.snooze }}" style="flex:1;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;padding:8px;border-radius:999px;border:1px solid #10180C;background:{{ s.snBg }};color:{{ s.snFg }};cursor:pointer;font-family:'Archivo',sans-serif" style-active="transform:translate(2px,2px)">{{ s.snLabel }}</button>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </sc-if>
+
+  <!-- ===== AGENT PROFILE / TARGETS ===== -->
+  <sc-if value="{{ sAProf }}" hint-placeholder-val="{{ false }}">
+    <div style="background:#10180C;border:1px solid #10180C;border-radius:16px;box-shadow:4px 4px 0 #10180C;padding:16px;color:#EFECE3">
+      <div style="font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:#C8FF4A">CALLER · +91 98250 12340</div>
+      <div style="font-family:'Anton',Impact,sans-serif;font-size:30px;text-transform:uppercase;margin-top:4px">PRIYANKA PANCHAL</div>
+      <div style="font-size:11px;color:#8A9285;margin-top:2px">Telesales · Mumbai team · since Apr 2023</div>
+    </div>
+    <div style="background:#fff;border:1px solid #10180C;border-radius:16px;box-shadow:4px 4px 0 #10180C;padding:14px;margin-top:12px">
+      <div style="font-size:10px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;margin-bottom:12px">THIS WEEK'S TARGETS</div>
+      <sc-for list="{{ targets }}" as="t" hint-placeholder-count="3">
+        <div style="margin-bottom:12px">
+          <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:5px">
+            <span style="font-weight:700">{{ t.label }}</span>
+            <span style="font-family:'Space Mono',monospace;color:#7A8172">{{ t.progress }}</span>
+          </div>
+          <div style="height:8px;background:#EFECE3;border:1px solid #10180C;border-radius:999px;overflow:hidden"><div style="height:100%;background:{{ t.c }};width:{{ t.pct }}%"></div></div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="background:linear-gradient(135deg,#3DC838 0%,#7FD63B 55%,#C8FF4A 100%);border:1px solid #10180C;border-radius:16px;box-shadow:4px 4px 0 #10180C;padding:14px;margin-top:12px;color:#10180C">
+      <div style="font-size:10px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase">RANK THIS WEEK</div>
+      <div style="display:flex;align-items:baseline;gap:8px;margin-top:4px">
+        <span style="font-family:'Anton',Impact,sans-serif;font-size:38px">#1</span>
+        <span style="font-family:'Playfair Display',Georgia,serif;font-style:italic;font-size:15px">of 8 callers, by talk time</span>
+      </div>
+    </div>
+  </sc-if>
+
+  </div>
+
+  <!-- ===== LEAD DETAIL OVERLAY ===== -->
+  <sc-if value="{{ leadOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeLead }}" style="position:absolute;inset:0;background:rgba(16,24,12,0.55);z-index:30"></div>
+    <div style="position:absolute;left:0;right:0;bottom:0;background:#EFECE3;border-top:1px solid #10180C;border-radius:22px 22px 0 0;padding:18px 18px 28px;z-index:31;max-height:78%;overflow-y:auto">
+      <div style="width:40px;height:4px;background:#10180C;border-radius:999px;margin:0 auto 14px;opacity:0.25"></div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+        <div>
+          <div style="font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:#7A8172">LEAD #{{ lead.id }}</div>
+          <div style="font-family:'Anton',Impact,sans-serif;font-size:26px;text-transform:uppercase;margin-top:3px">{{ lead.name }}</div>
+          <div style="font-family:'Space Mono',monospace;font-size:12px;color:#3A4033;margin-top:2px">{{ lead.phone }}</div>
+        </div>
+        <button onClick="{{ closeLead }}" style="width:32px;height:32px;border-radius:50%;border:1px solid #10180C;background:#fff;cursor:pointer;font-size:13px;font-family:'Archivo',sans-serif">✕</button>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <div style="flex:1;background:#fff;border:1px solid #10180C;border-radius:12px;padding:10px;text-align:center">
+          <div style="font-family:'Anton',sans-serif;font-size:20px">{{ lead.attempts }}</div>
+          <div style="font-size:8px;letter-spacing:0.14em;text-transform:uppercase;color:#7A8172">ATTEMPTS</div>
+        </div>
+        <div style="flex:1;background:#fff;border:1px solid #10180C;border-radius:12px;padding:10px;text-align:center">
+          <div style="font-family:'Anton',sans-serif;font-size:20px">{{ lead.added }}</div>
+          <div style="font-size:8px;letter-spacing:0.14em;text-transform:uppercase;color:#7A8172">ADDED</div>
+        </div>
+        <div style="flex:1;background:#fff;border:1px solid #10180C;border-radius:12px;padding:10px;text-align:center">
+          <div style="font-family:'Anton',sans-serif;font-size:20px">{{ lead.last }}</div>
+          <div style="font-size:8px;letter-spacing:0.14em;text-transform:uppercase;color:#7A8172">LAST CALL</div>
+        </div>
+      </div>
+      <div style="font-size:10px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;margin:16px 0 8px">STATUS</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <sc-for list="{{ statusChips }}" as="s" hint-placeholder-count="6">
+          <button onClick="{{ s.pick }}" style="font-family:'Archivo',sans-serif;font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;padding:6px 11px;border-radius:999px;cursor:pointer;border:1px solid #10180C;background:{{ s.bg }};color:{{ s.fg }}">{{ s.label }}</button>
+        </sc-for>
+      </div>
+      <div style="background:#fff;border:1px solid #10180C;border-radius:12px;padding:10px 12px;margin-top:14px">
+        <div style="font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:#7A8172;margin-bottom:4px">LAST NOTE</div>
+        <div style="font-size:12px;line-height:1.5;color:#3A4033">{{ lead.note }}</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button style="flex:1;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;padding:11px;border-radius:999px;border:1px solid #10180C;background:#3DC838;color:#fff;cursor:pointer;box-shadow:3px 3px 0 #10180C;font-family:'Archivo',sans-serif" style-active="transform:translate(3px,3px);box-shadow:0 0 0 #10180C">☎ CALL</button>
+        <button style="flex:1;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;padding:11px;border-radius:999px;border:1px solid #10180C;background:#fff;color:#10180C;cursor:pointer;box-shadow:3px 3px 0 #10180C;font-family:'Archivo',sans-serif" style-active="transform:translate(3px,3px);box-shadow:0 0 0 #10180C">WHATSAPP</button>
+        <button style="flex:1;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;padding:11px;border-radius:999px;border:1px solid #10180C;background:#fff;color:#10180C;cursor:pointer;box-shadow:3px 3px 0 #10180C;font-family:'Archivo',sans-serif" style-active="transform:translate(3px,3px);box-shadow:0 0 0 #10180C">✎ NOTE</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ===== CALL DETAIL OVERLAY ===== -->
+  <sc-if value="{{ callOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeCall }}" style="position:absolute;inset:0;background:rgba(16,24,12,0.55);z-index:30"></div>
+    <div style="position:absolute;left:0;right:0;bottom:0;background:#EFECE3;border-top:1px solid #10180C;border-radius:22px 22px 0 0;padding:18px 18px 28px;z-index:31;max-height:80%;overflow-y:auto">
+      <div style="width:40px;height:4px;background:#10180C;border-radius:999px;margin:0 auto 14px;opacity:0.25"></div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+        <div>
+          <div style="font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:#7A8172">CONTACT · 24 AUG</div>
+          <div style="font-family:'Anton',Impact,sans-serif;font-size:26px;text-transform:uppercase;margin-top:3px">{{ call.name }}</div>
+          <div style="font-family:'Space Mono',monospace;font-size:12px;color:#3A4033;margin-top:2px">{{ call.phone }}</div>
+        </div>
+        <button onClick="{{ closeCall }}" style="width:32px;height:32px;border-radius:50%;border:1px solid #10180C;background:#fff;cursor:pointer;font-size:13px;font-family:'Archivo',sans-serif">✕</button>
+      </div>
+      <div style="background:#10180C;border:1px solid #10180C;border-radius:16px;box-shadow:4px 4px 0 #10180C;padding:14px;color:#EFECE3;display:flex;align-items:center;gap:16px;margin-top:14px">
+        <div style="width:74px;height:74px;border-radius:50%;flex:none;background:{{ call.donut }};display:flex;align-items:center;justify-content:center">
+          <div style="width:44px;height:44px;border-radius:50%;background:#10180C;display:flex;align-items:center;justify-content:center;font-family:'Anton',sans-serif;font-size:15px">{{ call.total }}</div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+          <div style="font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:#C8FF4A">CALLS WITH THIS CONTACT</div>
+          <div style="font-size:11px"><span style="color:#3DC838">●</span> Incoming {{ call.inc }} · <span style="color:#C8FF4A">●</span> Outgoing {{ call.out }}</div>
+          <div style="font-size:11px;color:#8A9285"><span style="color:#EFECE3">●</span> Missed {{ call.mis }} · total talk {{ call.talk }}</div>
+        </div>
+      </div>
+      <div style="font-size:10px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;margin:16px 0 8px">HISTORY WITH {{ call.short }}</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <sc-for list="{{ callHist }}" as="h" hint-placeholder-count="3">
+          <div style="background:#fff;border:1px solid #10180C;border-radius:12px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center">
+            <span><span style="display:block;font-size:11px;font-weight:700;color:{{ h.tc }}">{{ h.glyph }} {{ h.type }}</span><span style="display:block;font-size:10px;color:#7A8172;margin-top:2px">{{ h.when }}</span></span>
+            <span style="font-family:'Space Mono',monospace;font-size:11px">{{ h.dur }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <sc-if value="{{ call.note }}" hint-placeholder-val="{{ false }}">
+        <div style="background:#fff;border:1px solid #10180C;border-radius:12px;padding:10px 12px;margin-top:12px">
+          <div style="font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:#7A8172;margin-bottom:4px">NOTE</div>
+          <div style="font-size:12px;line-height:1.5;color:#3A4033">{{ call.note }}</div>
+        </div>
+      </sc-if>
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button style="flex:1;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;padding:11px;border-radius:999px;border:1px solid #10180C;background:#3DC838;color:#fff;cursor:pointer;box-shadow:3px 3px 0 #10180C;font-family:'Archivo',sans-serif" style-active="transform:translate(3px,3px);box-shadow:0 0 0 #10180C">☎ CALL BACK</button>
+        <button style="flex:1;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;padding:11px;border-radius:999px;border:1px solid #10180C;background:#fff;color:#10180C;cursor:pointer;box-shadow:3px 3px 0 #10180C;font-family:'Archivo',sans-serif" style-active="transform:translate(3px,3px);box-shadow:0 0 0 #10180C">WHATSAPP</button>
+        <button style="flex:1;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;padding:11px;border-radius:999px;border:1px solid #10180C;background:#fff;color:#10180C;cursor:pointer;box-shadow:3px 3px 0 #10180C;font-family:'Archivo',sans-serif" style-active="transform:translate(3px,3px);box-shadow:0 0 0 #10180C">＋ LEAD</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ===== TAB BAR ===== -->
+  <div style="position:absolute;left:0;right:0;bottom:0;background:#10180C;border-top:1px solid #10180C;display:flex;padding:10px 8px 22px;z-index:20">
+    <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="5">
+      <button onClick="{{ t.go }}" style="flex:1;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 0;font-family:'Archivo',sans-serif">
+        <span style="font-size:16px;line-height:1;color:{{ t.c }}">{{ t.icon }}</span>
+        <span style="font-size:8px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:{{ t.c }}">{{ t.label }}</span>
+      </button>
+    </sc-for>
+  </div>
+
+</sc-if>
+</div>
+</x-import>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;startRole&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;login&quot;, &quot;options&quot;: [&quot;login&quot;, &quot;manager&quot;, &quot;agent&quot;], &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Demo&quot;}, &quot;recordingTone&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Demo&quot;}}">
+class Component extends DCLogic {
+  state = {
+    role: (this.props.startRole === 'manager' || this.props.startRole === 'agent') ? this.props.startRole : null,
+    tab: 'dash', emp: null, lead: null, leadFilter: 'All', callFilter: 'All',
+    playingId: null, playPct: {}, exported: false
+  };
+  componentWillUnmount(){ this.stopTone(); }
+  startTone(){
+    this.stopTone();
+    if (this.props.recordingTone === false) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    this.ac = new AC();
+    const g = this.ac.createGain(); g.gain.value = 0.06; g.connect(this.ac.destination);
+    this.osc = this.ac.createOscillator(); this.osc.type = 'sine'; this.osc.frequency.value = 210;
+    this.osc.connect(g); this.osc.start();
+    this.lfo = setInterval(() => { if (this.osc) this.osc.frequency.value = 170 + Math.random()*140; }, 260);
+  }
+  stopTone(){
+    if (this.lfo) { clearInterval(this.lfo); this.lfo = null; }
+    if (this.osc) { try{this.osc.stop();}catch(e){} this.osc = null; }
+    if (this.ac) { try{this.ac.close();}catch(e){} this.ac = null; }
+    if (this.prog) { clearInterval(this.prog); this.prog = null; }
+  }
+  togglePlay(id){
+    if (this.state.playingId === id) {
+      this.stopTone(); this.setState({playingId: null});
+      return;
+    }
+    this.stopTone(); this.startTone();
+    this.setState(s => ({playingId: id, playPct: {...s.playPct, [id]: s.playPct[id] >= 100 ? 0 : (s.playPct[id]||0)}}));
+    this.prog = setInterval(() => {
+      this.setState(s => {
+        const p = (s.playPct[id]||0) + 2;
+        if (p >= 100) { this.stopTone(); return {playingId: null, playPct: {...s.playPct, [id]: 100}}; }
+        return {playPct: {...s.playPct, [id]: p}};
+      });
+    }, 200);
+  }
+  renderVals(){
+    const st = this.state;
+    const go = (tab) => () => { this.stopTone(); this.setState({tab, playingId: null}); };
+    const statusStyle = (s) => ({
+      'New': {bg:'#fff', fg:'#10180C'},
+      'Follow-up call': {bg:'#7FD63B', fg:'#10180C'},
+      'Not pickup': {bg:'#EFECE3', fg:'#7A8172'},
+      'Busy on call': {bg:'#EFECE3', fg:'#3A4033'},
+      'Renewal follow-up': {bg:'#10180C', fg:'#C8FF4A'},
+      'Interested': {bg:'#C8FF4A', fg:'#10180C'},
+      'Won': {bg:'#3DC838', fg:'#fff'},
+      'Lost': {bg:'#10180C', fg:'#EFECE3'}
+    }[s] || {bg:'#fff', fg:'#10180C'});
+    const team = [
+      {name:'Priyanka Panchal', phone:'+91 98250 12340', calls:95, conn:71, talk:'4h 12m'},
+      {name:'Nimmy Saxena', phone:'+91 98790 22411', calls:78, conn:60, talk:'3h 38m'},
+      {name:'Hardik Vaidya', phone:'+91 97230 88123', calls:64, conn:47, talk:'3h 02m'},
+      {name:'Supriya Manna', phone:'+91 90990 45678', calls:59, conn:41, talk:'2h 47m'},
+      {name:'Dipti Meghapara', phone:'+91 96625 33210', calls:48, conn:38, talk:'2h 21m'},
+      {name:'Vimal Varmora', phone:'+91 98980 77650', calls:35, conn:26, talk:'1h 56m'},
+      {name:'Sunny Parmar', phone:'+91 95740 11098', calls:21, conn:17, talk:'1h 34m'},
+      {name:'Keval Patel', phone:'+91 99040 65432', calls:12, conn:11, talk:'1h 56m'}
+    ];
+    const leads = [
+      {id:'25458', name:'Sarfaraj Mitsubishi Technician', phone:'+91 88663 20145', status:'Follow-up call', attempts:4, added:'23 Sep', last:'Today', note:'Need to call back tomorrow — comparing AMC quotes with local vendor.'},
+      {id:'56890', name:'Dinesh Deshmukh', phone:'+91 90040 71126', status:'Interested', attempts:5, added:'22 Sep', last:'Today', note:'Positive on annual plan. Send price list on WhatsApp before 6 PM.'},
+      {id:'59849', name:'Kaushik Ambani', phone:'+91 79905 51877', status:'Not pickup', attempts:14, added:'13 Apr', last:'Fri', note:'Rings out every time after 2 PM. Try mornings next week.'},
+      {id:'59675', name:'Yudhir Agarwal', phone:'+91 98111 20455', status:'Renewal follow-up', attempts:2, added:'27 Mar', last:'26 Apr', note:'Renewal due 30 Aug. He will visit the shop and place order.'},
+      {id:'12345', name:'Nikunj Shingala', phone:'+91 97256 09912', status:'Won', attempts:6, added:'23 Jan', last:'Yest', note:'Closed — 12-month plan, payment received via UPI.'},
+      {id:'56987', name:'Sapna Suthar', phone:'+91 93275 84420', status:'New', attempts:0, added:'Today', last:'—', note:'Imported from IndiaMART enquiry. Wants demo of broadcast feature.'},
+      {id:'85214', name:'Keval Patel Traders', phone:'+91 98793 10288', status:'Busy on call', attempts:3, added:'23 Jan', last:'Today', note:'Was on another call twice today. Callback slot booked 5:30 PM.'},
+      {id:'44102', name:'Megha Textiles', phone:'+91 90230 55671', status:'Lost', attempts:9, added:'02 Jan', last:'12 Aug', note:'Went with competitor on price. Revisit at renewal season.'}
+    ];
+    const recs = [
+      {id:'r1', agent:'Priyanka', client:'Dolat Yadav', dur:'25m 21s', date:'24 Aug · 6:25 PM', note:'He will visit the shop and place order.'},
+      {id:'r2', agent:'Nimmy', client:'Rajesh Kumar', dur:'10m 58s', date:'24 Aug · 7:33 PM', note:'Price list sent. Asked for GST invoice sample.'},
+      {id:'r3', agent:'Hardik', client:'Avani Shah', dur:'6m 10s', date:'24 Aug · 3:12 PM', note:'Scheduled a product demo on Thursday.'},
+      {id:'r4', agent:'Supriya', client:'Dinesh Deshmukh', dur:'4m 47s', date:'24 Aug · 1:48 PM', note:'Interested in annual plan, wants WhatsApp follow-up.'}
+    ];
+    const calls = [
+      {name:'Dolat Yadav', phone:'+91 94430 57531', time:'6:25 PM', type:'Outgoing', dur:'25m 21s', note:'He will visit the shop and place order.'},
+      {name:'Rajesh Kumar', phone:'+91 98846 67450', time:'7:33 PM', type:'Incoming', dur:'10m 58s', note:'Price list sent.'},
+      {name:'Unknown', phone:'+91 86081 74215', time:'6:34 PM', type:'Outgoing', dur:'0s', note:''},
+      {name:'Avani Shah', phone:'+91 76038 55190', time:'3:12 PM', type:'Outgoing', dur:'6m 10s', note:'Demo booked for Thursday.'},
+      {name:'Sapna Suthar', phone:'+91 93275 84420', time:'12:05 PM', type:'Missed', dur:'—', note:''},
+      {name:'Megha Textiles', phone:'+91 90230 55671', time:'11:20 AM', type:'Rejected', dur:'—', note:''},
+      {name:'Kaushik Ambani', phone:'+91 79905 51877', time:'10:41 AM', type:'Outgoing', dur:'0s', note:'Never attended — retry morning.'}
+    ];
+    const typeC = {Incoming:'#2E9E2B', Outgoing:'#B8860B', Missed:'#C0392B', Rejected:'#8E2020'};
+    const typeG = {Incoming:'↓', Outgoing:'↑', Missed:'↩', Rejected:'⊘'};
+    const mTabs = [
+      {k:'dash', label:'Dashboard', icon:'▦'}, {k:'board', label:'Board', icon:'☰'},
+      {k:'leads', label:'Leads', icon:'◎'}, {k:'recs', label:'Recordings', icon:'▶'},
+      {k:'more', label:'More', icon:'⋯'}
+    ];
+    const aTabs = [
+      {k:'dash', label:'My Day', icon:'▦'}, {k:'calls', label:'Calls', icon:'☎'},
+      {k:'leads', label:'My Leads', icon:'◎'}, {k:'sched', label:'Follow-up', icon:'◷'},
+      {k:'prof', label:'Profile', icon:'◉'}
+    ];
+    const isM = st.role === 'manager';
+    const tabDefs = isM ? mTabs : aTabs;
+    const activeTab = st.tab;
+    const empVisible = isM && activeTab === 'emp';
+    const titles = isM
+      ? {dash:'Dashboard', board:'Leaderboard', emp:'Caller', leads:'Leads', recs:'Recordings', more:'More'}
+      : {dash:'My Day', calls:'Call History', leads:'My Leads', sched:'Follow-up', prof:'Profile'};
+    const leadFilters = ['All','New','Follow-up call','Interested','Won','Lost'];
+    const leadsFiltered = st.leadFilter === 'All' ? leads : leads.filter(l => l.status === st.leadFilter);
+    const callFilterDefs = ['All','Incoming','Outgoing','Missed','Rejected'];
+    const callsFiltered = st.callFilter === 'All' ? calls : calls.filter(c => c.type === st.callFilter);
+    const allStatuses = ['New','Follow-up call','Not pickup','Busy on call','Renewal follow-up','Interested','Won','Lost'];
+    const mkBar = (vals, peakIdx) => vals.map((v,i) => ({
+      t: ['9A','10A','11A','12P','1P','2P','3P','4P','5P','6P'][i] || '',
+      h: Math.max(6, Math.round(v)),
+      c: i === peakIdx ? 'linear-gradient(135deg,#3DC838,#C8FF4A)' : '#10180C'
+    }));
+    return {
+      isLogin: !st.role,
+      inApp: !!st.role,
+      goManager: () => this.setState({role:'manager', tab:'dash'}),
+      goAgent: () => this.setState({role:'agent', tab:'dash'}),
+      logout: () => { this.stopTone(); this.setState({role:null, tab:'dash', lead:null, emp:null, playingId:null}); },
+      roleChip: isM ? 'Manager ⏻' : 'Caller ⏻',
+      screenTitle: titles[activeTab] || 'Dashboard',
+      screenSub: isM ? 'ASKEVA · TEAM VIEW · 24 AUG 2026' : 'ASKEVA · PRIYANKA · 24 AUG 2026',
+      sMDash: isM && activeTab === 'dash',
+      sBoard: isM && activeTab === 'board',
+      sEmp: empVisible && !!st.emp,
+      sLeads: activeTab === 'leads',
+      sRecs: isM && activeTab === 'recs',
+      sMore: isM && activeTab === 'more',
+      sADash: !isM && activeTab === 'dash',
+      sACalls: !isM && activeTab === 'calls',
+      sASched: !isM && activeTab === 'sched',
+      sAProf: !isM && activeTab === 'prof',
+      goBoard: go('board'),
+      hourly: mkBar([18,34,52,44,65,88,58,46,39,28].map(v=>v*0.95), 5),
+      aHourly: mkBar([8,14,20,16,24,30,22,18,12,9].map(v=>v*2.4), 5),
+      board: team.map((e,i) => ({
+        ...e, rank: (i+1) < 10 ? '0'+(i+1) : ''+(i+1),
+        bg: i === 0 ? '#10180C' : '#fff', fg: i === 0 ? '#EFECE3' : '#10180C',
+        rankC: i === 0 ? '#C8FF4A' : '#3DC838',
+        open: () => this.setState({emp: e, tab: 'emp'})
+      })),
+      emp: st.emp || team[0],
+      empRows: [
+        {label:'↓ Incoming', c:'#2E9E2B', val:'18 · 27m 46s'},
+        {label:'↑ Outgoing', c:'#B8860B', val:'72 · 38m 18s'},
+        {label:'↩ Missed', c:'#C0392B', val:'8'},
+        {label:'⊘ Rejected', c:'#8E2020', val:'0'},
+        {label:'✂ Never attended', c:'#7A8172', val:'7'}
+      ],
+      empCalls: calls.slice(0,4).map(c => ({...c, tc: typeC[c.type]})),
+      filters: leadFilters.map(f => ({
+        label: f, pick: () => this.setState({leadFilter: f}),
+        bg: st.leadFilter === f ? '#10180C' : '#fff',
+        fg: st.leadFilter === f ? '#C8FF4A' : '#10180C'
+      })),
+      donut: 'conic-gradient(#3DC838 0 14%, #C8FF4A 14% 36%, #7FD63B 36% 61%, #EFECE3 61% 100%)',
+      leadCount: leadsFiltered.length,
+      leadsView: leadsFiltered.map(l => {
+        const p = statusStyle(l.status);
+        return {...l, pillBg: p.bg, pillFg: p.fg, open: () => this.setState({lead: l})};
+      }),
+      leadOpen: !!st.lead,
+      lead: st.lead ? {...st.lead, status: st.lead.status} : {id:'',name:'',phone:'',attempts:0,added:'',last:'',note:'',status:''},
+      closeLead: () => this.setState({lead: null}),
+      statusChips: allStatuses.map(s => {
+        const active = st.lead && st.lead.status === s;
+        const p = statusStyle(s);
+        return {
+          label: s,
+          bg: active ? p.bg : '#fff', fg: active ? p.fg : '#7A8172',
+          pick: () => this.setState(prev => ({lead: {...prev.lead, status: s}}))
+        };
+      }),
+      recsView: recs.map(r => {
+        const playing = st.playingId === r.id;
+        return {...r,
+          pct: st.playPct[r.id] || 0,
+          btnBg: playing ? '#3DC838' : '#fff', btnFg: playing ? '#fff' : '#10180C',
+          btnGlyph: playing ? '❚❚' : '▶',
+          toggle: () => this.togglePlay(r.id)
+        };
+      }),
+      callFilters: callFilterDefs.map(f => ({
+        label: f, pick: () => this.setState({callFilter: f}),
+        bg: st.callFilter === f ? '#10180C' : '#fff',
+        fg: st.callFilter === f ? '#C8FF4A' : '#10180C'
+      })),
+      callsView: callsFiltered.map(c => ({...c, tc: typeC[c.type], glyph: typeG[c.type], open: () => this.setState({call: c})})),
+      callOpen: !!st.call,
+      call: (() => {
+        const c = st.call || {name:'',phone:'',note:''};
+        const hists = {
+          'Dolat Yadav': {inc:2, out:4, mis:1, talk:'48m 10s'},
+          'Rajesh Kumar': {inc:3, out:1, mis:0, talk:'22m 34s'},
+          'Avani Shah': {inc:1, out:2, mis:0, talk:'14m 05s'}
+        };
+        const h = hists[c.name] || {inc:0, out:2, mis:1, talk:'6m 12s'};
+        const total = h.inc + h.out + h.mis;
+        const pIn = Math.round(h.inc/total*100), pOut = pIn + Math.round(h.out/total*100);
+        return {...c, ...h, total,
+          short: (c.name || '').split(' ')[0].toUpperCase(),
+          donut: 'conic-gradient(#3DC838 0 ' + pIn + '%, #C8FF4A ' + pIn + '% ' + pOut + '%, #EFECE3 ' + pOut + '% 100%)'
+        };
+      })(),
+      closeCall: () => this.setState({call: null}),
+      callHist: (() => {
+        const c = st.call || {};
+        const base = [
+          {type:'Outgoing', when:'Today · ' + (c.time || '6:25 PM'), dur: c.dur || '2m 10s'},
+          {type:'Incoming', when:'Yesterday · 4:12 PM', dur:'8m 44s'},
+          {type:'Missed', when:'22 Aug · 11:03 AM', dur:'—'},
+          {type:'Outgoing', when:'21 Aug · 5:40 PM', dur:'3m 27s'}
+        ];
+        return base.map(x => ({...x, tc: typeC[x.type], glyph: typeG[x.type]}));
+      })(),
+      schedCount: 3,
+      schedView: [
+        {id:'f1', name:'Keval Patel Traders', time:'5:30 PM', note:'Was busy twice today — confirmed slot for pricing talk.', bg:'#10180C', fg:'#EFECE3'},
+        {id:'f2', name:'Sarfaraj Mitsubishi Technician', time:'Tomorrow 10 AM', note:'Comparing AMC quotes. Bring competitor price sheet.', bg:'#fff', fg:'#10180C'},
+        {id:'f3', name:'Yudhir Agarwal', time:'30 Aug', note:'Renewal due — he will visit the shop and place order.', bg:'#fff', fg:'#10180C'}
+      ].map(s => {
+        const snoozed = !!(st.snoozed && st.snoozed[s.id]);
+        return {...s,
+          time: snoozed ? '+1H · ' + s.time : s.time,
+          snLabel: snoozed ? '✓ SNOOZED' : 'SNOOZE 1H',
+          snBg: snoozed ? '#C8FF4A' : 'transparent',
+          snFg: snoozed ? '#10180C' : s.fg,
+          snooze: () => this.setState(p => ({snoozed: {...(p.snoozed||{}), [s.id]: !snoozed}}))
+        };
+      }),
+      targets: [
+        {label:'Calls made', progress:'95 / 100', pct:95, c:'linear-gradient(135deg,#3DC838,#C8FF4A)'},
+        {label:'Talk time', progress:'4h 12m / 5h', pct:84, c:'#3DC838'},
+        {label:'Leads won', progress:'3 / 5', pct:60, c:'#10180C'}
+      ],
+      exportLabel: st.exported ? '✓ SENT' : '↓ EXPORT',
+      fakeExport: () => { this.setState({exported: true}); setTimeout(() => this.setState({exported:false}), 1800); },
+      tabs: tabDefs.map(t => {
+        const active = activeTab === t.k || (t.k === 'board' && activeTab === 'emp');
+        return {...t, c: active ? '#C8FF4A' : '#7A8172', go: go(t.k)};
+      })
+    };
+  }
+}
+</script>
+</body>
+</html>

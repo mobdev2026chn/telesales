@@ -1,0 +1,265 @@
+{
+  "plugins": [
+    "react",
+    "import"
+  ],
+  "rules": {
+    "react/forbid-elements": [
+      "warn",
+      {
+        "forbid": []
+      }
+    ],
+    "no-restricted-imports": [
+      "warn",
+      {
+        "patterns": [
+          {
+            "group": [
+              "components/actions/**",
+              "components/brand/**",
+              "components/cards/**",
+              "components/chat/**",
+              "seminar/**"
+            ],
+            "message": "Import design-system components from 'index.js', not component internals."
+          }
+        ]
+      }
+    ],
+    "no-restricted-syntax": [
+      "warn",
+      {
+        "selector": "Literal[value=/#[0-9a-fA-F]{3,8}\\b/]",
+        "message": "Raw hex color — use a design-system color token via var()."
+      },
+      {
+        "selector": "Literal[value=/\\b\\d+px\\b/]",
+        "message": "Raw px value — use a design-system spacing token via var()."
+      },
+      {
+        "selector": "Literal[value=/font-family\\s*:\\s*(?!['\\\"]?(?:Anton|Playfair Display|Archivo|Space Mono))/i]",
+        "message": "Font not provided by the design system. Available: Anton, Playfair Display, Archivo, Space Mono."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Button'] > JSXAttribute > JSXIdentifier[name!=/^(?:tone|size|disabled|children|onClick|style|key|ref|className|style|children)$/]",
+        "message": "<Button> doesn't accept that prop. Declared props: tone, size, disabled, children, onClick, style."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Button'] > JSXAttribute[name.name='tone'] > Literal[value!=/^(?:green|ink|lime|outline)$/]",
+        "message": "<Button> tone must be one of 'green' | 'ink' | 'lime' | 'outline'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Button'] > JSXAttribute[name.name='size'] > Literal[value!=/^(?:sm|md|lg)$/]",
+        "message": "<Button> size must be one of 'sm' | 'md' | 'lg'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='ChatBubble'] > JSXAttribute > JSXIdentifier[name!=/^(?:direction|sender|time|read|action|children|style|key|ref|className|style|children)$/]",
+        "message": "<ChatBubble> doesn't accept that prop. Declared props: direction, sender, time, read, action, children, style."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='ChatBubble'] > JSXAttribute[name.name='direction'] > Literal[value!=/^(?:in|out)$/]",
+        "message": "<ChatBubble> direction must be one of 'in' | 'out'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Pill'] > JSXAttribute > JSXIdentifier[name!=/^(?:number|label|tone|style|key|ref|className|style|children)$/]",
+        "message": "<Pill> doesn't accept that prop. Declared props: number, label, tone, style."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Pill'] > JSXAttribute[name.name='tone'] > Literal[value!=/^(?:outline|lime|green)$/]",
+        "message": "<Pill> tone must be one of 'outline' | 'lime' | 'green'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='SectionLabel'] > JSXAttribute > JSXIdentifier[name!=/^(?:children|tone|style|key|ref|className|style|children)$/]",
+        "message": "<SectionLabel> doesn't accept that prop. Declared props: children, tone, style."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='SectionLabel'] > JSXAttribute[name.name='tone'] > Literal[value!=/^(?:ink|green|paper)$/]",
+        "message": "<SectionLabel> tone must be one of 'ink' | 'green' | 'paper'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='StatCard'] > JSXAttribute > JSXIdentifier[name!=/^(?:number|label|stat|caption|tone|style|key|ref|className|style|children)$/]",
+        "message": "<StatCard> doesn't accept that prop. Declared props: number, label, stat, caption, tone, style."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='StatCard'] > JSXAttribute[name.name='tone'] > Literal[value!=/^(?:white|ink|green)$/]",
+        "message": "<StatCard> tone must be one of 'white' | 'ink' | 'green'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='TemplateCard'] > JSXAttribute > JSXIdentifier[name!=/^(?:header|headerTone|title|body|cta|ctaTone|style|key|ref|className|style|children)$/]",
+        "message": "<TemplateCard> doesn't accept that prop. Declared props: header, headerTone, title, body, cta, ctaTone, style."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='TemplateCard'] > JSXAttribute[name.name='headerTone'] > Literal[value!=/^(?:green|lime|ink)$/]",
+        "message": "<TemplateCard> headerTone must be one of 'green' | 'lime' | 'ink'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='TemplateCard'] > JSXAttribute[name.name='ctaTone'] > Literal[value!=/^(?:green|ink|outline)$/]",
+        "message": "<TemplateCard> ctaTone must be one of 'green' | 'ink' | 'outline'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Ticker'] > JSXAttribute > JSXIdentifier[name!=/^(?:text|speed|style|key|ref|className|style|children)$/]",
+        "message": "<Ticker> doesn't accept that prop. Declared props: text, speed, style."
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": [
+        "**/index.js"
+      ],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ],
+  "x-omelette": {
+    "components": {
+      "Button": {
+        "replaces": []
+      },
+      "ChatBubble": {
+        "replaces": []
+      },
+      "Pill": {
+        "replaces": []
+      },
+      "SectionLabel": {
+        "replaces": []
+      },
+      "StatCard": {
+        "replaces": []
+      },
+      "TemplateCard": {
+        "replaces": []
+      },
+      "Ticker": {
+        "replaces": []
+      }
+    },
+    "tokens": [
+      "--border-ink",
+      "--border-w",
+      "--font-accent",
+      "--font-body",
+      "--font-display",
+      "--font-mono",
+      "--gradient-signature",
+      "--green-400",
+      "--green-500",
+      "--green-600",
+      "--ink-800",
+      "--ink-900",
+      "--leading-body",
+      "--leading-display",
+      "--lime-400",
+      "--paper",
+      "--radius-bubble",
+      "--radius-card",
+      "--radius-pill",
+      "--shadow-btn",
+      "--shadow-card",
+      "--shadow-card-sm",
+      "--space-1",
+      "--space-2",
+      "--space-3",
+      "--space-4",
+      "--space-5",
+      "--space-6",
+      "--space-7",
+      "--space-8",
+      "--surface-accent",
+      "--surface-card",
+      "--surface-highlight",
+      "--surface-inverse",
+      "--surface-page",
+      "--text-accent",
+      "--text-body",
+      "--text-body-lg",
+      "--text-body-md",
+      "--text-body-sm",
+      "--text-h1",
+      "--text-h2",
+      "--text-heading",
+      "--text-hero",
+      "--text-label",
+      "--text-muted",
+      "--text-on-accent",
+      "--text-on-inverse",
+      "--text-stat",
+      "--tracking-display",
+      "--tracking-label",
+      "--wa-action",
+      "--wa-bubble-in",
+      "--wa-bubble-out",
+      "--wa-canvas",
+      "--wa-meta",
+      "--white"
+    ],
+    "tokenKinds": {
+      "--green-600": "color",
+      "--green-500": "color",
+      "--green-400": "color",
+      "--lime-400": "color",
+      "--ink-900": "color",
+      "--ink-800": "color",
+      "--paper": "color",
+      "--white": "color",
+      "--wa-canvas": "color",
+      "--wa-bubble-in": "color",
+      "--wa-bubble-out": "color",
+      "--wa-action": "color",
+      "--wa-meta": "color",
+      "--gradient-signature": "color",
+      "--surface-page": "color",
+      "--surface-card": "color",
+      "--surface-inverse": "color",
+      "--surface-accent": "color",
+      "--surface-highlight": "color",
+      "--text-heading": "font",
+      "--text-body": "font",
+      "--text-muted": "font",
+      "--text-on-accent": "font",
+      "--text-on-inverse": "font",
+      "--text-accent": "font",
+      "--border-ink": "color",
+      "--font-display": "font",
+      "--font-accent": "font",
+      "--font-body": "font",
+      "--font-mono": "font",
+      "--text-hero": "font",
+      "--text-h1": "font",
+      "--text-h2": "font",
+      "--text-stat": "font",
+      "--text-body-lg": "font",
+      "--text-body-md": "font",
+      "--text-body-sm": "font",
+      "--text-label": "font",
+      "--tracking-label": "font",
+      "--tracking-display": "font",
+      "--leading-display": "font",
+      "--leading-body": "font",
+      "--space-1": "spacing",
+      "--space-2": "spacing",
+      "--space-3": "spacing",
+      "--space-4": "spacing",
+      "--space-5": "spacing",
+      "--space-6": "spacing",
+      "--space-7": "spacing",
+      "--space-8": "spacing",
+      "--radius-card": "radius",
+      "--radius-bubble": "radius",
+      "--radius-pill": "radius",
+      "--border-w": "spacing",
+      "--shadow-card": "shadow",
+      "--shadow-card-sm": "shadow",
+      "--shadow-btn": "shadow"
+    },
+    "fontFamilies": [
+      "Anton",
+      "Archivo",
+      "Playfair Display",
+      "Space Mono"
+    ]
+  }
+}
