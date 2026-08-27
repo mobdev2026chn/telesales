@@ -886,9 +886,13 @@
   </div>
 
   <script>
-    let API_BASE = (window.location.protocol === 'http:' || window.location.protocol === 'https:')
-      ? `${window.location.origin}/api`
-      : 'http://localhost:5004/api';
+    let API_BASE = 'https://telesales.askeva.io/api';
+    if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
+      API_BASE = `${window.location.origin}/api`;
+    }
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      API_BASE = 'http://localhost:5004/api';
+    }
 
     // In-memory User Dictionary and Managers List
     window.usersMap = {};
