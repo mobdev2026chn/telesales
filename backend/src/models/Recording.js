@@ -1,7 +1,11 @@
 const mongoose = require('mongoose');
 
 const RecordingSchema = new mongoose.Schema({
-  id: { type: String, required: true, unique: true },
+  id: { 
+    type: String, 
+    default: () => `rec_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+    unique: true 
+  },
   callerName: { type: String, required: true },
   contactName: { type: String, required: true },
   phoneNumber: { type: String, required: true },

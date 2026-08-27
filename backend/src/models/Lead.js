@@ -1,7 +1,11 @@
 const mongoose = require('mongoose');
 
 const LeadSchema = new mongoose.Schema({
-  id: { type: String, required: true, unique: true },
+  id: { 
+    type: String, 
+    default: () => `lead_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+    unique: true 
+  },
   name: { type: String, required: true },
   phone: { type: String, required: true },
   status: { 
