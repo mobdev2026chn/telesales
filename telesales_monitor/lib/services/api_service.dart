@@ -456,16 +456,49 @@ class ApiService {
 
   // 16. Check if phone number is registered in MongoDB before connecting SIM
   static Future<Map<String, dynamic>?> checkPhoneRegistered(String phoneNumber) async {
+    final clean = phoneNumber.replaceAll(RegExp(r'[^0-9]'), '');
+    final last10 = clean.length >= 10 ? clean.substring(clean.length - 10) : clean;
+
     try {
+      // 1. Try dedicated check-phone endpoint
       final res = await _postWithFallback('/auth/check-phone', {
-        'phoneNumber': phoneNumber,
+        'phoneNumber': last10,
       });
-      if (res != null) {
-        return jsonDecode(res.body) as Map<String, dynamic>;
+      if (res != null && res.statusCode == 200) {
+        final decoded = jsonDecode(res.body);
+        if (decoded is Map<String, dynamic>) {
+          return decoded;
+        }
       }
     } catch (e) {
-      debugPrint('ApiService.checkPhoneRegistered error: $e');
+      debugPrint('checkPhoneRegistered /auth/check-phone endpoint error: $e');
     }
+
+    try {
+      // 2. High-reliability fallback: verify against live user list (/admin/users)
+      final usersRes = await _getWithFallback('/admin/users');
+      if (usersRes != null && usersRes.statusCode == 200) {
+        final data = jsonDecode(usersRes.body);
+        final list = (data['users'] as List<dynamic>?) ?? [];
+        for (final u in list) {
+          final p = (u['phone'] ?? '').toString().replaceAll(RegExp(r'[^0-9]'), '');
+          if (p == last10 || p.endsWith(last10) || last10.endsWith(p)) {
+            return {
+              'success': true,
+              'user': u,
+              'message': 'Phone number verified successfully'
+            };
+          }
+        }
+        return {
+          'success': false,
+          'message': 'Mobile number \'$last10\' is not registered in the database. Please contact your manager or admin to add your account.'
+        };
+      }
+    } catch (e) {
+      debugPrint('checkPhoneRegistered fallback error: $e');
+    }
+
     return null;
   }
 }
