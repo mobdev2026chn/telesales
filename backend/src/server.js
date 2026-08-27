@@ -34,6 +34,19 @@ app.use('/api/uploads', express.static(path.join(__dirname, '../uploads')));
 app.use('/admin', express.static(path.join(__dirname, '../../admin_web')));
 app.use('/web', express.static(path.join(__dirname, '../../admin_web')));
 app.use('/assets/images', express.static(path.join(__dirname, '../../telesales_monitor/assets/images')));
+app.use(express.static(path.join(__dirname, '../../admin_web')));
+app.use(express.static(path.join(__dirname, '../uploads')));
+
+// Direct logo handler
+app.get(['/ask_eva_logo.jpg', '/ask_eva_logo.png', '/admin/ask_eva_logo.jpg', '/admin/ask_eva_logo.png', '/web/ask_eva_logo.png'], (req, res) => {
+  const p1 = path.join(__dirname, '../../admin_web/ask_eva_logo.png');
+  if (fs.existsSync(p1)) return res.sendFile(p1);
+  const p2 = path.join(__dirname, '../../admin_web/ask_eva_logo.jpg');
+  if (fs.existsSync(p2)) return res.sendFile(p2);
+  const p3 = path.join(__dirname, '../uploads/ask_eva_logo.jpg');
+  if (fs.existsSync(p3)) return res.sendFile(p3);
+  res.status(404).send('Logo not found');
+});
 
 // Database Connection & Initial Seeding
 connectDB().then(() => {
