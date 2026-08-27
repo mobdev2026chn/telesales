@@ -13,7 +13,7 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
 
     <application
-        android:label="Telesales Monitor"
+        android:label="Telesales"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"

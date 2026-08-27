@@ -30,7 +30,7 @@ class TelesalesApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => TeleProvider()),
       ],
       child: MaterialApp(
-        title: 'ASKEVA Call Monitor',
+        title: 'Telesales',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           scaffoldBackgroundColor: AppTheme.paper,
