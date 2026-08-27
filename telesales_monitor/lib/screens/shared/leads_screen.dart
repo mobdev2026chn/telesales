@@ -340,7 +340,16 @@ class _LeadsScreenState extends State<LeadsScreen> {
                     badgeText = AppTheme.limeYellow;
                   }
 
-                  final isUnsaved = name == phone || name == 'Unknown';
+                  final cleanName = name.replaceAll(RegExp(r'[\s+\-()]'), '');
+                  final cleanPhone = phone.replaceAll(RegExp(r'[\s+\-()]'), '');
+                  final isUnsaved = name.trim().isEmpty ||
+                      name == 'Unknown' ||
+                      name == 'Client' ||
+                      name == 'Unsaved' ||
+                      cleanName == cleanPhone ||
+                      cleanName.endsWith(cleanPhone) ||
+                      cleanPhone.endsWith(cleanName) ||
+                      RegExp(r'^\d+$').hasMatch(cleanName);
 
                   return NeoCard(
                     backgroundColor: AppTheme.white,

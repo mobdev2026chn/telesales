@@ -6,6 +6,7 @@ import '../../widgets/neo_card.dart';
 import '../../widgets/neo_button.dart';
 import '../../widgets/top_header.dart';
 import '../../widgets/reschedule_sheet.dart';
+import '../../widgets/save_contact_dialog.dart';
 import '../../providers/tele_provider.dart';
 
 class ScheduledCallbacksScreen extends StatefulWidget {
@@ -154,6 +155,17 @@ class _ScheduledCallbacksScreenState extends State<ScheduledCallbacksScreen> {
                 final isDark = index == 0;
                 final timeStr = _formatScheduleTime(cb.scheduledTime);
 
+                final cleanName = cb.name.replaceAll(RegExp(r'[\s+\-()]'), '');
+                final cleanPhone = cb.phone.replaceAll(RegExp(r'[\s+\-()]'), '');
+                final isUnsaved = cb.name.trim().isEmpty ||
+                    cb.name == 'Unknown' ||
+                    cb.name == 'Client' ||
+                    cb.name == 'Unsaved' ||
+                    cleanName == cleanPhone ||
+                    cleanName.endsWith(cleanPhone) ||
+                    cleanPhone.endsWith(cleanName) ||
+                    RegExp(r'^\d+$').hasMatch(cleanName);
+
                 return NeoCard(
                   backgroundColor: isDark ? AppTheme.ink900 : AppTheme.white,
                   shadowColor: AppTheme.ink900,
@@ -165,14 +177,49 @@ class _ScheduledCallbacksScreenState extends State<ScheduledCallbacksScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Expanded(
-                            child: Text(
-                              cb.name,
-                              style: AppTheme.bodyBold(
-                                size: 14,
-                                color: isDark ? AppTheme.white : AppTheme.ink900,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                            child: Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    cb.name,
+                                    style: AppTheme.bodyBold(
+                                      size: 14,
+                                      color: isDark ? AppTheme.white : AppTheme.ink900,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (cb.phone.isNotEmpty) ...[
+                                  const SizedBox(width: 8),
+                                  GestureDetector(
+                                    onTap: () => SaveContactDialog.show(context, cb.phone, initialName: isUnsaved ? null : cb.name),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: isUnsaved ? AppTheme.limeYellow : (isDark ? AppTheme.ink800 : AppTheme.paper),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: isDark ? AppTheme.limeYellow : AppTheme.ink900, width: 1),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            isUnsaved ? Icons.person_add_alt_1_rounded : Icons.edit_note_rounded,
+                                            size: 12,
+                                            color: AppTheme.ink900,
+                                          ),
+                                          const SizedBox(width: 3),
+                                          Text(
+                                            isUnsaved ? '+ SAVE' : 'EDIT',
+                                            style: AppTheme.label(size: 8, color: AppTheme.ink900),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
                           const SizedBox(width: 8),

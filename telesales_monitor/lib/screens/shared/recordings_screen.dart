@@ -4,6 +4,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/neo_card.dart';
 import '../../widgets/neo_button.dart';
 import '../../widgets/top_header.dart';
+import '../../widgets/save_contact_dialog.dart';
 import '../../providers/tele_provider.dart';
 import '../../models/recording_model.dart';
 import '../../services/api_service.dart';
@@ -243,7 +244,13 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                   final bool isPlaying = rMap['isPlaying'] as bool? ?? false;
                   final double progress = rMap['progress'] as double? ?? 0.0;
 
-                  final RecordingModel? origRec = tele.recordings.firstWhere((element) => element.id == id, orElse: () => tele.recordings[0]);
+                  RecordingModel? origRec;
+                  for (final r in tele.recordings) {
+                    if (r.id == id) {
+                      origRec = r;
+                      break;
+                    }
+                  }
                   final int rating = _ratings[id] ?? origRec?.rating ?? 0;
                   final String savedComment = origRec?.comment ?? '';
                   final String commentedBy = origRec?.commentedBy ?? '';
@@ -251,6 +258,20 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                   if (!_commentCtrls.containsKey(id)) {
                     _commentCtrls[id] = TextEditingController(text: savedComment);
                   }
+
+                  final String recPhone = (origRec != null && origRec.clientPhone.isNotEmpty)
+                      ? origRec.clientPhone
+                      : (rMap['phoneNumber']?.toString() ?? '');
+                  final cleanName = contact.replaceAll(RegExp(r'[\s+\-()]'), '');
+                  final cleanPhone = recPhone.replaceAll(RegExp(r'[\s+\-()]'), '');
+                  final isUnsaved = contact.trim().isEmpty ||
+                      contact == 'Unknown' ||
+                      contact == 'Client' ||
+                      contact == 'Unsaved' ||
+                      cleanName == cleanPhone ||
+                      cleanName.endsWith(cleanPhone) ||
+                      cleanPhone.endsWith(cleanName) ||
+                      RegExp(r'^\d+$').hasMatch(cleanName);
 
                   return NeoCard(
                     backgroundColor: AppTheme.white,
@@ -263,17 +284,51 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Row(
-                              children: [
-                                Text(
-                                  '$caller → ',
-                                  style: AppTheme.label(size: 11, color: AppTheme.greenDark),
-                                ),
-                                Text(
-                                  contact,
-                                  style: AppTheme.bodyBold(size: 14, color: AppTheme.ink900),
-                                ),
-                              ],
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  Text(
+                                    '$caller → ',
+                                    style: AppTheme.label(size: 11, color: AppTheme.greenDark),
+                                  ),
+                                  Flexible(
+                                    child: Text(
+                                      contact,
+                                      style: AppTheme.bodyBold(size: 14, color: AppTheme.ink900),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  if (recPhone.isNotEmpty) ...[
+                                    const SizedBox(width: 8),
+                                    GestureDetector(
+                                      onTap: () => SaveContactDialog.show(context, recPhone, initialName: isUnsaved ? null : contact),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                        decoration: BoxDecoration(
+                                          color: isUnsaved ? AppTheme.limeYellow : AppTheme.paper,
+                                          borderRadius: BorderRadius.circular(6),
+                                          border: Border.all(color: AppTheme.ink900, width: 1),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              isUnsaved ? Icons.person_add_alt_1_rounded : Icons.edit_note_rounded,
+                                              size: 12,
+                                              color: AppTheme.ink900,
+                                            ),
+                                            const SizedBox(width: 3),
+                                            Text(
+                                              isUnsaved ? '+ SAVE' : 'EDIT',
+                                              style: AppTheme.label(size: 8, color: AppTheme.ink900),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
                             ),
                             GestureDetector(
                               onTap: () => tele.toggleRecordingPlayback(id),
