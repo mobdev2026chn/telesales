@@ -166,6 +166,41 @@ app.get(['/api/recordings', '/api/admin/recordings'], async (req, res) => {
   }
 });
 
+app.post(['/api/admin/recordings/:id/comment', '/api/recordings/:id/comment', '/admin/recordings/:id/comment'], async (req, res) => {
+  try {
+    const { rating, comment, commentedBy, commentedByRole } = req.body;
+    const recId = req.params.id;
+    const isMongoId = /^[0-9a-fA-F]{24}$/.test(recId);
+
+    const updated = await Recording.findOneAndUpdate(
+      {
+        $or: [
+          { id: recId },
+          ...(isMongoId ? [{ _id: recId }] : [])
+        ]
+      },
+      {
+        $set: {
+          rating: typeof rating === 'number' ? rating : 0,
+          comment: comment || '',
+          commentedBy: commentedBy || 'Admin',
+          commentedByRole: commentedByRole || 'admin',
+          commentedAt: new Date(),
+        }
+      },
+      { new: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ success: false, message: 'Recording not found' });
+    }
+
+    res.json({ success: true, message: 'Comment saved successfully', recording: updated });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.post(['/api/calls/sync', '/api/user/calls/sync'], async (req, res) => {
   try {
     const { callerId, callerName, callerPhone, calls } = req.body;

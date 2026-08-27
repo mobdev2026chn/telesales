@@ -368,8 +368,9 @@ class TeleProvider extends ChangeNotifier {
                 ? map['timestamp'] as int
                 : DateTime.now().millisecondsSinceEpoch;
 
-            if (_loginSessionTimestamp != null && timestampMs < _loginSessionTimestamp!.millisecondsSinceEpoch - 5000) {
-              continue; // Only track and sync calls made after active user login
+            final sessionMs = _loginSessionTimestamp?.millisecondsSinceEpoch ?? DateTime.now().millisecondsSinceEpoch;
+            if (timestampMs < sessionMs - 5000) {
+              continue; // Only track and sync calls made during the active user work session
             }
 
             realLogs.add(

@@ -44,30 +44,50 @@ async function purgeAtlas() {
     const notifRes = await Notification.deleteMany({});
     console.log(`🗑️ Deleted ${notifRes.deletedCount} notifications.`);
 
-    // 5. Delete all employees
-    const empRes = await Employee.deleteMany({});
-    console.log(`🗑️ Deleted ${empRes.deletedCount} existing employees.`);
+    // 5. Clean employees and preserve Admin + Mukhil
+    const empRes = await Employee.deleteMany({ email: { $nin: ['admin@askeva.com', 'mukhil@askeva.com'] } });
+    console.log(`🗑️ Deleted ${empRes.deletedCount} old test employees.`);
 
-    // 6. Seed ONLY the single clean Admin account
-    const cleanAdmin = await Employee.create({
-      id: 'admin_1',
-      name: 'Admin',
-      email: 'admin@askeva.com',
-      phone: '+91 98250 00000',
-      password: 'admin123',
-      role: 'admin',
-      team: 'Management',
-      dailyTarget: 150,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-    console.log(`\n✅ Seeded Clean Single Admin Account:\n  - Name: ${cleanAdmin.name}\n  - Email: ${cleanAdmin.email}\n  - Password: admin123\n  - Role: ${cleanAdmin.role}\n`);
+    // Ensure Admin and Mukhil are in database
+    await Employee.findOneAndUpdate(
+      { email: 'admin@askeva.com' },
+      {
+        id: 'admin_1',
+        name: 'Admin',
+        email: 'admin@askeva.com',
+        phone: '+91 98250 00000',
+        password: 'admin123',
+        role: 'admin',
+        team: 'Management',
+        dailyTarget: 150,
+        totalCalls: 0,
+        connectedCalls: 0,
+        talkTimeSeconds: 0,
+      },
+      { upsert: true, new: true }
+    );
 
-    await mongoose.disconnect();
-    console.log('🎉 ATLAS CLOUD DATABASE PURGED SUCCESSFULLY! Ready for fresh start.\n');
+    await Employee.findOneAndUpdate(
+      { phone: '8248399615' },
+      {
+        id: 'user_1787835404775',
+        name: 'Mukhil',
+        email: 'mukhil@askeva.com',
+        phone: '8248399615',
+        role: 'caller',
+        team: 'Telesales Team',
+        dailyTarget: 100,
+        totalCalls: 0,
+        connectedCalls: 0,
+        talkTimeSeconds: 0,
+      },
+      { upsert: true, new: true }
+    );
+
+    console.log('✨ Clean database ready with Admin and Mukhil accounts!');
     process.exit(0);
   } catch (err) {
-    console.error('❌ Error purging MongoDB Atlas:', err);
+    console.error('❌ Error purging Atlas DB:', err);
     process.exit(1);
   }
 }
