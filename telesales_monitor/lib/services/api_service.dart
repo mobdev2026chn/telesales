@@ -7,18 +7,16 @@ import '../models/lead_model.dart';
 import '../models/recording_model.dart';
 
 class ApiService {
-  // Candidate hosts: LAN IP (192.168.0.29:5004), adb reverse / local, emulator, production
+  // Candidate hosts: Production domain (telesales.askeva.io), LAN IP, adb reverse / local
   static final List<String> candidateBaseUrls = [
+    'https://telesales.askeva.io/api',
+    'http://telesales.askeva.io/api',
     'http://192.168.0.29:5004/api',
     'http://127.0.0.1:5004/api',
     'http://10.0.2.2:5004/api',
-    'https://telesales.askeva.io/api',
-    'http://telesales.askeva.io/api',
-    'http://192.168.0.24:5004/api',
-    'http://192.168.0.22:5004/api',
   ];
 
-  static String baseUrl = 'http://192.168.0.29:5004/api';
+  static String baseUrl = 'https://telesales.askeva.io/api';
 
   static void setBaseUrl(String url) {
     baseUrl = url;
