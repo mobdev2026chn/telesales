@@ -107,7 +107,7 @@ class TopHeader extends StatelessWidget {
               const SizedBox(width: 8),
             ],
 
-            // SIM Filter Selector Pill
+            // SIM Filter Selector Pill (SIM 1 | SIM 2)
             Container(
               height: 32,
               padding: const EdgeInsets.all(2),
@@ -120,7 +120,6 @@ class TopHeader extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _buildPillItem(context, 'ALL', 0),
                   _buildPillItem(context, 'SIM 1', 1),
                   _buildPillItem(context, 'SIM 2', 2),
                 ],
