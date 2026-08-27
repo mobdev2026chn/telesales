@@ -460,14 +460,12 @@ class TeleProvider extends ChangeNotifier {
     if (last10.length != 10 || !RegExp(r'^[6-9]\d{9}$').hasMatch(last10)) {
       return {'isValid': false, 'message': 'Please enter a valid 10-digit mobile number.'};
     }
-    final formatted = '+91 $last10';
-
     try {
-      final verifyRes = await ApiService.checkPhoneRegistered(formatted);
+      final verifyRes = await ApiService.checkPhoneRegistered(last10);
       if (verifyRes == null || verifyRes['success'] != true) {
         return {
           'isValid': false,
-          'message': verifyRes?['message']?.toString() ?? 'Mobile number \'$formatted\' is not registered in the database. Please contact your manager or admin to add your account.'
+          'message': verifyRes?['message']?.toString() ?? 'Mobile number \'$last10\' is not registered in the database. Please contact your manager or admin to add your account.'
         };
       }
       _callerName = verifyRes['user']?['name']?.toString() ?? _callerName;
@@ -479,7 +477,7 @@ class TeleProvider extends ChangeNotifier {
       };
     }
 
-    _verifiedTrackingNumber = formatted;
+    _verifiedTrackingNumber = last10;
     _simTrackingMode = slotIndex == 0 ? SimTrackingMode.sim1Only : SimTrackingMode.sim2Only;
     _setupCompleted = true;
     _isLoggedIn = false;
@@ -489,7 +487,7 @@ class TeleProvider extends ChangeNotifier {
       'isValid': true,
       'formattedNumber': _verifiedTrackingNumber,
       'userName': _callerName,
-      'message': '✓ SIM ${slotIndex + 1} connected and verified for $_callerName ($formatted)!'
+      'message': '✓ SIM ${slotIndex + 1} connected and verified for $_callerName ($last10)!'
     };
   }
 

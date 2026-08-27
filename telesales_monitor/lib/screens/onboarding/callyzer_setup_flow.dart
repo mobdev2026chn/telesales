@@ -26,6 +26,14 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
   bool _useDataOpen = false;
   bool _unnecessaryPermsOpen = false;
 
+  String _clean10DigitPhone(String raw) {
+    final digits = raw.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.length >= 10) {
+      return digits.substring(digits.length - 10);
+    }
+    return digits;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -39,7 +47,7 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
           setState(() {
             _selectedSimSlot = tele.detectedSims[0].slotIndex;
             if (tele.detectedSims[0].phoneNumber.isNotEmpty) {
-              _phoneController.text = tele.detectedSims[0].phoneNumber.replaceAll('+91', '').trim();
+              _phoneController.text = _clean10DigitPhone(tele.detectedSims[0].phoneNumber);
             }
           });
         }
@@ -692,7 +700,7 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
                   setState(() {
                     _selectedSimSlot = sim.slotIndex;
                     if (sim.phoneNumber.isNotEmpty) {
-                      _phoneController.text = sim.phoneNumber.replaceAll('+91', '').trim();
+                      _phoneController.text = _clean10DigitPhone(sim.phoneNumber);
                     }
                   });
                 },
@@ -757,9 +765,9 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
           Text('MOBILE NUMBER', style: AppTheme.label(size: 10, color: AppTheme.muted, letterSpacing: 0.1)),
           const SizedBox(height: 6),
 
-          // Country code + Phone input in a sleek card
+          // Clean single phone input box (No +91 country box)
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             decoration: BoxDecoration(
               color: AppTheme.white,
               borderRadius: BorderRadius.circular(14),
@@ -767,21 +775,7 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
             ),
             child: Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: AppTheme.paper,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppTheme.ink900, width: 1),
-                  ),
-                  child: Row(
-                    children: [
-                      Text('+91', style: AppTheme.mono(size: 14, color: AppTheme.ink900)),
-                      const SizedBox(width: 4),
-                      const Icon(Icons.keyboard_arrow_down, size: 16, color: AppTheme.muted),
-                    ],
-                  ),
-                ),
+                const Icon(Icons.phone_android_rounded, size: 20, color: AppTheme.ink900),
                 const SizedBox(width: 12),
                 Expanded(
                   child: TextField(
@@ -806,8 +800,8 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
             backgroundColor: AppTheme.orangePill,
             padding: const EdgeInsets.symmetric(vertical: 16),
             onTap: () async {
-              final raw = _phoneController.text.trim();
-              if (raw.isEmpty) {
+              final raw = _clean10DigitPhone(_phoneController.text);
+              if (raw.isEmpty || raw.length != 10) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     backgroundColor: AppTheme.ink900,
@@ -817,7 +811,7 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
                       side: const BorderSide(color: AppTheme.orangePill, width: 1),
                     ),
                     content: Text(
-                      'Please enter your 10-digit mobile number.',
+                      'Please enter a valid 10-digit mobile number.',
                       style: AppTheme.bodyBold(size: 12, color: AppTheme.white),
                     ),
                   ),

@@ -190,17 +190,18 @@ router.post('/check-phone', async (req, res) => {
 
     const user = await Employee.findOne({
       $or: [
-        { phone: input },
+        { phone: last10 },
         { phone: new RegExp(last10 + '$') },
         { phone: `+91 ${last10}` },
         { phone: `+91${last10}` },
+        { phone: `91${last10}` },
       ]
     });
 
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: `Mobile number '+91 ${last10}' is not registered in the database. Please contact your manager or admin to add your number.`
+        message: `Mobile number '${last10}' is not registered in the database. Please contact your manager or admin to add your number.`
       });
     }
 
@@ -209,12 +210,12 @@ router.post('/check-phone', async (req, res) => {
       user: {
         id: user.id,
         name: user.name,
-        phone: user.phone || `+91 ${last10}`,
+        phone: user.phone || last10,
         email: user.email,
         role: user.role,
         team: user.team,
       },
-      message: `Mobile number verified for ${user.name} (${(user.role || 'CALLER').toUpperCase()})!`
+      message: `Mobile number '${last10}' verified for ${user.name} (${(user.role || 'CALLER').toUpperCase()})!`
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
