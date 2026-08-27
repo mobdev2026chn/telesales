@@ -300,9 +300,36 @@ class ApiService {
 
   // 8. Verify Caller via Backend API (Supports Phone Number, Registered Email or Username)
   static Future<Map<String, dynamic>?> verifyCaller(String phoneOrEmail, {String password = '', int simSlot = 1}) async {
+    final clean = phoneOrEmail.replaceAll(RegExp(r'[^0-9]'), '');
+    final last10 = clean.length >= 10 ? clean.substring(clean.length - 10) : clean;
+
+    try {
+      // 1. Cross-reference real user name from live MongoDB /admin/users first
+      final usersRes = await _getWithFallback('/admin/users');
+      if (usersRes != null && usersRes.statusCode == 200) {
+        final data = jsonDecode(usersRes.body);
+        final list = (data['users'] as List<dynamic>?) ?? [];
+        for (final u in list) {
+          final p = (u['phone'] ?? '').toString().replaceAll(RegExp(r'[^0-9]'), '');
+          final email = (u['email'] ?? '').toString().toLowerCase();
+          final inputLower = phoneOrEmail.toLowerCase();
+          if ((last10.isNotEmpty && (p == last10 || p.endsWith(last10) || last10.endsWith(p))) ||
+              (email.isNotEmpty && email == inputLower)) {
+            return {
+              'success': true,
+              'user': u,
+              'message': 'Caller verified successfully as ${u['name']}'
+            };
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('verifyCaller users fetch fallback notice: $e');
+    }
+
     try {
       final res = await _postWithFallback('/auth/caller-verify', {
-        'phoneNumber': phoneOrEmail,
+        'phoneNumber': last10.isNotEmpty ? last10 : phoneOrEmail,
         'email': phoneOrEmail,
         'username': phoneOrEmail,
         'password': password,

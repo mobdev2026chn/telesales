@@ -528,8 +528,13 @@ class TeleProvider extends ChangeNotifier {
 
   void purgeUserSession() {
     _isLoggedIn = false;
-    _setupCompleted = true; // Never ask for initial setup again
+    _setupCompleted = false;
     _authToken = '';
+    _callerName = '';
+    _verifiedTrackingNumber = '';
+    _callbacks.clear();
+    _callLogs.clear();
+    _leads.clear();
     _activeTabIndex = 0;
     _savePreferences();
     notifyListeners();
@@ -791,15 +796,20 @@ class TeleProvider extends ChangeNotifier {
     }
   }
 
-  // Scheduled Callbacks (100% Dynamic)
+  // Scheduled Callbacks (100% Dynamic - strictly for current session & user-scheduled)
   final List<ScheduledCallback> _callbacks = [];
 
   List<ScheduledCallback> get callbacks => _callbacks;
 
   void _syncCallbacksFromCallLogs() {
     final Set<String> existingPhones = _callbacks.map((c) => c.phone).toSet();
+    // Only capture missed calls that happen during the active telesales session
+    final sessionStart = _loginSessionTimestamp;
+    if (sessionStart == null) return;
+
     for (var call in _callLogs) {
-      if ((call.type == CallType.missed || call.type == CallType.rejected) &&
+      if (call.timestamp.isAfter(sessionStart) &&
+          (call.type == CallType.missed || call.type == CallType.rejected) &&
           call.phoneNumber.isNotEmpty &&
           !existingPhones.contains(call.phoneNumber)) {
         _callbacks.add(
@@ -807,7 +817,7 @@ class TeleProvider extends ChangeNotifier {
             id: 'cb_${call.id}',
             name: call.contactName != 'Unknown' ? call.contactName : call.phoneNumber,
             phone: call.phoneNumber,
-            scheduledTime: DateTime.now().add(Duration(hours: (_callbacks.length + 1) * 2)),
+            scheduledTime: DateTime.now().add(const Duration(hours: 2)),
             note: 'Missed call follow-up required',
           ),
         );
