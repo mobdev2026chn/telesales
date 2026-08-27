@@ -1537,6 +1537,9 @@
 
             const rawAudioUrl = r.audioUrl || '';
             const fullAudioUrl = rawAudioUrl ? (rawAudioUrl.startsWith('http') ? rawAudioUrl : `${API_BASE.replace('/api', '')}${rawAudioUrl}`) : '';
+            const playableAudio = (r.audioData && r.audioData.length > 50) 
+                ? (r.audioData.startsWith('data:') ? r.audioData : `data:audio/wav;base64,${r.audioData}`) 
+                : fullAudioUrl;
             const safeTranscript = (r.transcript || 'Call recording logged').replace(/'/g, "\\'").replace(/"/g, '&quot;');
 
             const isUnsaved = !r.contactName || r.contactName === 'Unknown' || r.contactName === 'Client' || r.contactName === r.phoneNumber;
@@ -1553,7 +1556,7 @@
                     </div>
                     <div style="font-family: 'Space Mono', monospace; font-size: 12px; color: #475569; font-weight: 700; margin-top: 3px;">${r.dateStr || 'Today'} · ${formattedDur}</div>
                   </div>
-                  <button id="playBtn_${recId}" class="btn-sm" style="background: #CCFF00; color: #0F172A; font-weight: 800; padding: 8px 18px; display: flex; align-items: center; gap: 8px; border-radius: 999px; border: 2px solid #0F172A; box-shadow: 2px 2px 0px #0F172A; cursor: pointer;" onclick="toggleAudioPlayback('${recId}', '${fullAudioUrl}', '${safeTranscript}', ${r.durationSeconds || 30})">
+                  <button id="playBtn_${recId}" class="btn-sm" style="background: #CCFF00; color: #0F172A; font-weight: 800; padding: 8px 18px; display: flex; align-items: center; gap: 8px; border-radius: 999px; border: 2px solid #0F172A; box-shadow: 2px 2px 0px #0F172A; cursor: pointer;" onclick="toggleAudioPlayback('${recId}', '${playableAudio}', '${safeTranscript}', ${r.durationSeconds || 30})">
                     <span id="playIcon_${recId}">▶</span> <span id="playText_${recId}">PLAY AUDIO</span>
                   </button>
                 </div>
@@ -1569,7 +1572,7 @@
                   </div>
                 </div>
 
-                <audio id="audioEl_${recId}" src="${fullAudioUrl}" style="display: none;" ontimeupdate="onAudioTimeUpdate('${recId}')" onended="onAudioEnded('${recId}')" onerror="onAudioError('${recId}', '${safeTranscript}', ${r.durationSeconds || 30})"></audio>
+                <audio id="audioEl_${recId}" src="${playableAudio}" preload="auto" style="display: none;" ontimeupdate="onAudioTimeUpdate('${recId}')" onended="onAudioEnded('${recId}')" onerror="onAudioError('${recId}', '${safeTranscript}', ${r.durationSeconds || 30})"></audio>
 
                 <div style="font-style: italic; margin-top: 12px; font-size: 13px; color: #0F172A; background: #F8FAFC; border: 1.5px solid #CBD5E1; padding: 12px 14px; border-radius: 8px; font-weight: 600; line-height: 1.5;">
                   "${r.transcript || 'Voice call recording logged.'}"

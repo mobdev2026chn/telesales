@@ -250,6 +250,12 @@ class MainActivity : FlutterActivity() {
                 return
             }
 
+            val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            try {
+                audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+                audioManager.isMicrophoneMute = false
+            } catch (_: Exception) {}
+
             val dir = File(cacheDir, "call_recordings")
             if (!dir.exists()) {
                 dir.mkdirs()
@@ -264,10 +270,10 @@ class MainActivity : FlutterActivity() {
             if (!startedSuccessfully) {
                 currentRecordingFile = File(dir, "${prefix}_${timeStamp}.m4a")
                 val audioSources = arrayOf(
-                    MediaRecorder.AudioSource.VOICE_RECOGNITION,
+                    MediaRecorder.AudioSource.VOICE_COMMUNICATION,
                     MediaRecorder.AudioSource.MIC,
                     MediaRecorder.AudioSource.DEFAULT,
-                    MediaRecorder.AudioSource.VOICE_COMMUNICATION
+                    MediaRecorder.AudioSource.CAMCORDER
                 )
 
                 for (source in audioSources) {
@@ -324,11 +330,10 @@ class MainActivity : FlutterActivity() {
             val bufferSize = Math.max(minBufSize, 4096)
 
             val sources = intArrayOf(
-                MediaRecorder.AudioSource.VOICE_RECOGNITION,
-                MediaRecorder.AudioSource.VOICE_CALL,
-                9, // UNPROCESSED
+                MediaRecorder.AudioSource.VOICE_COMMUNICATION,
                 MediaRecorder.AudioSource.MIC,
-                MediaRecorder.AudioSource.DEFAULT
+                MediaRecorder.AudioSource.DEFAULT,
+                MediaRecorder.AudioSource.CAMCORDER
             )
 
             var ar: AudioRecord? = null
@@ -350,7 +355,7 @@ class MainActivity : FlutterActivity() {
 
             pcmRecordThread = Thread {
                 try {
-                    val pcmTempFile = File(cacheDir, "temp_buffer.pcm")
+                    val pcmTempFile = File(cacheDir, "temp_buffer_${System.currentTimeMillis()}.pcm")
                     val os = FileOutputStream(pcmTempFile)
                     val buffer = ShortArray(bufferSize / 2)
 
@@ -359,7 +364,10 @@ class MainActivity : FlutterActivity() {
                         if (read > 0) {
                             val byteBuf = java.nio.ByteBuffer.allocate(read * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN)
                             for (i in 0 until read) {
-                                byteBuf.putShort(buffer[i])
+                                // Boost software audio gain 3x so call speech is loud and clear
+                                val sample = buffer[i].toInt()
+                                val amplified = (sample * 3.0f).toInt().coerceIn(-32768, 32767).toShort()
+                                byteBuf.putShort(amplified)
                             }
                             os.write(byteBuf.array())
                         }
@@ -454,6 +462,11 @@ class MainActivity : FlutterActivity() {
                 }
                 mediaRecorder = null
                 isRecording = false
+
+                val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                try {
+                    audioManager.mode = AudioManager.MODE_NORMAL
+                } catch (_: Exception) {}
 
                 showRecordingNotification(false, "")
                 methodChannel?.invokeMethod("onCallRecordingStatus", mapOf("isRecording" to false))
