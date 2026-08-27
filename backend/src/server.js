@@ -9,6 +9,7 @@ const CallLog = require('./models/CallLog');
 const Employee = require('./models/Employee');
 const Lead = require('./models/Lead');
 const Recording = require('./models/Recording');
+const Notification = require('./models/Notification');
 
 const adminRoutes = require('./routes/admin');
 const userRoutes = require('./routes/user');
@@ -195,7 +196,116 @@ app.post(['/api/admin/recordings/:id/comment', '/api/recordings/:id/comment', '/
       return res.status(404).json({ success: false, message: 'Recording not found' });
     }
 
+    // Create persistent Notification for the caller in MongoDB
+    try {
+      const callerName = updated.callerName || '';
+      const callerEmp = await Employee.findOne({
+        $or: [
+          { name: new RegExp(`^${callerName}$`, 'i') },
+          ...(updated.phoneNumber ? [{ phone: updated.phoneNumber }] : [])
+        ]
+      });
+
+      const recipientPhone = callerEmp ? callerEmp.phone : (updated.phoneNumber || '');
+      const starsStr = typeof rating === 'number' && rating > 0 ? `${rating} ⭐` : '';
+      const author = commentedBy || 'Admin';
+      const roleStr = (commentedByRole || 'admin').toUpperCase();
+
+      const newNotif = await Notification.create({
+        id: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        recipientPhone: recipientPhone,
+        recipientName: callerName,
+        senderName: author,
+        senderRole: commentedByRole || 'admin',
+        recordingId: updated.id || recId,
+        contactName: updated.contactName || 'Client',
+        title: `Feedback from ${author} (${roleStr})`,
+        message: `${author} reviewed your call with ${updated.contactName || 'Client'} ${starsStr ? `(${starsStr})` : ''}: "${comment || 'Good call'}"`,
+        comment: comment || '',
+        rating: typeof rating === 'number' ? rating : 0,
+        isRead: false,
+      });
+      console.log(`🔔 Notification created for caller "${callerName}" (${recipientPhone}): ID ${newNotif.id}`);
+    } catch (notifErr) {
+      console.error('Error creating notification:', notifErr.message);
+    }
+
     res.json({ success: true, message: 'Comment saved successfully', recording: updated });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Direct top-level Notification Endpoints for maximum reliability
+app.get(['/api/user/notifications', '/api/notifications'], async (req, res) => {
+  try {
+    const { phone, name } = req.query;
+    let query = {};
+    if (phone || name) {
+      const orClauses = [];
+      if (phone && phone.trim()) {
+        const cleanPhone = phone.replace(/[^0-9]/g, '');
+        const last10 = cleanPhone.length >= 10 ? cleanPhone.substring(cleanPhone.length - 10) : cleanPhone;
+        orClauses.push(
+          { recipientPhone: phone },
+          { recipientPhone: new RegExp(last10 + '$') },
+          { recipientPhone: new RegExp('^' + last10) }
+        );
+      }
+      if (name && name.trim()) {
+        const cleanName = name.trim().split(' ')[0];
+        orClauses.push(
+          { recipientName: new RegExp(`^${name.trim()}$`, 'i') },
+          { recipientName: new RegExp(cleanName, 'i') }
+        );
+      }
+      query = { $or: orClauses };
+    }
+
+    const notifications = await Notification.find(query).sort({ createdAt: -1 }).limit(50);
+    const unreadCount = await Notification.countDocuments({ ...query, isRead: false });
+
+    res.json({
+      success: true,
+      unreadCount,
+      notifications,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post(['/api/user/notifications/:id/read', '/api/notifications/:id/read'], async (req, res) => {
+  try {
+    const notif = await Notification.findOneAndUpdate(
+      { $or: [{ id: req.params.id }, { _id: req.params.id }] },
+      { $set: { isRead: true } },
+      { new: true }
+    );
+    res.json({ success: true, notification: notif });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post(['/api/user/notifications/read-all', '/api/notifications/read-all'], async (req, res) => {
+  try {
+    const { phone, name } = req.body;
+    let query = {};
+    if (phone || name) {
+      const orClauses = [];
+      if (phone) {
+        const clean = phone.replace(/[^0-9]/g, '');
+        const last10 = clean.length >= 10 ? clean.substring(clean.length - 10) : clean;
+        orClauses.push({ recipientPhone: phone }, { recipientPhone: new RegExp(last10 + '$') });
+      }
+      if (name) {
+        orClauses.push({ recipientName: new RegExp(name, 'i') });
+      }
+      query = { $or: orClauses };
+    }
+    await Notification.updateMany(query, { $set: { isRead: true } });
+    res.json({ success: true, message: 'All notifications marked as read' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
