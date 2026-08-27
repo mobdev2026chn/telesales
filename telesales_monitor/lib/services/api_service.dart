@@ -11,9 +11,9 @@ class ApiService {
   static final List<String> candidateBaseUrls = [
     'https://telesales.askeva.io/api',
     'http://telesales.askeva.io/api',
-    'http://192.168.0.29:5004/api',
-    'http://127.0.0.1:5004/api',
-    'http://10.0.2.2:5004/api',
+    // 'http://192.168.0.29:5004/api',
+    // 'http://127.0.0.1:5004/api',
+    // 'http://10.0.2.2:5004/api',
   ];
 
   static String baseUrl = 'https://telesales.askeva.io/api';
@@ -452,5 +452,20 @@ class ApiService {
       debugPrint('ApiService.createUser error: $e');
       return {'success': false, 'message': e.toString()};
     }
+  }
+
+  // 16. Check if phone number is registered in MongoDB before connecting SIM
+  static Future<Map<String, dynamic>?> checkPhoneRegistered(String phoneNumber) async {
+    try {
+      final res = await _postWithFallback('/auth/check-phone', {
+        'phoneNumber': phoneNumber,
+      });
+      if (res != null) {
+        return jsonDecode(res.body) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      debugPrint('ApiService.checkPhoneRegistered error: $e');
+    }
+    return null;
   }
 }

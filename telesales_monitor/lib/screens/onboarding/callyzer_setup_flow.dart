@@ -6,6 +6,7 @@ import '../../widgets/neo_card.dart';
 import '../../widgets/neo_button.dart';
 import '../../providers/tele_provider.dart';
 import '../../models/call_log_model.dart';
+import '../login_screen.dart';
 
 class CallyzerSetupFlow extends StatefulWidget {
   const CallyzerSetupFlow({super.key});
@@ -18,7 +19,6 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
   int _currentStep = 0;
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _passController = TextEditingController();
   int _selectedSimSlot = 0;
 
   // Accordion open states for Privacy screen
@@ -754,88 +754,48 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
 
           const SizedBox(height: 16),
 
-          // Caller Name Input
-          Text('CALLER FULL NAME', style: AppTheme.label(size: 9, color: AppTheme.muted, letterSpacing: 0.1)),
+          Text('MOBILE NUMBER', style: AppTheme.label(size: 10, color: AppTheme.muted, letterSpacing: 0.1)),
           const SizedBox(height: 6),
+
+          // Country code + Phone input in a sleek card
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
             decoration: BoxDecoration(
               color: AppTheme.white,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppTheme.ink900, width: 1),
-            ),
-            child: TextField(
-              controller: _nameController,
-              style: AppTheme.bodyBold(size: 14),
-              decoration: const InputDecoration(
-                hintText: 'Enter Caller Name (e.g. Sales Agent 1)',
-                border: InputBorder.none,
-                prefixIcon: Icon(Icons.person_outline, size: 20, color: AppTheme.ink900),
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-
-          Text('MOBILE NUMBER', style: AppTheme.label(size: 9, color: AppTheme.muted, letterSpacing: 0.1)),
-          const SizedBox(height: 6),
-
-          // Country code box
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              color: AppTheme.white,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppTheme.ink900, width: 1),
+              border: Border.all(color: AppTheme.ink900, width: 1.5),
             ),
             child: Row(
               children: [
-                Text('91', style: AppTheme.mono(size: 14, color: AppTheme.ink900)),
-                const SizedBox(width: 8),
-                const Icon(Icons.keyboard_arrow_down, size: 18, color: AppTheme.muted),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.paper,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppTheme.ink900, width: 1),
+                  ),
+                  child: Row(
+                    children: [
+                      Text('+91', style: AppTheme.mono(size: 14, color: AppTheme.ink900)),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.keyboard_arrow_down, size: 16, color: AppTheme.muted),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: _phoneController,
+                    keyboardType: TextInputType.phone,
+                    style: AppTheme.mono(size: 16, color: AppTheme.ink900),
+                    decoration: const InputDecoration(
+                      hintText: 'Enter 10-digit mobile number...',
+                      hintStyle: TextStyle(fontSize: 13, color: AppTheme.muted),
+                      border: InputBorder.none,
+                    ),
+                  ),
+                ),
               ],
-            ),
-          ),
-          const SizedBox(height: 14),
-
-          // Phone number input
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(
-              color: AppTheme.white,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppTheme.ink900, width: 1),
-            ),
-            child: TextField(
-              controller: _phoneController,
-              keyboardType: TextInputType.emailAddress,
-              style: AppTheme.mono(size: 14),
-              decoration: const InputDecoration(
-                hintText: 'Registered Phone Number or Email...',
-                border: InputBorder.none,
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-
-          // Password Input
-          Text('ACCOUNT PASSWORD', style: AppTheme.label(size: 9, color: AppTheme.muted, letterSpacing: 0.1)),
-          const SizedBox(height: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(
-              color: AppTheme.white,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppTheme.ink900, width: 1),
-            ),
-            child: TextField(
-              controller: _passController,
-              obscureText: true,
-              style: AppTheme.mono(size: 14),
-              decoration: const InputDecoration(
-                hintText: 'Enter Password...',
-                border: InputBorder.none,
-                prefixIcon: Icon(Icons.lock_outline, size: 18, color: AppTheme.ink900),
-              ),
             ),
           ),
           const SizedBox(height: 24),
@@ -847,43 +807,106 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
             padding: const EdgeInsets.symmetric(vertical: 16),
             onTap: () async {
               final raw = _phoneController.text.trim();
-              final pass = _passController.text.trim();
               if (raw.isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     backgroundColor: AppTheme.ink900,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: const BorderSide(color: AppTheme.orangePill, width: 1),
+                    ),
                     content: Text(
-                      'Please enter your registered mobile number or email.',
+                      'Please enter your 10-digit mobile number.',
                       style: AppTheme.bodyBold(size: 12, color: AppTheme.white),
                     ),
                   ),
                 );
                 return;
               }
-              if (pass.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    backgroundColor: AppTheme.ink900,
-                    content: Text(
-                      'Please enter your password.',
-                      style: AppTheme.bodyBold(size: 12, color: AppTheme.white),
-                    ),
+
+              // Show loading overlay / feedback
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  backgroundColor: AppTheme.ink900,
+                  duration: const Duration(seconds: 2),
+                  behavior: SnackBarBehavior.floating,
+                  content: Row(
+                    children: [
+                      const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.limeYellow),
+                      ),
+                      const SizedBox(width: 12),
+                      Text('Verifying mobile number with team records...', style: AppTheme.body(size: 12, color: AppTheme.white)),
+                    ],
                   ),
-                );
-                return;
-              }
-              final res = await tele.validateAndSetTrackingNumber(raw, _selectedSimSlot, password: pass);
+                ),
+              );
+
+              final res = await tele.validateAndSetTrackingNumber(raw, _selectedSimSlot);
               if (!mounted) return;
+
               if (res['isValid'] == true) {
-                _nextStep();
-              } else {
+                // Show Success Toast
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     backgroundColor: AppTheme.ink900,
-                    content: Text(
-                      res['message'] as String? ?? 'Authentication failed. Account not verified in database.',
-                      style: AppTheme.bodyBold(size: 12, color: AppTheme.limeYellow),
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: const BorderSide(color: AppTheme.greenNeon, width: 1.5),
                     ),
+                    content: Row(
+                      children: [
+                        const Icon(Icons.check_circle, color: AppTheme.greenNeon, size: 22),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            res['message'] as String? ?? 'SIM connected & mobile number verified successfully!',
+                            style: AppTheme.bodyBold(size: 12, color: AppTheme.white),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+
+                // Navigate directly to LoginScreen
+                await Future.delayed(const Duration(milliseconds: 600));
+                if (!mounted) return;
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  (route) => false,
+                );
+              } else {
+                // Show Failure Dialog
+                showDialog(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    backgroundColor: AppTheme.paper,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: const BorderSide(color: AppTheme.ink900, width: 2),
+                    ),
+                    title: Row(
+                      children: [
+                        const Icon(Icons.error_outline, color: Colors.red, size: 24),
+                        const SizedBox(width: 8),
+                        Text('Verification Failed', style: AppTheme.headline(size: 18)),
+                      ],
+                    ),
+                    content: Text(
+                      res['message'] as String? ?? 'Mobile number not found in database. Please contact your manager or admin.',
+                      style: AppTheme.body(size: 13, color: AppTheme.ink900),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: Text('OK', style: AppTheme.bodyBold(size: 14, color: AppTheme.ink900)),
+                      ),
+                    ],
                   ),
                 );
               }

@@ -453,44 +453,44 @@ class TeleProvider extends ChangeNotifier {
     return {'isValid': true};
   }
 
-  Future<Map<String, dynamic>> validateAndSetTrackingNumber(String inputPhone, int slotIndex, {String password = ''}) async {
+  Future<Map<String, dynamic>> validateAndSetTrackingNumber(String inputPhone, int slotIndex) async {
     final clean = inputPhone.replaceAll(RegExp(r'[^0-9]'), '');
     final last10 = clean.length >= 10 ? clean.substring(clean.length - 10) : clean;
 
-    String formatted = inputPhone.trim();
-    if (!inputPhone.contains('@')) {
-      if (last10.length != 10 || !RegExp(r'^[6-9]\d{9}$').hasMatch(last10)) {
-        return {'isValid': false, 'message': 'Please enter a valid 10-digit mobile number or registered email.'};
-      }
-      formatted = '+91 $last10';
+    if (last10.length != 10 || !RegExp(r'^[6-9]\d{9}$').hasMatch(last10)) {
+      return {'isValid': false, 'message': 'Please enter a valid 10-digit mobile number.'};
     }
+    final formatted = '+91 $last10';
 
     try {
-      final verifyRes = await ApiService.verifyCaller(formatted, password: password);
+      final verifyRes = await ApiService.checkPhoneRegistered(formatted);
       if (verifyRes == null || verifyRes['success'] != true) {
         return {
           'isValid': false,
-          'message': verifyRes?['message']?.toString() ?? 'Account \'$formatted\' is not registered in DB employees table. Contact Admin.'
+          'message': verifyRes?['message']?.toString() ?? 'Mobile number \'$formatted\' is not registered in the database. Please contact your manager or admin to add your account.'
         };
       }
       _callerName = verifyRes['user']?['name']?.toString() ?? _callerName;
-      if (verifyRes['user']?['phone'] != null && verifyRes['user']!['phone'].toString().isNotEmpty) {
-        formatted = verifyRes['user']!['phone'].toString();
-      }
     } catch (e) {
-      debugPrint('DB verification notice: $e');
-    }
-
-    // Hardware SIM card check
-    final simCheck = await verifyRegisteredSimCard(formatted);
-    if (simCheck['isValid'] == false) {
-      return simCheck;
+      debugPrint('DB verification error: $e');
+      return {
+        'isValid': false,
+        'message': 'Failed to connect to server. Please check your internet connection.'
+      };
     }
 
     _verifiedTrackingNumber = formatted;
     _simTrackingMode = slotIndex == 0 ? SimTrackingMode.sim1Only : SimTrackingMode.sim2Only;
+    _setupCompleted = true;
+    _isLoggedIn = false;
+    await _savePreferences();
     notifyListeners();
-    return {'isValid': true, 'formattedNumber': _verifiedTrackingNumber};
+    return {
+      'isValid': true,
+      'formattedNumber': _verifiedTrackingNumber,
+      'userName': _callerName,
+      'message': '✓ SIM ${slotIndex + 1} connected and verified for $_callerName ($formatted)!'
+    };
   }
 
   String get activeSimLabel {

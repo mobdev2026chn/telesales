@@ -17,10 +17,25 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _passwordCtrl = TextEditingController();
   bool _obscurePass = true;
   bool _isLoading = false;
-  UserRole _selectedRole = UserRole.manager;
+  UserRole _selectedRole = UserRole.caller;
   String? _usernameError;
   String? _passwordError;
   String? _authError;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final tele = Provider.of<TeleProvider>(context, listen: false);
+      if (tele.verifiedTrackingNumber.isNotEmpty) {
+        final cleanPhone = tele.verifiedTrackingNumber.replaceAll('+91', '').trim();
+        setState(() {
+          _usernameCtrl.text = cleanPhone;
+          _selectedRole = UserRole.caller;
+        });
+      }
+    });
+  }
 
   @override
   void dispose() {

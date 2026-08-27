@@ -172,4 +172,53 @@ router.post('/link-phone', async (req, res) => {
   }
 });
 
+// 4. POST /api/auth/check-phone - Check if mobile number is registered in DB
+router.post('/check-phone', async (req, res) => {
+  try {
+    const { phoneNumber, phone } = req.body;
+    const input = (phoneNumber || phone || '').trim();
+    if (!input) {
+      return res.status(400).json({ success: false, message: 'Please enter a mobile number' });
+    }
+
+    const clean = input.replace(/[^0-9]/g, '');
+    const last10 = clean.length >= 10 ? clean.substring(clean.length - 10) : clean;
+
+    if (last10.length !== 10) {
+      return res.status(400).json({ success: false, message: 'Please enter a valid 10-digit mobile number' });
+    }
+
+    const user = await Employee.findOne({
+      $or: [
+        { phone: input },
+        { phone: new RegExp(last10 + '$') },
+        { phone: `+91 ${last10}` },
+        { phone: `+91${last10}` },
+      ]
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: `Mobile number '+91 ${last10}' is not registered in the database. Please contact your manager or admin to add your number.`
+      });
+    }
+
+    return res.json({
+      success: true,
+      user: {
+        id: user.id,
+        name: user.name,
+        phone: user.phone || `+91 ${last10}`,
+        email: user.email,
+        role: user.role,
+        team: user.team,
+      },
+      message: `Mobile number verified for ${user.name} (${(user.role || 'CALLER').toUpperCase()})!`
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;
