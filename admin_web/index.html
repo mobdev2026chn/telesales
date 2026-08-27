@@ -883,10 +883,9 @@
   </div>
 
   <script>
-    let API_BASE = 'http://localhost:5004/api';
-    if (window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1' && window.location.protocol !== 'file:') {
-      API_BASE = 'https://telesales.askeva.io/api';
-    }
+    let API_BASE = (window.location.protocol === 'http:' || window.location.protocol === 'https:')
+      ? `${window.location.origin}/api`
+      : 'http://localhost:5004/api';
 
     // In-memory User Dictionary and Managers List
     window.usersMap = {};
