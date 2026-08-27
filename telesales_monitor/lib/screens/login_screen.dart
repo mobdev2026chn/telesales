@@ -4,6 +4,7 @@ import '../theme/app_theme.dart';
 import '../widgets/neo_button.dart';
 import '../widgets/ticker_banner.dart';
 import '../providers/tele_provider.dart';
+import '../services/api_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -554,7 +555,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   NeoButton.accent(
                     gradient: null,
-                    backgroundColor: AppTheme.orangePill,
+                    backgroundColor: AppTheme.greenNeon,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     onTap: isVerifying
                         ? () {}
@@ -568,17 +569,20 @@ class _LoginScreenState extends State<LoginScreen> {
                               isVerifying = true;
                               sheetErr = null;
                             });
-                            final res = await tele.linkAndVerifySimPhone(
+                            final res = await ApiService.linkPhone(
                               userId: user?['id']?.toString() ?? '',
                               email: user?['email']?.toString() ?? '',
-                              inputPhone: raw,
+                              phone: raw,
                             );
-                            if (res['success'] == true) {
-                              if (ctx.mounted) Navigator.of(ctx).pop();
+                            if (res != null && res['success'] == true) {
+                              if (ctx.mounted) {
+                                Navigator.of(ctx).pop();
+                                _handleLogin(tele);
+                              }
                             } else {
                               setSheetState(() {
                                 isVerifying = false;
-                                sheetErr = res['message'] as String? ?? 'SIM verification failed.';
+                                sheetErr = res?['message']?.toString() ?? 'SIM verification failed.';
                               });
                             }
                           },
@@ -587,9 +591,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           ? const SizedBox(
                               width: 18,
                               height: 18,
-                              child: CircularProgressIndicator(color: AppTheme.white, strokeWidth: 2),
+                              child: CircularProgressIndicator(color: AppTheme.ink900, strokeWidth: 2),
                             )
-                          : Text('VERIFY & LINK SIM', style: AppTheme.headline(size: 14, color: AppTheme.white)),
+                          : Text('VERIFY & LINK SIM', style: AppTheme.headline(size: 14, color: AppTheme.ink900)),
                     ),
                   ),
                 ],

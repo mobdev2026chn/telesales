@@ -123,7 +123,7 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const Icon(Icons.campaign, size: 54, color: AppTheme.orangePill),
+                const Icon(Icons.campaign, size: 54, color: AppTheme.greenDark),
                 const SizedBox(height: 10),
                 Text('What\'s New', style: AppTheme.headline(size: 26)),
                 Text('1.1.2', style: AppTheme.label(size: 10, color: AppTheme.muted)),
@@ -136,14 +136,14 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
                 SizedBox(
                   width: double.infinity,
                   child: NeoButton.pill(
-                    backgroundColor: AppTheme.orangePill,
+                    backgroundColor: AppTheme.greenNeon,
                     shadowColor: AppTheme.ink900,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     onTap: () => Navigator.pop(ctx),
                     child: Center(
                       child: Text(
                         'Got it !',
-                        style: AppTheme.headline(size: 16, color: AppTheme.white),
+                        style: AppTheme.headline(size: 16, color: AppTheme.ink900),
                       ),
                     ),
                   ),
@@ -162,7 +162,7 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.check, size: 16, color: AppTheme.orangePill),
+          const Icon(Icons.check, size: 16, color: AppTheme.greenDark),
           const SizedBox(width: 8),
           Expanded(
             child: Text(text, style: AppTheme.body(size: 12, color: AppTheme.ink700)),
@@ -389,13 +389,13 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
           // Agree & Continue Button
           NeoButton.accent(
             gradient: null,
-            backgroundColor: AppTheme.orangePill,
+            backgroundColor: AppTheme.greenNeon,
             padding: const EdgeInsets.symmetric(vertical: 16),
             onTap: _nextStep,
             child: Center(
               child: Text(
                 'AGREE & CONTINUE',
-                style: AppTheme.headline(size: 16, color: AppTheme.white),
+                style: AppTheme.headline(size: 16, color: AppTheme.ink900),
               ),
             ),
           ),
@@ -451,7 +451,7 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
           const SizedBox(height: 28),
           NeoButton.accent(
             gradient: null,
-            backgroundColor: AppTheme.orangePill,
+            backgroundColor: AppTheme.greenNeon,
             padding: const EdgeInsets.symmetric(vertical: 16),
             onTap: () async {
               await tele.requestNativePermissions();
@@ -460,7 +460,7 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
             child: Center(
               child: Text(
                 'Allow Access',
-                style: AppTheme.headline(size: 16, color: AppTheme.white),
+                style: AppTheme.headline(size: 16, color: AppTheme.ink900),
               ),
             ),
           ),
@@ -583,7 +583,7 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
                 border: Border.all(color: AppTheme.ink900, width: 1.5),
                 boxShadow: AppTheme.neoShadowSm(),
               ),
-              child: const Icon(Icons.contacts, size: 64, color: AppTheme.orangePill),
+              child: const Icon(Icons.contacts, size: 64, color: AppTheme.greenDark),
             ),
           ),
           const SizedBox(height: 24),
@@ -609,7 +609,7 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
           const SizedBox(height: 28),
           NeoButton.accent(
             gradient: null,
-            backgroundColor: AppTheme.orangePill,
+            backgroundColor: AppTheme.greenNeon,
             padding: const EdgeInsets.symmetric(vertical: 16),
             onTap: () async {
               await tele.requestNativePermissions();
@@ -618,7 +618,7 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
             child: Center(
               child: Text(
                 'Let\'s do it',
-                style: AppTheme.headline(size: 16, color: AppTheme.white),
+                style: AppTheme.headline(size: 16, color: AppTheme.ink900),
               ),
             ),
           ),
@@ -797,7 +797,7 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
           // Submit Button
           NeoButton.accent(
             gradient: null,
-            backgroundColor: AppTheme.orangePill,
+            backgroundColor: AppTheme.greenNeon,
             padding: const EdgeInsets.symmetric(vertical: 16),
             onTap: () async {
               final raw = _clean10DigitPhone(_phoneController.text);
@@ -808,7 +808,7 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
                     behavior: SnackBarBehavior.floating,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
-                      side: const BorderSide(color: AppTheme.orangePill, width: 1),
+                      side: const BorderSide(color: AppTheme.greenNeon, width: 1.5),
                     ),
                     content: Text(
                       'Please enter a valid 10-digit mobile number.',
