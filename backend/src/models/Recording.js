@@ -12,6 +12,11 @@ const RecordingSchema = new mongoose.Schema({
   audioData: { type: String, default: '' }, // Base64 encoded actual recorded audio
   transcript: { type: String, default: '' },
   storageSizeBytes: { type: Number, default: 450000 },
+  rating: { type: Number, default: 0 },
+  comment: { type: String, default: '' },
+  commentedBy: { type: String, default: '' },
+  commentedByRole: { type: String, default: '' },
+  commentedAt: { type: Date, default: null },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Recording', RecordingSchema);

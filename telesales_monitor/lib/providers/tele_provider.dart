@@ -8,6 +8,7 @@ import '../models/lead_model.dart';
 import '../models/employee_model.dart';
 import '../models/recording_model.dart';
 import '../models/sim_card_info.dart';
+import '../models/notification_model.dart';
 import '../services/api_service.dart';
 
 enum UserRole { manager, caller }
@@ -35,25 +36,37 @@ class TeleProvider extends ChangeNotifier {
   static const MethodChannel _telephonyChannel = MethodChannel('com.askeva.telesales/telephony');
 
   UserRole _currentRole = UserRole.caller;
-  bool _isLoggedIn = true;
+  bool _isLoggedIn = false;
   bool _setupCompleted = false;
   int _activeTabIndex = 1;
+  DateTime? _loginSessionTimestamp;
 
   // Real Dynamic SIM Detection
   List<SimCardInfo> _detectedSims = [];
   SimTrackingMode _simTrackingMode = SimTrackingMode.bothSims;
   String _verifiedTrackingNumber = '';
-  String _callerName = 'Priyanka Panchal';
+  String _callerName = '';
 
   UserRole get currentRole => _currentRole;
   bool get isLoggedIn => _isLoggedIn;
   bool get setupCompleted => _setupCompleted;
   int get activeTabIndex => _activeTabIndex;
+  DateTime? get loginSessionTimestamp => _loginSessionTimestamp;
   List<SimCardInfo> get detectedSims => _detectedSims;
   bool get isLoadingSims => false;
   SimTrackingMode get simTrackingMode => _simTrackingMode;
   String get verifiedTrackingNumber => _verifiedTrackingNumber;
   String get callerName => _callerName;
+
+  String get currentUserName {
+    if (_callerName.isNotEmpty && _callerName != 'Caller Agent') {
+      return _callerName;
+    }
+    if (_verifiedTrackingNumber.isNotEmpty) {
+      return _verifiedTrackingNumber;
+    }
+    return _currentRole == UserRole.manager ? 'ADMIN' : 'CALLER AGENT';
+  }
 
   void setCallerName(String name) {
     _callerName = name;
@@ -131,19 +144,32 @@ class TeleProvider extends ChangeNotifier {
     });
   }
 
+  String _authToken = '';
+  String get authToken => _authToken;
+
   Future<void> _loadPreferencesAndState() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      _isLoggedIn = prefs.getBool('is_logged_in') ?? false;
       _setupCompleted = prefs.getBool('setup_completed') ?? false;
+      _authToken = prefs.getString('auth_token') ?? '';
       _verifiedTrackingNumber = prefs.getString('verified_tracking_number') ?? '';
-      _callerName = prefs.getString('caller_name') ?? 'Priyanka Panchal';
+      _callerName = prefs.getString('caller_name') ?? '';
       _autoRecordEnabled = prefs.getBool('auto_record_enabled') ?? true;
+      final roleStr = prefs.getString('user_role');
+      if (roleStr != null) {
+        _currentRole = UserRole.values.firstWhere((r) => r.name == roleStr, orElse: () => UserRole.caller);
+      }
       final modeStr = prefs.getString('sim_tracking_mode');
       if (modeStr != null) {
         _simTrackingMode = SimTrackingMode.values.firstWhere(
           (m) => m.name == modeStr,
           orElse: () => SimTrackingMode.bothSims,
         );
+      }
+      final sessionMs = prefs.getInt('initial_setup_timestamp_ms') ?? prefs.getInt('login_session_timestamp_ms');
+      if (sessionMs != null) {
+        _loginSessionTimestamp = DateTime.fromMillisecondsSinceEpoch(sessionMs);
       }
       notifyListeners();
     } catch (e) {
@@ -152,24 +178,86 @@ class TeleProvider extends ChangeNotifier {
     await fetchDeviceSims();
     await fetchDeviceCallLogs();
     await fetchBackendData();
+    _startPeriodicSyncTimer();
+  }
+
+  Timer? _syncPollingTimer;
+
+  void _startPeriodicSyncTimer() {
+    _syncPollingTimer?.cancel();
+    _syncPollingTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (_isLoggedIn) {
+        fetchNotifications();
+      }
+    });
+  }
+
+  Future<void> _savePreferences() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('is_logged_in', _isLoggedIn);
+      await prefs.setBool('setup_completed', _setupCompleted);
+      if (_authToken.isEmpty && _isLoggedIn) {
+        _authToken = 'token_${_currentRole.name}_${DateTime.now().millisecondsSinceEpoch}';
+      }
+      await prefs.setString('auth_token', _authToken);
+      await prefs.setString('verified_tracking_number', _verifiedTrackingNumber);
+      await prefs.setString('caller_name', _callerName);
+      await prefs.setBool('auto_record_enabled', _autoRecordEnabled);
+      await prefs.setString('sim_tracking_mode', _simTrackingMode.name);
+      await prefs.setString('user_role', _currentRole.name);
+      if (_loginSessionTimestamp != null) {
+        await prefs.setInt('initial_setup_timestamp_ms', _loginSessionTimestamp!.millisecondsSinceEpoch);
+        await prefs.setInt('login_session_timestamp_ms', _loginSessionTimestamp!.millisecondsSinceEpoch);
+      }
+    } catch (e) {
+      debugPrint('Error saving preferences: $e');
+    }
   }
 
   Map<String, dynamic>? _backendStats;
   Map<String, dynamic>? get backendStats => _backendStats;
   List<EmployeeModel> _teamEmployees = [];
+  String _selectedTeamFilter = 'ALL';
+  String get selectedTeamFilter => _selectedTeamFilter;
+  List<String> _availableTeams = ['ALL', 'Telesales Team', 'Management'];
+  List<String> get availableTeams => _availableTeams;
+
+  void setTeamFilter(String team) {
+    _selectedTeamFilter = team;
+    notifyListeners();
+    fetchBackendData();
+  }
 
   Future<void> fetchBackendData() async {
     try {
-      final stats = await ApiService.fetchDashboardStats();
+      String? phoneParam;
+      String? nameParam;
+      String? teamParam;
+
+      if (_currentRole == UserRole.caller) {
+        phoneParam = _verifiedTrackingNumber;
+        nameParam = _callerName;
+      } else {
+        if (_selectedTeamFilter != 'ALL') {
+          teamParam = _selectedTeamFilter;
+        }
+      }
+
+      final stats = await ApiService.fetchDashboardStats(callerPhone: phoneParam, callerName: nameParam, team: teamParam);
       if (stats != null) {
         _backendStats = stats;
+        if (stats['teams'] != null) {
+          final rawTeams = List<String>.from((stats['teams'] as List).map((t) => t.toString()));
+          final filtered = rawTeams.where((t) => t != 'ALL' && t != 'ALL TEAMS').toList();
+          _availableTeams = ['ALL', ...filtered];
+        }
       }
-      final emps = await ApiService.fetchLeaderboard();
-      if (emps != null && emps.isNotEmpty) {
-        _teamEmployees = emps;
-      }
-      final recs = await ApiService.fetchRecordings();
-      if (recs != null && recs.isNotEmpty) {
+      final emps = await ApiService.fetchLeaderboard(callerPhone: phoneParam, callerName: nameParam, team: teamParam);
+      _teamEmployees = emps ?? [];
+
+      final recs = await ApiService.fetchRecordings(callerPhone: phoneParam, callerName: nameParam, team: teamParam);
+      if (recs != null) {
         for (var newR in recs) {
           final existingIndex = _recordings.indexWhere((r) =>
             r.id == newR.id || (r.filePath.isNotEmpty && newR.audioUrl.contains(r.filePath.split(RegExp(r'[/\\]')).last))
@@ -180,11 +268,63 @@ class TeleProvider extends ChangeNotifier {
         }
         _recordings.clear();
         _recordings.addAll(recs);
+      } else {
+        _recordings.clear();
       }
+
+      await fetchNotifications();
       notifyListeners();
     } catch (e) {
       debugPrint('Backend fetch notice: $e');
     }
+  }
+
+  // Caller Notifications
+  final List<NotificationItem> _notifications = [];
+  int _unreadNotificationCount = 0;
+  List<NotificationItem> get notifications => _notifications;
+  int get unreadNotificationCount => _unreadNotificationCount;
+
+  Future<void> fetchNotifications() async {
+    try {
+      final res = await ApiService.fetchCallerNotifications(
+        phone: _verifiedTrackingNumber,
+        name: _callerName,
+      );
+      if (res != null && res['success'] == true) {
+        _unreadNotificationCount = (res['unreadCount'] is int) ? res['unreadCount'] as int : 0;
+        if (res['notifications'] is List) {
+          _notifications.clear();
+          for (var item in res['notifications']) {
+            if (item is Map<String, dynamic>) {
+              _notifications.add(NotificationItem.fromJson(item));
+            }
+          }
+        }
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('fetchNotifications error: $e');
+    }
+  }
+
+  Future<void> markNotificationRead(String notifId) async {
+    final idx = _notifications.indexWhere((n) => n.id == notifId);
+    if (idx != -1 && !_notifications[idx].isRead) {
+      _notifications[idx].isRead = true;
+      if (_unreadNotificationCount > 0) _unreadNotificationCount--;
+      notifyListeners();
+    }
+    await ApiService.markNotificationRead(notifId);
+  }
+
+  Future<void> markAllNotificationsRead() async {
+    for (var n in _notifications) {
+      n.isRead = true;
+    }
+    _unreadNotificationCount = 0;
+    notifyListeners();
+    await ApiService.markAllNotificationsRead(phone: _verifiedTrackingNumber, name: _callerName);
   }
 
   Future<bool> requestNativePermissions() async {
@@ -228,6 +368,10 @@ class TeleProvider extends ChangeNotifier {
                 ? map['timestamp'] as int
                 : DateTime.now().millisecondsSinceEpoch;
 
+            if (_loginSessionTimestamp != null && timestampMs < _loginSessionTimestamp!.millisecondsSinceEpoch - 5000) {
+              continue; // Only track and sync calls made after active user login
+            }
+
             realLogs.add(
               CallLogModel(
                 id: map['id']?.toString() ?? UniqueKey().toString(),
@@ -247,7 +391,9 @@ class TeleProvider extends ChangeNotifier {
         _callLogs.addAll(realLogs);
         _syncLeadsFromCallLogs();
         _syncCallbacksFromCallLogs();
-        ApiService.syncCallLogs(_callLogs, callerName: _callerName, callerPhone: _verifiedTrackingNumber);
+        if (_currentRole == UserRole.caller) {
+          ApiService.syncCallLogs(_callLogs, callerName: _callerName, callerPhone: _verifiedTrackingNumber);
+        }
         notifyListeners();
       }
     } catch (e) {
@@ -272,37 +418,79 @@ class TeleProvider extends ChangeNotifier {
     }
   }
 
-  Future<Map<String, dynamic>> validateAndSetTrackingNumber(String inputPhone, int slotIndex) async {
-    try {
-      final res = await _telephonyChannel.invokeMethod('validateSimNumber', {
-        'phoneNumber': inputPhone,
-        'slotIndex': slotIndex,
-      });
-      if (res is Map) {
-        final isValid = res['isValid'] == true;
-        if (isValid) {
-          _verifiedTrackingNumber = res['formattedNumber'] as String? ?? '+91 $inputPhone';
-          _simTrackingMode = slotIndex == 0 ? SimTrackingMode.sim1Only : SimTrackingMode.sim2Only;
-          notifyListeners();
-          return {'isValid': true, 'formattedNumber': _verifiedTrackingNumber};
-        } else {
-          return {'isValid': false, 'message': res['message'] ?? 'Validation failed'};
+  Future<Map<String, dynamic>> verifyRegisteredSimCard(String registeredPhone) async {
+    await fetchDeviceSims();
+    final cleanReg = registeredPhone.replaceAll(RegExp(r'[^0-9]'), '');
+    final last10Reg = cleanReg.length >= 10 ? cleanReg.substring(cleanReg.length - 10) : cleanReg;
+
+    if (last10Reg.length != 10) {
+      return {'isValid': true};
+    }
+
+    if (_detectedSims.isNotEmpty) {
+      bool simMatched = false;
+      bool hasReadableSimPhone = false;
+
+      for (var sim in _detectedSims) {
+        final cleanSim = sim.phoneNumber.replaceAll(RegExp(r'[^0-9]'), '');
+        final last10Sim = cleanSim.length >= 10 ? cleanSim.substring(cleanSim.length - 10) : cleanSim;
+        if (last10Sim.length >= 10) {
+          hasReadableSimPhone = true;
+          if (last10Sim == last10Reg) {
+            simMatched = true;
+            break;
+          }
         }
       }
-    } catch (e) {
-      debugPrint('Validation fallback: $e');
-    }
 
+      if (hasReadableSimPhone && !simMatched) {
+        return {
+          'isValid': false,
+          'message': 'Device SIM Validation Failed: The registered SIM card (+91 $last10Reg) is not inserted in this mobile phone. Please insert your registered SIM card to proceed.'
+        };
+      }
+    }
+    return {'isValid': true};
+  }
+
+  Future<Map<String, dynamic>> validateAndSetTrackingNumber(String inputPhone, int slotIndex, {String password = ''}) async {
     final clean = inputPhone.replaceAll(RegExp(r'[^0-9]'), '');
     final last10 = clean.length >= 10 ? clean.substring(clean.length - 10) : clean;
-    if (last10.length == 10 && RegExp(r'^[6-9]\d{9}$').hasMatch(last10)) {
-      _verifiedTrackingNumber = '+91 $last10';
-      _simTrackingMode = slotIndex == 0 ? SimTrackingMode.sim1Only : SimTrackingMode.sim2Only;
-      notifyListeners();
-      return {'isValid': true, 'formattedNumber': _verifiedTrackingNumber};
+
+    String formatted = inputPhone.trim();
+    if (!inputPhone.contains('@')) {
+      if (last10.length != 10 || !RegExp(r'^[6-9]\d{9}$').hasMatch(last10)) {
+        return {'isValid': false, 'message': 'Please enter a valid 10-digit mobile number or registered email.'};
+      }
+      formatted = '+91 $last10';
     }
 
-    return {'isValid': false, 'message': 'Please enter a valid 10-digit Indian mobile number.'};
+    try {
+      final verifyRes = await ApiService.verifyCaller(formatted, password: password);
+      if (verifyRes == null || verifyRes['success'] != true) {
+        return {
+          'isValid': false,
+          'message': verifyRes?['message']?.toString() ?? 'Account \'$formatted\' is not registered in DB employees table. Contact Admin.'
+        };
+      }
+      _callerName = verifyRes['user']?['name']?.toString() ?? _callerName;
+      if (verifyRes['user']?['phone'] != null && verifyRes['user']!['phone'].toString().isNotEmpty) {
+        formatted = verifyRes['user']!['phone'].toString();
+      }
+    } catch (e) {
+      debugPrint('DB verification notice: $e');
+    }
+
+    // Hardware SIM card check
+    final simCheck = await verifyRegisteredSimCard(formatted);
+    if (simCheck['isValid'] == false) {
+      return simCheck;
+    }
+
+    _verifiedTrackingNumber = formatted;
+    _simTrackingMode = slotIndex == 0 ? SimTrackingMode.sim1Only : SimTrackingMode.sim2Only;
+    notifyListeners();
+    return {'isValid': true, 'formattedNumber': _verifiedTrackingNumber};
   }
 
   String get activeSimLabel {
@@ -328,21 +516,10 @@ class TeleProvider extends ChangeNotifier {
       _callerName = callerName;
     }
     _setupCompleted = true;
+    _isLoggedIn = true;
+    _loginSessionTimestamp ??= DateTime.now();
     _savePreferences();
     notifyListeners();
-  }
-
-  Future<void> _savePreferences() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('setup_completed', true);
-      await prefs.setString('verified_tracking_number', _verifiedTrackingNumber);
-      await prefs.setString('caller_name', _callerName);
-      await prefs.setString('sim_tracking_mode', _simTrackingMode.name);
-      await prefs.setBool('auto_record_enabled', _autoRecordEnabled);
-    } catch (e) {
-      debugPrint('Error saving prefs: $e');
-    }
   }
 
   void setSimTrackingMode(SimTrackingMode mode) {
@@ -351,7 +528,16 @@ class TeleProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> performLogin({
+  void purgeUserSession() {
+    _isLoggedIn = false;
+    _setupCompleted = true; // Never ask for initial setup again
+    _authToken = '';
+    _activeTabIndex = 0;
+    _savePreferences();
+    notifyListeners();
+  }
+
+  Future<Map<String, dynamic>> performLogin({
     required String username,
     required String password,
     required UserRole role,
@@ -361,55 +547,116 @@ class TeleProvider extends ChangeNotifier {
         final res = await ApiService.loginAdmin(username, password);
         if (res != null && res['success'] == true) {
           final user = res['user'] as Map<String, dynamic>?;
-          if (user != null && user['name'] != null) {
-            _callerName = user['name'].toString();
+          if (user != null) {
+            if (user['name'] != null) _callerName = user['name'].toString();
+            if (user['email'] != null) _verifiedTrackingNumber = user['email'].toString();
           }
-          setRole(UserRole.manager);
+          _currentRole = UserRole.manager;
+          _isLoggedIn = true;
+          _setupCompleted = true;
+          _loginSessionTimestamp ??= DateTime.now();
+          _savePreferences();
           await fetchBackendData();
-          return true;
+          notifyListeners();
+          return {'success': true, 'message': 'Admin authentication successful'};
         }
+        return {'success': false, 'message': res?['message']?.toString() ?? 'Account not registered in DB employees table or incorrect password.'};
       } else {
-        final res = await ApiService.verifyCaller(username);
+        final res = await ApiService.verifyCaller(username, password: password);
         if (res != null && res['success'] == true) {
           final user = res['user'] as Map<String, dynamic>?;
-          if (user != null && user['name'] != null) {
-            _callerName = user['name'].toString();
+          String regPhone = '';
+          if (user != null) {
+            if (user['name'] != null) _callerName = user['name'].toString();
+            if (user['phone'] != null && user['phone'].toString().isNotEmpty) {
+              _verifiedTrackingNumber = user['phone'].toString();
+              regPhone = user['phone'].toString();
+            }
           }
-          setRole(UserRole.caller);
+
+          // If logged in via Email ID with no registered phone in DB, ask for mobile number verification
+          if (regPhone.isEmpty) {
+            return {
+              'success': false,
+              'requiresPhoneInput': true,
+              'user': user,
+              'message': 'Logged in via Email. Please enter your mobile SIM number inserted in this device.'
+            };
+          }
+
+          // Hardware SIM Card Match Check on Phone
+          final simCheck = await verifyRegisteredSimCard(regPhone);
+          if (simCheck['isValid'] == false) {
+            return {'success': false, 'message': simCheck['message']};
+          }
+
+          _currentRole = UserRole.caller;
+          _isLoggedIn = true;
+          _setupCompleted = true;
+          _loginSessionTimestamp ??= DateTime.now();
+          _savePreferences();
+          await fetchDeviceCallLogs();
           await fetchBackendData();
-          return true;
+          notifyListeners();
+          return {'success': true, 'message': 'Caller verified successfully'};
         }
+        return {'success': false, 'message': res?['message']?.toString() ?? 'Caller account not registered in DB employees table or incorrect password.'};
       }
     } catch (e) {
       debugPrint('TeleProvider.performLogin notice: $e');
     }
+    return {'success': false, 'message': 'Could not reach server. Check backend connection.'};
+  }
 
-    // Dynamic login execution if offline/fallback
-    if (username.isNotEmpty) {
-      if (role == UserRole.manager) {
-        _callerName = username.toUpperCase() == 'RASMI' ? 'Rasmi Desai' : username;
-        setRole(UserRole.manager);
-      } else {
-        _callerName = username.toUpperCase() == 'PRIYANKA' ? 'Priyanka Panchal' : username;
-        setRole(UserRole.caller);
-      }
-      await fetchBackendData();
-      return true;
+  Future<Map<String, dynamic>> linkAndVerifySimPhone({
+    required String userId,
+    required String email,
+    required String inputPhone,
+  }) async {
+    final clean = inputPhone.replaceAll(RegExp(r'[^0-9]'), '');
+    final last10 = clean.length >= 10 ? clean.substring(clean.length - 10) : clean;
+    if (last10.length != 10 || !RegExp(r'^[6-9]\d{9}$').hasMatch(last10)) {
+      return {'success': false, 'message': 'Please enter a valid 10-digit mobile number.'};
     }
-    return false;
+
+    final formattedPhone = '+91 $last10';
+
+    // 1. Verify against physical SIM card hardware on phone
+    final simCheck = await verifyRegisteredSimCard(formattedPhone);
+    if (simCheck['isValid'] == false) {
+      return {'success': false, 'message': simCheck['message']};
+    }
+
+    // 2. Link phone number in MongoDB database
+    final linkRes = await ApiService.linkPhone(userId: userId, email: email, phone: formattedPhone);
+    if (linkRes != null && linkRes['success'] == true) {
+      _verifiedTrackingNumber = formattedPhone;
+      _currentRole = UserRole.caller;
+      _isLoggedIn = true;
+      _setupCompleted = true;
+      _loginSessionTimestamp ??= DateTime.now();
+      _savePreferences();
+      await fetchDeviceCallLogs();
+      await fetchBackendData();
+      notifyListeners();
+      return {'success': true, 'message': 'Mobile SIM number linked and verified successfully!'};
+    }
+
+    return {'success': false, 'message': linkRes?['message']?.toString() ?? 'Failed to link mobile number in database.'};
   }
 
   void setRole(UserRole role) {
     _currentRole = role;
     _isLoggedIn = true;
+    _setupCompleted = true;
     _activeTabIndex = 0;
+    _loginSessionTimestamp ??= DateTime.now();
+    _savePreferences();
     notifyListeners();
   }
 
   void logout() {
-    _isLoggedIn = false;
-    _activeTabIndex = 0;
-    notifyListeners();
+    purgeUserSession();
   }
 
   void setTabIndex(int index) {
@@ -599,27 +846,8 @@ class TeleProvider extends ChangeNotifier {
     }
   }
 
-  // Employees & Leaderboard
-  List<EmployeeModel> get employees {
-    if (_teamEmployees.isNotEmpty) {
-      return _teamEmployees;
-    }
-    return [
-      EmployeeModel(
-        id: 'emp_me',
-        name: _callerName.isNotEmpty ? _callerName : (_verifiedTrackingNumber.isNotEmpty ? _verifiedTrackingNumber : 'Active Caller'),
-        phone: _verifiedTrackingNumber.isNotEmpty ? _verifiedTrackingNumber : '+91 98250 12340',
-        totalCalls: trackedTotalCalls,
-        connectedCalls: trackedConnectedCalls,
-        totalTalkTime: trackedTotalTalkTime,
-        incomingCalls: trackedIncomingCalls,
-        outgoingCalls: trackedOutgoingCalls,
-        missedCalls: trackedMissedCalls,
-        neverAttendedCalls: trackedNeverAttendedCalls,
-        rank: 1,
-      ),
-    ];
-  }
+  // Employees & Leaderboard (Strict Live DB Data)
+  List<EmployeeModel> get employees => _teamEmployees;
 
   EmployeeModel? _selectedEmployee;
   EmployeeModel? get selectedEmployee => _selectedEmployee;
@@ -773,6 +1001,60 @@ class TeleProvider extends ChangeNotifier {
         notifyListeners();
       });
     });
+  }
+
+  Future<void> openNativePhoneContactEditor(String phoneNumber, String name) async {
+    try {
+      await _telephonyChannel.invokeMethod('openSaveContact', {
+        'phoneNumber': phoneNumber,
+        'name': name,
+      });
+    } catch (e) {
+      debugPrint('openSaveContact error: $e');
+    }
+  }
+
+  Future<bool> saveContact({required String phoneNumber, required String name, String? notes}) async {
+    final success = await ApiService.saveContact(
+      phoneNumber: phoneNumber,
+      name: name,
+      notes: notes,
+    );
+    if (success) {
+      await fetchDeviceCallLogs();
+      await fetchBackendData();
+      notifyListeners();
+    }
+    return success;
+  }
+
+  Future<Map<String, dynamic>> createUser({
+    required String name,
+    required String email,
+    required String phone,
+    required String password,
+    String role = 'caller',
+    String team = 'Telesales Team',
+    int dailyTarget = 100,
+    String? managerId,
+    String? managerName,
+  }) async {
+    final res = await ApiService.createUser(
+      name: name,
+      email: email,
+      phone: phone,
+      password: password,
+      role: role,
+      team: team,
+      dailyTarget: dailyTarget,
+      managerId: managerId ?? '',
+      managerName: managerName ?? currentUserName,
+    );
+    if (res['success'] == true) {
+      await fetchBackendData();
+      notifyListeners();
+    }
+    return res;
   }
 
   @override

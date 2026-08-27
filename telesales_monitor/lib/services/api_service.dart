@@ -7,17 +7,18 @@ import '../models/lead_model.dart';
 import '../models/recording_model.dart';
 
 class ApiService {
-  // Candidate hosts: Production Subdomain (telesales.askeva.io), LAN IP, adb reverse / local, emulator
+  // Candidate hosts: LAN IP (192.168.0.29:5004), adb reverse / local, emulator, production
   static final List<String> candidateBaseUrls = [
+    'http://192.168.0.29:5004/api',
+    'http://127.0.0.1:5004/api',
+    'http://10.0.2.2:5004/api',
     'https://telesales.askeva.io/api',
     'http://telesales.askeva.io/api',
-    'http://192.168.0.24:5000/api',
-    'http://127.0.0.1:5000/api',
-    'http://10.0.2.2:5000/api',
-    'http://192.168.0.22:5000/api',
+    'http://192.168.0.24:5004/api',
+    'http://192.168.0.22:5004/api',
   ];
 
-  static String baseUrl = 'https://telesales.askeva.io/api';
+  static String baseUrl = 'http://192.168.0.29:5004/api';
 
   static void setBaseUrl(String url) {
     baseUrl = url;
@@ -32,9 +33,9 @@ class ApiService {
           Uri.parse('$base$path'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode(body),
-        ).timeout(const Duration(milliseconds: 2500));
+        ).timeout(const Duration(milliseconds: 3500));
 
-        if (res.statusCode == 200 || res.statusCode == 201) {
+        if (res.statusCode < 500) {
           baseUrl = base;
           return res;
         }
@@ -50,9 +51,10 @@ class ApiService {
       try {
         final res = await http.get(
           Uri.parse('$base$path'),
-        ).timeout(const Duration(milliseconds: 2500));
+          headers: {'Content-Type': 'application/json'},
+        ).timeout(const Duration(milliseconds: 3500));
 
-        if (res.statusCode == 200) {
+        if (res.statusCode < 500) {
           baseUrl = base;
           return res;
         }
@@ -62,7 +64,7 @@ class ApiService {
   }
 
   // 1. Sync Batch Calls to MongoDB Backend
-  static Future<bool> syncCallLogs(List<CallLogModel> calls, {String callerName = 'Priyanka Panchal', String callerPhone = '+91 98250 12340'}) async {
+  static Future<bool> syncCallLogs(List<CallLogModel> calls, {String callerName = 'Caller Agent', String callerPhone = ''}) async {
     try {
       final payload = {
         'callerId': 'caller_1',
@@ -88,9 +90,15 @@ class ApiService {
   }
 
   // 2. Fetch Admin Dashboard Telemetry
-  static Future<Map<String, dynamic>?> fetchDashboardStats() async {
+  static Future<Map<String, dynamic>?> fetchDashboardStats({String? callerPhone, String? callerName, String? team}) async {
     try {
-      final res = await _getWithFallback('/dashboard/stats');
+      final queryParams = <String>[];
+      if (callerPhone != null && callerPhone.isNotEmpty) queryParams.add('callerPhone=${Uri.encodeComponent(callerPhone)}');
+      if (callerName != null && callerName.isNotEmpty) queryParams.add('callerName=${Uri.encodeComponent(callerName)}');
+      if (team != null && team.isNotEmpty) queryParams.add('team=${Uri.encodeComponent(team)}');
+      final queryString = queryParams.isNotEmpty ? '?${queryParams.join('&')}' : '';
+
+      final res = await _getWithFallback('/dashboard/stats$queryString');
       if (res != null && res.statusCode == 200) {
         final data = jsonDecode(res.body);
         return data['stats'] as Map<String, dynamic>? ?? data['data'] as Map<String, dynamic>?;
@@ -102,9 +110,15 @@ class ApiService {
   }
 
   // 3. Fetch Team Leaderboard
-  static Future<List<EmployeeModel>?> fetchLeaderboard() async {
+  static Future<List<EmployeeModel>?> fetchLeaderboard({String? callerPhone, String? callerName, String? team}) async {
     try {
-      final res = await _getWithFallback('/employees/leaderboard');
+      final queryParams = <String>[];
+      if (callerPhone != null && callerPhone.isNotEmpty) queryParams.add('callerPhone=${Uri.encodeComponent(callerPhone)}');
+      if (callerName != null && callerName.isNotEmpty) queryParams.add('callerName=${Uri.encodeComponent(callerName)}');
+      if (team != null && team.isNotEmpty) queryParams.add('team=${Uri.encodeComponent(team)}');
+      final queryString = queryParams.isNotEmpty ? '?${queryParams.join('&')}' : '';
+
+      final res = await _getWithFallback('/employees/leaderboard$queryString');
       if (res != null && res.statusCode == 200) {
         final data = jsonDecode(res.body);
         final list = (data['employees'] ?? data['data']) as List<dynamic>;
@@ -117,6 +131,7 @@ class ApiService {
             id: e['id']?.toString() ?? '1',
             name: e['name'] ?? '',
             phone: e['phone'] ?? '',
+            role: e['role']?.toString() ?? 'caller',
             totalCalls: totalCalls,
             connectedCalls: connectedCalls,
             totalTalkTime: Duration(seconds: talkTimeSec),
@@ -135,9 +150,15 @@ class ApiService {
   }
 
   // 4. Fetch CRM Leads from Backend
-  static Future<List<LeadModel>?> fetchLeads() async {
+  static Future<List<LeadModel>?> fetchLeads({String? callerPhone, String? callerName, String? team}) async {
     try {
-      final res = await _getWithFallback('/leads');
+      final queryParams = <String>[];
+      if (callerPhone != null && callerPhone.isNotEmpty) queryParams.add('callerPhone=${Uri.encodeComponent(callerPhone)}');
+      if (callerName != null && callerName.isNotEmpty) queryParams.add('callerName=${Uri.encodeComponent(callerName)}');
+      if (team != null && team.isNotEmpty) queryParams.add('team=${Uri.encodeComponent(team)}');
+      final queryString = queryParams.isNotEmpty ? '?${queryParams.join('&')}' : '';
+
+      final res = await _getWithFallback('/leads$queryString');
       if (res != null && res.statusCode == 200) {
         final data = jsonDecode(res.body);
         final list = data['leads'] as List<dynamic>;
@@ -179,9 +200,15 @@ class ApiService {
   }
 
   // 5. Fetch Audio Recordings from Backend
-  static Future<List<RecordingModel>?> fetchRecordings() async {
+  static Future<List<RecordingModel>?> fetchRecordings({String? callerPhone, String? callerName, String? team}) async {
     try {
-      final res = await _getWithFallback('/recordings');
+      final queryParams = <String>[];
+      if (callerPhone != null && callerPhone.isNotEmpty) queryParams.add('callerPhone=${Uri.encodeComponent(callerPhone)}');
+      if (callerName != null && callerName.isNotEmpty) queryParams.add('callerName=${Uri.encodeComponent(callerName)}');
+      if (team != null && team.isNotEmpty) queryParams.add('team=${Uri.encodeComponent(team)}');
+      final queryString = queryParams.isNotEmpty ? '?${queryParams.join('&')}' : '';
+
+      final res = await _getWithFallback('/recordings$queryString');
       if (res != null && res.statusCode == 200) {
         final data = jsonDecode(res.body);
         final list = data['recordings'] as List<dynamic>;
@@ -264,7 +291,7 @@ class ApiService {
         'username': emailOrUsername,
         'password': password,
       });
-      if (res != null && (res.statusCode == 200 || res.statusCode == 201)) {
+      if (res != null) {
         return jsonDecode(res.body) as Map<String, dynamic>;
       }
     } catch (e) {
@@ -273,19 +300,159 @@ class ApiService {
     return null;
   }
 
-  // 8. Verify Caller via Backend API
-  static Future<Map<String, dynamic>?> verifyCaller(String phoneOrUsername, {int simSlot = 1}) async {
+  // 8. Verify Caller via Backend API (Supports Phone Number, Registered Email or Username)
+  static Future<Map<String, dynamic>?> verifyCaller(String phoneOrEmail, {String password = '', int simSlot = 1}) async {
     try {
       final res = await _postWithFallback('/auth/caller-verify', {
-        'phoneNumber': phoneOrUsername,
+        'phoneNumber': phoneOrEmail,
+        'email': phoneOrEmail,
+        'username': phoneOrEmail,
+        'password': password,
         'simSlot': simSlot,
       });
-      if (res != null && (res.statusCode == 200 || res.statusCode == 201)) {
+      if (res != null) {
         return jsonDecode(res.body) as Map<String, dynamic>;
       }
     } catch (e) {
       debugPrint('ApiService.verifyCaller error: $e');
     }
     return null;
+  }
+
+  // 9. Link / Update Mobile SIM Number for Employee Account
+  static Future<Map<String, dynamic>?> linkPhone({required String userId, required String email, required String phone}) async {
+    try {
+      final res = await _postWithFallback('/auth/link-phone', {
+        'userId': userId,
+        'email': email,
+        'phone': phone,
+      });
+      if (res != null) {
+        return jsonDecode(res.body) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      debugPrint('ApiService.linkPhone error: $e');
+    }
+    return null;
+  }
+
+  // 10. Save Call Quality Rating and Comment for Recording
+  static Future<bool> saveRecordingFeedback({
+    required String recordingId,
+    required int rating,
+    required String comment,
+    required String commentedBy,
+    required String commentedByRole,
+  }) async {
+    try {
+      final res = await _postWithFallback('/admin/recordings/$recordingId/comment', {
+        'rating': rating,
+        'comment': comment,
+        'commentedBy': commentedBy,
+        'commentedByRole': commentedByRole,
+      });
+      return res != null && res.statusCode == 200;
+    } catch (e) {
+      debugPrint('ApiService.saveRecordingFeedback error: $e');
+      return false;
+    }
+  }
+
+  // 11. Fetch Caller Notifications
+  static Future<Map<String, dynamic>?> fetchCallerNotifications({String? phone, String? name}) async {
+    try {
+      final queryParams = <String, String>{};
+      if (phone != null && phone.isNotEmpty) queryParams['phone'] = phone;
+      if (name != null && name.isNotEmpty) queryParams['name'] = name;
+      final uriStr = Uri(path: '/user/notifications', queryParameters: queryParams.isNotEmpty ? queryParams : null).toString();
+
+      final res = await _getWithFallback(uriStr);
+      if (res != null && res.statusCode == 200) {
+        return jsonDecode(res.body) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      debugPrint('ApiService.fetchCallerNotifications error: $e');
+    }
+    return null;
+  }
+
+  // 12. Mark Notification as Read
+  static Future<bool> markNotificationRead(String notifId) async {
+    try {
+      final res = await _postWithFallback('/user/notifications/$notifId/read', {});
+      return res != null && res.statusCode == 200;
+    } catch (e) {
+      debugPrint('ApiService.markNotificationRead error: $e');
+      return false;
+    }
+  }
+
+  // 13. Mark All Notifications as Read
+  static Future<bool> markAllNotificationsRead({String? phone, String? name}) async {
+    try {
+      final res = await _postWithFallback('/user/notifications/read-all', {
+        'phone': phone ?? '',
+        'name': name ?? '',
+      });
+      return res != null && res.statusCode == 200;
+    } catch (e) {
+      debugPrint('ApiService.markAllNotificationsRead error: $e');
+      return false;
+    }
+  }
+
+  // 14. Save or Update Contact Name in CRM & Database
+  static Future<bool> saveContact({
+    required String phoneNumber,
+    required String name,
+    String? notes,
+  }) async {
+    try {
+      final res = await _postWithFallback('/user/contacts/save', {
+        'phoneNumber': phoneNumber,
+        'name': name,
+        'notes': notes ?? '',
+      });
+      return res != null && res.statusCode == 200;
+    } catch (e) {
+      debugPrint('ApiService.saveContact error: $e');
+      return false;
+    }
+  }
+
+  // 15. Create New User / Caller (Admin & Manager)
+  static Future<Map<String, dynamic>> createUser({
+    required String name,
+    required String email,
+    required String phone,
+    required String password,
+    String role = 'caller',
+    String team = 'Telesales Team',
+    int dailyTarget = 100,
+    String? managerId,
+    String? managerName,
+  }) async {
+    try {
+      final res = await _postWithFallback('/admin/users', {
+        'name': name,
+        'email': email,
+        'phone': phone,
+        'password': password,
+        'role': role,
+        'team': team,
+        'dailyTarget': dailyTarget,
+        'managerId': managerId ?? '',
+        'managerName': managerName ?? '',
+      });
+      if (res != null && (res.statusCode == 200 || res.statusCode == 201)) {
+        final data = jsonDecode(res.body);
+        return {'success': true, 'message': data['message'] ?? 'User created successfully', 'user': data['user']};
+      }
+      final errorData = res != null ? jsonDecode(res.body) : null;
+      return {'success': false, 'message': errorData?['message'] ?? 'Failed to create user'};
+    } catch (e) {
+      debugPrint('ApiService.createUser error: $e');
+      return {'success': false, 'message': e.toString()};
+    }
   }
 }

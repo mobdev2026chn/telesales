@@ -4,6 +4,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/neo_card.dart';
 import '../../widgets/top_header.dart';
 import '../../widgets/lead_detail_sheet.dart';
+import '../../widgets/save_contact_dialog.dart';
 import '../../providers/tele_provider.dart';
 
 class LeadsScreen extends StatefulWidget {
@@ -15,13 +16,100 @@ class LeadsScreen extends StatefulWidget {
 
 class _LeadsScreenState extends State<LeadsScreen> {
   int _selectedFilterIndex = 0;
-  final String _selectedTeamMember = 'ALL TEAM MEMBERS';
+  String _selectedTeamMember = 'ALL TEAM MEMBERS';
+
+  void _showTeamMemberPicker(BuildContext context, TeleProvider tele) {
+    final List<String> memberOptions = <String>{
+      'ALL TEAM MEMBERS',
+      if (tele.callerName.isNotEmpty) tele.callerName.toUpperCase(),
+      ...tele.employees.map((e) => e.name.toUpperCase()),
+    }.toList();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          decoration: BoxDecoration(
+            color: AppTheme.paper,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            border: Border.all(color: AppTheme.ink900, width: 2),
+            boxShadow: AppTheme.neoShadow(color: AppTheme.ink900),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppTheme.ink900,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'SELECT TEAM MEMBER',
+                style: AppTheme.headline(size: 14, color: AppTheme.ink900),
+              ),
+              const SizedBox(height: 12),
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: memberOptions.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (_, idx) {
+                    final option = memberOptions[idx];
+                    final isSelected = _selectedTeamMember == option;
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _selectedTeamMember = option;
+                        });
+                        Navigator.pop(ctx);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: isSelected ? AppTheme.ink900 : AppTheme.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppTheme.ink900, width: 1.5),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              option,
+                              style: AppTheme.label(
+                                size: 11,
+                                color: isSelected ? AppTheme.limeYellow : AppTheme.ink900,
+                              ),
+                            ),
+                            if (isSelected)
+                              const Icon(Icons.check_circle_rounded, size: 18, color: AppTheme.limeYellow),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final tele = Provider.of<TeleProvider>(context);
 
-    final callerName = tele.callerName.isNotEmpty ? tele.callerName.toUpperCase() : 'RASMI DESAI';
+    final callerName = tele.currentUserName.toUpperCase();
 
     // Dynamic Leads List from Provider
     final List<Map<String, dynamic>> dynamicLeads = [];
@@ -79,23 +167,26 @@ class _LeadsScreenState extends State<LeadsScreen> {
             const SizedBox(height: 14),
 
             // Dropdown: ALL TEAM MEMBERS
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: AppTheme.white,
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: AppTheme.ink900, width: 1.5),
-                boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    _selectedTeamMember,
-                    style: AppTheme.label(size: 10, color: AppTheme.ink900, letterSpacing: 0.14),
-                  ),
-                  const Icon(Icons.keyboard_arrow_down, size: 20, color: AppTheme.ink900),
-                ],
+            GestureDetector(
+              onTap: () => _showTeamMemberPicker(context, tele),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppTheme.white,
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: AppTheme.ink900, width: 1.5),
+                  boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      _selectedTeamMember,
+                      style: AppTheme.label(size: 10, color: AppTheme.ink900, letterSpacing: 0.14),
+                    ),
+                    const Icon(Icons.keyboard_arrow_down, size: 20, color: AppTheme.ink900),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 12),
@@ -249,6 +340,8 @@ class _LeadsScreenState extends State<LeadsScreen> {
                     badgeText = AppTheme.limeYellow;
                   }
 
+                  final isUnsaved = name == phone || name == 'Unknown';
+
                   return NeoCard(
                     backgroundColor: AppTheme.white,
                     shadowColor: AppTheme.ink900,
@@ -261,11 +354,44 @@ class _LeadsScreenState extends State<LeadsScreen> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Expanded(
-                              child: Text(
-                                name,
-                                style: AppTheme.bodyBold(size: 14, color: AppTheme.ink900),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                              child: Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      name,
+                                      style: AppTheme.bodyBold(size: 14, color: AppTheme.ink900),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  GestureDetector(
+                                    onTap: () => SaveContactDialog.show(context, phone, initialName: isUnsaved ? null : name),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: isUnsaved ? AppTheme.limeYellow : AppTheme.paper,
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: AppTheme.ink900, width: 1),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            isUnsaved ? Icons.person_add_alt_1_rounded : Icons.edit_note_rounded,
+                                            size: 12,
+                                            color: AppTheme.ink900,
+                                          ),
+                                          const SizedBox(width: 3),
+                                          Text(
+                                            isUnsaved ? '+ SAVE' : 'EDIT',
+                                            style: AppTheme.label(size: 8, color: AppTheme.ink900),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                             Container(

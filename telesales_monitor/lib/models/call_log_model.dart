@@ -27,7 +27,7 @@ class CallLogModel {
     required this.timestamp,
     this.note,
     this.recordingPath,
-    this.agentName = 'Priyanka Panchal',
+    this.agentName = 'Caller Agent',
     this.simSlot = 1,
   });
 

@@ -5,6 +5,8 @@ import '../../widgets/neo_card.dart';
 import '../../widgets/neo_button.dart';
 import '../../widgets/top_header.dart';
 import '../../providers/tele_provider.dart';
+import '../../models/recording_model.dart';
+import '../../services/api_service.dart';
 
 class RecordingsScreen extends StatefulWidget {
   const RecordingsScreen({super.key});
@@ -15,14 +17,111 @@ class RecordingsScreen extends StatefulWidget {
 
 class _RecordingsScreenState extends State<RecordingsScreen> {
   int _selectedFilterIndex = 0; // 0 = ALL, 1 = OVER 5M, 2 = UNDER 5M
-  final String _selectedStaff = 'ALL STAFF';
+  String _selectedStaff = 'ALL STAFF';
   final Map<String, int> _ratings = {};
+  final Map<String, TextEditingController> _commentCtrls = {};
+
+  @override
+  void dispose() {
+    for (var ctrl in _commentCtrls.values) {
+      ctrl.dispose();
+    }
+    super.dispose();
+  }
+
+  void _showStaffPicker(BuildContext context, TeleProvider tele) {
+    final List<String> staffOptions = <String>{
+      'ALL STAFF',
+      if (tele.callerName.isNotEmpty) tele.callerName.toUpperCase(),
+      ...tele.employees.map((e) => e.name.toUpperCase()),
+    }.toList();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          decoration: BoxDecoration(
+            color: AppTheme.paper,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            border: Border.all(color: AppTheme.ink900, width: 2),
+            boxShadow: AppTheme.neoShadow(color: AppTheme.ink900),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppTheme.ink900,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'SELECT STAFF MEMBER',
+                style: AppTheme.headline(size: 14, color: AppTheme.ink900),
+              ),
+              const SizedBox(height: 12),
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: staffOptions.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (_, idx) {
+                    final option = staffOptions[idx];
+                    final isSelected = _selectedStaff == option;
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _selectedStaff = option;
+                        });
+                        Navigator.pop(ctx);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: isSelected ? AppTheme.ink900 : AppTheme.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppTheme.ink900, width: 1.5),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              option,
+                              style: AppTheme.label(
+                                size: 11,
+                                color: isSelected ? AppTheme.limeYellow : AppTheme.ink900,
+                              ),
+                            ),
+                            if (isSelected)
+                              const Icon(Icons.check_circle_rounded, size: 18, color: AppTheme.limeYellow),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final tele = Provider.of<TeleProvider>(context);
 
-    final callerName = tele.callerName.isNotEmpty ? tele.callerName.toUpperCase() : 'RASMI DESAI';
+    final callerName = tele.currentUserName.toUpperCase();
+    final isManagerOrAdmin = tele.currentRole == UserRole.manager;
 
     final List<Map<String, dynamic>> dynamicRecordings = [];
 
@@ -61,23 +160,26 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
             const SizedBox(height: 14),
 
             // ALL STAFF Dropdown
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: AppTheme.white,
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: AppTheme.ink900, width: 1.5),
-                boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    _selectedStaff,
-                    style: AppTheme.label(size: 10, color: AppTheme.ink900, letterSpacing: 0.14),
-                  ),
-                  const Icon(Icons.keyboard_arrow_down, size: 20, color: AppTheme.ink900),
-                ],
+            GestureDetector(
+              onTap: () => _showStaffPicker(context, tele),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppTheme.white,
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: AppTheme.ink900, width: 1.5),
+                  boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      _selectedStaff,
+                      style: AppTheme.label(size: 10, color: AppTheme.ink900, letterSpacing: 0.14),
+                    ),
+                    const Icon(Icons.keyboard_arrow_down, size: 20, color: AppTheme.ink900),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 12),
@@ -132,15 +234,23 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                 itemCount: dynamicRecordings.length,
                 separatorBuilder: (ctx, i) => const SizedBox(height: 12),
                 itemBuilder: (ctx, i) {
-                  final rec = dynamicRecordings[i];
-                  final id = rec['id'] as String;
-                  final caller = rec['callerName'] as String;
-                  final contact = rec['contactName'] as String;
-                  final timeStr = rec['timeStr'] as String;
-                  final quote = rec['quote'] as String;
-                  final isPlaying = rec['isPlaying'] as bool? ?? false;
-                  final progress = rec['progress'] as double? ?? 0.0;
-                  final rating = _ratings[id] ?? 0;
+                  final Map<String, dynamic> rMap = dynamicRecordings[i];
+                  final String id = rMap['id'] as String;
+                  final String caller = rMap['callerName'] as String;
+                  final String contact = rMap['contactName'] as String;
+                  final String timeStr = rMap['timeStr'] as String;
+                  final String quote = rMap['quote'] as String;
+                  final bool isPlaying = rMap['isPlaying'] as bool? ?? false;
+                  final double progress = rMap['progress'] as double? ?? 0.0;
+
+                  final RecordingModel? origRec = tele.recordings.firstWhere((element) => element.id == id, orElse: () => tele.recordings[0]);
+                  final int rating = _ratings[id] ?? origRec?.rating ?? 0;
+                  final String savedComment = origRec?.comment ?? '';
+                  final String commentedBy = origRec?.commentedBy ?? '';
+
+                  if (!_commentCtrls.containsKey(id)) {
+                    _commentCtrls[id] = TextEditingController(text: savedComment);
+                  }
 
                   return NeoCard(
                     backgroundColor: AppTheme.white,
@@ -215,46 +325,154 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                         ),
                         const SizedBox(height: 12),
 
-                        // Call Quality Rating & Save Button
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              children: [
-                                Text('Call Quality:', style: AppTheme.label(size: 9, color: AppTheme.muted)),
-                                const SizedBox(width: 6),
-                                Row(
-                                  children: List.generate(5, (starIdx) {
-                                    final isStarred = starIdx < rating;
-                                    return GestureDetector(
-                                      onTap: () => setState(() => _ratings[id] = starIdx + 1),
+                        // CALL QUALITY Section
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppTheme.paper,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppTheme.ink800.withOpacity(0.15), width: 1),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    'CALL QUALITY',
+                                    style: AppTheme.label(size: 9, color: AppTheme.muted, letterSpacing: 0.12),
+                                  ),
+                                  Text(
+                                    rating > 0 ? '$rating/5 STARS' : 'NOT RATED',
+                                    style: AppTheme.label(
+                                      size: 9,
+                                      color: rating > 0 ? AppTheme.greenDark : AppTheme.muted,
+                                      letterSpacing: 0.1,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+
+                              // Star Rating Selector (Interactive for Manager/Admin, Read-only for Caller)
+                              Row(
+                                children: List.generate(5, (starIdx) {
+                                  final isStarred = starIdx < rating;
+                                  return GestureDetector(
+                                    onTap: isManagerOrAdmin
+                                        ? () {
+                                            setState(() {
+                                              _ratings[id] = starIdx + 1;
+                                            });
+                                          }
+                                        : null,
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(right: 6),
                                       child: Icon(
-                                        isStarred ? Icons.star : Icons.star_border,
-                                        size: 16,
+                                        isStarred ? Icons.star_rounded : Icons.star_outline_rounded,
+                                        size: 20,
                                         color: isStarred ? AppTheme.orangePill : AppTheme.muted,
                                       ),
-                                    );
-                                  }),
+                                    ),
+                                  );
+                                }),
+                              ),
+                              const SizedBox(height: 10),
+
+                              // Feedback Notification Banner for Caller
+                              if (savedComment.isNotEmpty) ...[
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.ink900,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Icon(Icons.star, size: 14, color: AppTheme.limeYellow),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          'Feedback by ${commentedBy.isNotEmpty ? commentedBy : "Admin/Manager"}: "$savedComment"',
+                                          style: AppTheme.bodyBold(size: 11, color: AppTheme.white),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                              ] else if (!isManagerOrAdmin) ...[
+                                Text(
+                                  'Awaiting Manager / Admin call quality review',
+                                  style: AppTheme.italicSerif(size: 11, color: AppTheme.muted),
                                 ),
                               ],
-                            ),
-                            NeoButton.pill(
-                              backgroundColor: AppTheme.ink900,
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                              onTap: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    backgroundColor: AppTheme.ink900,
-                                    content: Text('Recording feedback saved.', style: AppTheme.bodyBold(size: 12, color: AppTheme.limeYellow)),
-                                  ),
-                                );
-                              },
-                              child: Text(
-                                'SAVE',
-                                style: AppTheme.label(size: 8.5, color: AppTheme.limeYellow),
-                              ),
-                            ),
-                          ],
+
+                              // Comment Input & SAVE Button (Visible ONLY to Manager / Admin)
+                              if (isManagerOrAdmin)
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Container(
+                                        height: 38,
+                                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.white,
+                                          borderRadius: BorderRadius.circular(10),
+                                          border: Border.all(color: AppTheme.ink900, width: 1),
+                                        ),
+                                        child: TextField(
+                                          controller: _commentCtrls[id],
+                                          style: AppTheme.body(size: 12, color: AppTheme.ink900),
+                                          decoration: const InputDecoration(
+                                            hintText: 'Comment on call quality...',
+                                            hintStyle: TextStyle(color: AppTheme.muted, fontSize: 11),
+                                            border: InputBorder.none,
+                                            contentPadding: EdgeInsets.only(bottom: 12),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    NeoButton.pill(
+                                      backgroundColor: AppTheme.ink900,
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                      onTap: () async {
+                                        final text = _commentCtrls[id]?.text.trim() ?? '';
+                                        final selectedRating = _ratings[id] ?? rating;
+
+                                        final success = await ApiService.saveRecordingFeedback(
+                                          recordingId: id,
+                                          rating: selectedRating,
+                                          comment: text,
+                                          commentedBy: callerName,
+                                          commentedByRole: 'manager',
+                                        );
+
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              backgroundColor: AppTheme.ink900,
+                                              content: Text(
+                                                success ? 'Call quality rating and comment saved!' : 'Feedback saved locally.',
+                                                style: AppTheme.bodyBold(size: 12, color: AppTheme.limeYellow),
+                                              ),
+                                            ),
+                                          );
+                                          await tele.fetchBackendData();
+                                        }
+                                      },
+                                      child: Text(
+                                        'SAVE',
+                                        style: AppTheme.label(size: 9, color: AppTheme.limeYellow),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                            ],
+                          ),
                         ),
                       ],
                     ),

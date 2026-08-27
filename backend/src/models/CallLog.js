@@ -2,8 +2,8 @@ const mongoose = require('mongoose');
 
 const CallLogSchema = new mongoose.Schema({
   callerId: { type: String, default: 'caller_1' },
-  callerName: { type: String, default: 'Priyanka Panchal' },
-  callerPhone: { type: String, default: '+91 98250 12340' },
+  callerName: { type: String, default: 'Caller Agent' },
+  callerPhone: { type: String, default: '+91 98250 00000' },
   contactName: { type: String, required: true },
   phoneNumber: { type: String, required: true },
   type: { 

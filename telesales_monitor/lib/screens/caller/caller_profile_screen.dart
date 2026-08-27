@@ -66,7 +66,7 @@ class CallerProfileScreen extends StatelessWidget {
                       autofocus: true,
                       style: AppTheme.bodyBold(size: 14),
                       decoration: const InputDecoration(
-                        hintText: 'e.g. Priyanka Panchal / Sales Agent 1',
+                        hintText: 'e.g. Sales Agent 1',
                         border: InputBorder.none,
                         prefixIcon: Icon(Icons.person_outline, color: AppTheme.ink900),
                       ),

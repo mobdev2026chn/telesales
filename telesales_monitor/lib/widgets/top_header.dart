@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import 'sim_permission_dialog.dart';
+import 'notifications_sheet.dart';
 import '../providers/tele_provider.dart';
 
 class TopHeader extends StatelessWidget {
@@ -13,14 +14,15 @@ class TopHeader extends StatelessWidget {
   const TopHeader({
     super.key,
     required this.title,
-    this.userName = 'RASMI DESAI',
+    this.userName = 'ADMIN',
     this.selectedSimIndex = 1,
     this.onSimSelected,
   });
 
   @override
   Widget build(BuildContext context) {
-    final tele = Provider.of<TeleProvider>(context, listen: false);
+    final tele = Provider.of<TeleProvider>(context);
+    final unreadCount = tele.unreadNotificationCount;
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -51,46 +53,158 @@ class TopHeader extends StatelessWidget {
           ],
         ),
 
-        // SIM Filter Selector Pill + Direct Logout Phone Icon Button
-        Container(
-          height: 32,
-          padding: const EdgeInsets.all(2),
-          decoration: BoxDecoration(
-            color: AppTheme.paper,
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: AppTheme.ink900, width: 1.5),
-            boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildPillItem(context, 'ALL', 0),
-              _buildPillItem(context, 'SIM 1', 1),
-              _buildPillItem(context, 'SIM 2', 2),
-              const SizedBox(width: 2),
+        // Notification Bell Icon (CALLER ONLY) + SIM Filter Selector Pill
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Notification Bell Button with Badge (Visible ONLY for Callers)
+            if (tele.currentRole == UserRole.caller) ...[
               GestureDetector(
                 onTap: () {
-                  tele.logout();
+                  NotificationsSheet.show(context);
                 },
-                child: Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    color: AppTheme.greenNeon,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppTheme.ink900, width: 1),
-                  ),
-                  child: const Icon(
-                    Icons.phone_android_rounded,
-                    size: 13,
-                    color: AppTheme.white,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: AppTheme.white,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: AppTheme.ink900, width: 1.5),
+                        boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+                      ),
+                      child: const Icon(
+                        Icons.notifications_outlined,
+                        size: 18,
+                        color: AppTheme.ink900,
+                      ),
+                    ),
+                    if (unreadCount > 0)
+                      Positioned(
+                        top: -3,
+                        right: -3,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: AppTheme.orangePill,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: AppTheme.white, width: 1.5),
+                          ),
+                          constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                          child: Center(
+                            child: Text(
+                              '$unreadCount',
+                              style: AppTheme.label(size: 8, color: AppTheme.white),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
+
+            // SIM Filter Selector Pill
+            Container(
+              height: 32,
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: AppTheme.paper,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: AppTheme.ink900, width: 1.5),
+                boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildPillItem(context, 'ALL', 0),
+                  _buildPillItem(context, 'SIM 1', 1),
+                  _buildPillItem(context, 'SIM 2', 2),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+
+            // Dedicated Round Logout Button
+            GestureDetector(
+              onTap: () => _showLogoutConfirmDialog(context, tele),
+              child: Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: AppTheme.white,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppTheme.ink900, width: 1.5),
+                  boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+                ),
+                child: const Center(
+                  child: Icon(
+                    Icons.logout_rounded,
+                    size: 16,
+                    color: AppTheme.ink900,
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ],
+    );
+  }
+
+  void _showLogoutConfirmDialog(BuildContext context, TeleProvider tele) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppTheme.ink900, width: 2),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: AppTheme.orangePill,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppTheme.ink900, width: 1.5),
+              ),
+              child: const Icon(Icons.logout_rounded, color: AppTheme.white, size: 16),
+            ),
+            const SizedBox(width: 10),
+            Text('LOGOUT', style: AppTheme.headline(size: 18)),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to log out from Ask Eva Telesales?',
+          style: AppTheme.body(size: 13, color: AppTheme.ink900),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text('CANCEL', style: AppTheme.label(size: 11, color: AppTheme.muted)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.ink900,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: const BorderSide(color: AppTheme.ink900, width: 1.2),
+              ),
+            ),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              tele.purgeUserSession();
+            },
+            child: Text('LOGOUT', style: AppTheme.label(size: 11, color: AppTheme.limeYellow)),
+          ),
+        ],
+      ),
     );
   }
 

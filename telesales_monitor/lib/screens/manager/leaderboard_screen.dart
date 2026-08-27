@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/neo_card.dart';
 import '../../widgets/top_header.dart';
+import '../../widgets/create_user_dialog.dart';
 import '../../providers/tele_provider.dart';
 import '../../models/employee_model.dart';
 
@@ -28,22 +29,24 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   Widget build(BuildContext context) {
     final tele = Provider.of<TeleProvider>(context);
 
-    final callerName = tele.callerName.isNotEmpty ? tele.callerName.toUpperCase() : 'RASMI DESAI';
+    final callerName = tele.currentUserName.toUpperCase();
 
     // Callers list dataset built dynamically from Provider employees
     final List<Map<String, dynamic>> callers = [];
 
     int r = 1;
     for (var emp in tele.employees) {
-      callers.add({
-        'rank': r,
-        'name': emp.name,
-        'calls': emp.totalCalls,
-        'connected': emp.connectedCalls,
-        'talkTime': emp.talkTimeFormatted.isNotEmpty ? emp.talkTimeFormatted : '0s',
-        'isCrown': r == 1,
-      });
-      r++;
+      if (emp.role.toLowerCase() == 'caller') {
+        callers.add({
+          'rank': r,
+          'name': emp.name,
+          'calls': emp.totalCalls,
+          'connected': emp.connectedCalls,
+          'talkTime': emp.talkTimeFormatted.isNotEmpty ? emp.talkTimeFormatted : '0s',
+          'isCrown': r == 1,
+        });
+        r++;
+      }
     }
 
     final query = _searchCtrl.text.trim().toLowerCase();
@@ -80,6 +83,75 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
               title: 'LEADERBOARD',
               userName: callerName,
               selectedSimIndex: 1,
+            ),
+            const SizedBox(height: 12),
+
+            // Action Row: Team Filter & + CREATE USER Button
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppTheme.ink900,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppTheme.ink800, width: 1.5),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.groups_outlined, color: AppTheme.limeYellow, size: 16),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              dropdownColor: AppTheme.ink900,
+                              isExpanded: true,
+                              value: tele.availableTeams.contains(tele.selectedTeamFilter) ? tele.selectedTeamFilter : tele.availableTeams.first,
+                              icon: const Icon(Icons.arrow_drop_down, color: AppTheme.limeYellow, size: 18),
+                              style: AppTheme.headline(size: 10.5, color: AppTheme.greenNeon),
+                              onChanged: (val) {
+                                if (val != null) {
+                                  tele.setTeamFilter(val);
+                                }
+                              },
+                              items: tele.availableTeams.map((t) {
+                                return DropdownMenuItem<String>(
+                                  value: t,
+                                  child: Text(t == 'ALL' ? '🏢 ALL TEAMS' : '🏢 ${t.toUpperCase()}', overflow: TextOverflow.ellipsis),
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () => CreateUserDialog.show(context),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.greenNeon,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppTheme.ink900, width: 1.5),
+                      boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.person_add_alt_1_rounded, size: 16, color: AppTheme.ink900),
+                        const SizedBox(width: 4),
+                        Text(
+                          '+ CREATE USER',
+                          style: AppTheme.label(size: 9.5, color: AppTheme.ink900, letterSpacing: 0.1),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 14),
 

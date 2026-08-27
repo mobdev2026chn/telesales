@@ -19,6 +19,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.CallLog
+import android.provider.ContactsContract
 import android.telephony.SubscriptionInfo
 import android.telephony.SubscriptionManager
 import android.telephony.TelephonyManager
@@ -130,6 +131,12 @@ class MainActivity : FlutterActivity() {
                 }
                 "stopAudio" -> {
                     stopAudioPlayback()
+                    result.success(true)
+                }
+                "openSaveContact" -> {
+                    val phone = call.argument<String>("phoneNumber") ?: ""
+                    val name = call.argument<String>("name") ?: ""
+                    openNativeSaveContactIntent(phone, name)
                     result.success(true)
                 }
                 else -> result.notImplemented()
@@ -772,7 +779,7 @@ class MainActivity : FlutterActivity() {
                     val id = if (idIdx != -1) it.getString(idIdx) ?: "$count" else "$count"
                     val number = if (numberIdx != -1) it.getString(numberIdx) ?: "" else ""
                     val rawName = if (nameIdx != -1) it.getString(nameIdx) else null
-                    val contactName = if (!rawName.isNullOrEmpty()) rawName else (if (number.isNotEmpty()) number else "Unknown")
+                    val contactName = resolveContactName(number, rawName)
                     val typeInt = if (typeIdx != -1) it.getInt(typeIdx) else CallLog.Calls.INCOMING_TYPE
                     val dateLong = if (dateIdx != -1) it.getLong(dateIdx) else System.currentTimeMillis()
                     val durationLong = if (durationIdx != -1) it.getLong(durationIdx) else 0L
@@ -818,6 +825,48 @@ class MainActivity : FlutterActivity() {
         return logsList
     }
 
+    private fun resolveContactName(number: String, cachedName: String?): String {
+        if (!cachedName.isNullOrEmpty() && cachedName != "Unknown" && cachedName != number) {
+            return cachedName
+        }
+        if (number.isEmpty()) return "Unknown"
+        try {
+            val hasPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
+            if (hasPermission) {
+                val uri = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(number))
+                val projection = arrayOf(ContactsContract.PhoneLookup.DISPLAY_NAME)
+                val cursor = contentResolver.query(uri, projection, null, null, null)
+                cursor?.use {
+                    if (it.moveToFirst()) {
+                        val nameIdx = it.getColumnIndex(ContactsContract.PhoneLookup.DISPLAY_NAME)
+                        if (nameIdx != -1) {
+                            val resolved = it.getString(nameIdx)
+                            if (!resolved.isNullOrEmpty()) {
+                                return resolved
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+        return if (number.isNotEmpty()) number else "Unknown"
+    }
+
+    private fun openNativeSaveContactIntent(phoneNumber: String, name: String) {
+        try {
+            val intent = Intent(Intent.ACTION_INSERT).apply {
+                type = ContactsContract.Contacts.CONTENT_TYPE
+                putExtra(ContactsContract.Intents.Insert.PHONE, phoneNumber)
+                if (name.isNotEmpty()) {
+                    putExtra(ContactsContract.Intents.Insert.NAME, name)
+                }
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     private fun validateSimNumber(numberInput: String, targetSlot: Int): Map<String, Any?> {
         val cleanNumber = numberInput.replace(Regex("[^0-9]"), "").takeLast(10)
         val response = HashMap<String, Any?>()
@@ -836,19 +885,26 @@ class MainActivity : FlutterActivity() {
 
         val simPhone = (foundSim?.get("number") as? String ?: "").replace(Regex("[^0-9]"), "").takeLast(10)
         
-        if (simPhone.isNotEmpty() && simPhone == cleanNumber) {
-            response["isValid"] = true
-            response["isHardwareMatch"] = true
-            response["slotIndex"] = foundSim?.get("slotIndex") ?: 0
-            response["carrierName"] = foundSim?.get("carrierName") ?: "Detected Carrier"
-            response["formattedNumber"] = "+91 $cleanNumber"
-            return response
+        if (simPhone.isNotEmpty()) {
+            if (simPhone == cleanNumber) {
+                response["isValid"] = true
+                response["isHardwareMatch"] = true
+                response["slotIndex"] = foundSim?.get("slotIndex") ?: 0
+                response["carrierName"] = foundSim?.get("carrierName") ?: "Detected Carrier"
+                response["formattedNumber"] = "+91 $cleanNumber"
+                return response
+            } else {
+                response["isValid"] = false
+                response["isHardwareMatch"] = false
+                response["message"] = "Device SIM Mismatch: Registered SIM (+91 $cleanNumber) was not detected in this device SIM slot."
+                return response
+            }
         }
 
         val isStandardIndianNumber = cleanNumber.matches(Regex("^[6-9][0-9]{9}$"))
         if (isStandardIndianNumber) {
             response["isValid"] = true
-            response["isHardwareMatch"] = simPhone.isNotEmpty() && simPhone == cleanNumber
+            response["isHardwareMatch"] = false
             response["slotIndex"] = foundSim?.get("slotIndex") ?: targetSlot
             response["carrierName"] = foundSim?.get("carrierName") ?: "Jio / Airtel"
             response["formattedNumber"] = "+91 $cleanNumber"

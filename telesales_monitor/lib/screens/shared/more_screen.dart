@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/neo_card.dart';
 import '../../widgets/top_header.dart';
+import '../../widgets/create_user_dialog.dart';
+import '../../providers/tele_provider.dart';
 
 class MoreScreen extends StatefulWidget {
   final VoidCallback onNavigateToBoard;
@@ -40,9 +43,9 @@ class _MoreScreenState extends State<MoreScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Top Header Bar
-              const TopHeader(
+              TopHeader(
                 title: 'MORE',
-                userName: 'RASMI DESAI',
+                userName: Provider.of<TeleProvider>(context).currentUserName,
                 selectedSimIndex: 1,
               ),
               const SizedBox(height: 16),
@@ -72,14 +75,32 @@ class _MoreScreenState extends State<MoreScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text('Manage telesales team, add users/callers & view cloud telemetry.', style: AppTheme.body(size: 11, color: AppTheme.lightMuted)),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
                     Row(
                       children: [
-                        const Icon(Icons.language, size: 14, color: AppTheme.limeYellow),
-                        const SizedBox(width: 6),
-                        Text(
-                          'https://telesales.askeva.io/admin',
-                          style: AppTheme.mono(size: 11, color: AppTheme.limeYellow),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => CreateUserDialog.show(context),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              decoration: BoxDecoration(
+                                color: AppTheme.greenNeon,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: AppTheme.ink900, width: 1.2),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(Icons.person_add_alt_1_rounded, size: 16, color: AppTheme.ink900),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    '+ CREATE NEW USER',
+                                    style: AppTheme.label(size: 10, color: AppTheme.ink900, letterSpacing: 0.1),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                         ),
                       ],
                     ),

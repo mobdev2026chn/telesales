@@ -6,6 +6,7 @@ import '../../widgets/top_header.dart';
 import '../../widgets/dialer_pad_sheet.dart';
 import '../../widgets/contact_history_sheet.dart';
 import '../../widgets/advanced_filter_sheet.dart';
+import '../../widgets/save_contact_dialog.dart';
 import '../../providers/tele_provider.dart';
 import '../../models/call_log_model.dart';
 
@@ -240,6 +241,8 @@ class _CallerHistoryScreenState extends State<CallerHistoryScreen> {
 
                     final isLime = badgeStyle == 'lime';
 
+                    final isUnsaved = name == phone || name == 'Unknown';
+
                     return NeoCard(
                       backgroundColor: AppTheme.white,
                       shadowColor: AppTheme.ink900,
@@ -251,9 +254,45 @@ class _CallerHistoryScreenState extends State<CallerHistoryScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(
-                                name,
-                                style: AppTheme.bodyBold(size: 14, color: AppTheme.ink900),
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        name,
+                                        style: AppTheme.bodyBold(size: 14, color: AppTheme.ink900),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    GestureDetector(
+                                      onTap: () => SaveContactDialog.show(context, phone, initialName: isUnsaved ? null : name),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                        decoration: BoxDecoration(
+                                          color: isUnsaved ? AppTheme.limeYellow : AppTheme.paper,
+                                          borderRadius: BorderRadius.circular(6),
+                                          border: Border.all(color: AppTheme.ink900, width: 1),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              isUnsaved ? Icons.person_add_alt_1_rounded : Icons.edit_note_rounded,
+                                              size: 12,
+                                              color: AppTheme.ink900,
+                                            ),
+                                            const SizedBox(width: 3),
+                                            Text(
+                                              isUnsaved ? '+ SAVE' : 'EDIT',
+                                              style: AppTheme.label(size: 8, color: AppTheme.ink900),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),

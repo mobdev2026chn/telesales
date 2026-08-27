@@ -17,7 +17,8 @@ class CallyzerSetupFlow extends StatefulWidget {
 class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
   int _currentStep = 0;
   final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _nameController = TextEditingController(text: 'Priyanka Panchal');
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _passController = TextEditingController();
   int _selectedSimSlot = 0;
 
   // Accordion open states for Privacy screen
@@ -767,7 +768,7 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
               controller: _nameController,
               style: AppTheme.bodyBold(size: 14),
               decoration: const InputDecoration(
-                hintText: 'Enter Caller Name (e.g. Priyanka Panchal)',
+                hintText: 'Enter Caller Name (e.g. Sales Agent 1)',
                 border: InputBorder.none,
                 prefixIcon: Icon(Icons.person_outline, size: 20, color: AppTheme.ink900),
               ),
@@ -806,11 +807,34 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
             ),
             child: TextField(
               controller: _phoneController,
-              keyboardType: TextInputType.phone,
+              keyboardType: TextInputType.emailAddress,
               style: AppTheme.mono(size: 14),
               decoration: const InputDecoration(
-                hintText: 'Phone Number (e.g. 9825012340)',
+                hintText: 'Registered Phone Number or Email...',
                 border: InputBorder.none,
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // Password Input
+          Text('ACCOUNT PASSWORD', style: AppTheme.label(size: 9, color: AppTheme.muted, letterSpacing: 0.1)),
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              color: AppTheme.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppTheme.ink900, width: 1),
+            ),
+            child: TextField(
+              controller: _passController,
+              obscureText: true,
+              style: AppTheme.mono(size: 14),
+              decoration: const InputDecoration(
+                hintText: 'Enter Password...',
+                border: InputBorder.none,
+                prefixIcon: Icon(Icons.lock_outline, size: 18, color: AppTheme.ink900),
               ),
             ),
           ),
@@ -823,19 +847,32 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
             padding: const EdgeInsets.symmetric(vertical: 16),
             onTap: () async {
               final raw = _phoneController.text.trim();
+              final pass = _passController.text.trim();
               if (raw.isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     backgroundColor: AppTheme.ink900,
                     content: Text(
-                      'Please enter your SIM mobile number.',
+                      'Please enter your registered mobile number or email.',
                       style: AppTheme.bodyBold(size: 12, color: AppTheme.white),
                     ),
                   ),
                 );
                 return;
               }
-              final res = await tele.validateAndSetTrackingNumber(raw, _selectedSimSlot);
+              if (pass.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    backgroundColor: AppTheme.ink900,
+                    content: Text(
+                      'Please enter your password.',
+                      style: AppTheme.bodyBold(size: 12, color: AppTheme.white),
+                    ),
+                  ),
+                );
+                return;
+              }
+              final res = await tele.validateAndSetTrackingNumber(raw, _selectedSimSlot, password: pass);
               if (!mounted) return;
               if (res['isValid'] == true) {
                 _nextStep();
@@ -844,7 +881,7 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
                   SnackBar(
                     backgroundColor: AppTheme.ink900,
                     content: Text(
-                      res['message'] as String? ?? 'This SIM number is not verified in this device.',
+                      res['message'] as String? ?? 'Authentication failed. Account not verified in database.',
                       style: AppTheme.bodyBold(size: 12, color: AppTheme.limeYellow),
                     ),
                   ),

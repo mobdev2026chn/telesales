@@ -31,7 +31,7 @@ class RescheduleSheet extends StatefulWidget {
 class _RescheduleSheetState extends State<RescheduleSheet> {
   late DateTime _selectedDate;
   late TimeOfDay _selectedTime;
-  final TextEditingController _noteCtrl = TextEditingController(text: 'Rescheduled follow-up call');
+  final TextEditingController _noteCtrl = TextEditingController();
 
   @override
   void initState() {

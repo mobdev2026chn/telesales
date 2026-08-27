@@ -34,7 +34,6 @@
       font-family: 'Archivo', sans-serif;
       min-height: 100vh;
       display: flex;
-      flex-direction: column;
     }
 
     /* NEO SHADOWS */
@@ -44,58 +43,142 @@
     .neo-shadow-sm {
       box-shadow: 2.5px 2.5px 0px var(--ink900);
     }
-    .neo-border {
-      border: 2px solid var(--ink900);
+
+    /* WEB APP LOGIN SCREEN OVERLAY */
+    #webLoginOverlay {
+      position: fixed;
+      inset: 0;
+      background-color: var(--paper);
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
     }
 
-    /* HEADER BAR */
-    header {
+    .login-card {
+      background-color: var(--white);
+      border: 3px solid var(--ink900);
+      border-radius: 24px;
+      padding: 36px 32px;
+      width: 100%;
+      max-width: 440px;
+      box-shadow: 8px 8px 0px var(--ink900);
+      text-align: center;
+    }
+
+    .login-logo {
+      width: 72px;
+      height: 72px;
+      border-radius: 18px;
+      border: 2px solid var(--ink900);
+      box-shadow: 4px 4px 0px var(--green-neon);
+      object-fit: cover;
+      margin-bottom: 16px;
+    }
+
+    /* SIDEBAR NAVIGATION */
+    aside.sidebar {
+      width: 280px;
       background-color: var(--ink900);
       color: var(--white);
-      padding: 16px 32px;
       display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border-bottom: 3px solid var(--ink900);
+      flex-direction: column;
+      border-right: 3px solid var(--ink900);
+      min-height: 100vh;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      flex-shrink: 0;
     }
 
-    .brand-group {
+    .sidebar-header {
+      padding: 24px 20px;
+      border-bottom: 2px solid #223319;
       display: flex;
       align-items: center;
-      gap: 16px;
+      gap: 14px;
     }
 
-    .brand-logo {
+    .sidebar-logo {
       width: 44px;
       height: 44px;
-      border-radius: 10px;
+      border-radius: 12px;
       border: 1.5px solid var(--white);
-      box-shadow: 2px 2px 0px var(--green-neon);
+      box-shadow: 2.5px 2.5px 0px var(--green-neon);
       object-fit: cover;
     }
 
-    .brand-title {
+    .sidebar-brand-title {
       font-family: 'Anton', sans-serif;
-      font-size: 26px;
+      font-size: 24px;
       letter-spacing: 1px;
+      line-height: 1;
     }
 
-    .brand-title span {
+    .sidebar-brand-title span {
       color: var(--green-neon);
     }
 
-    .user-profile-pill {
-      background-color: var(--white);
-      color: var(--ink900);
-      padding: 6px 14px;
-      border-radius: 999px;
+    .sidebar-brand-sub {
       font-family: 'Space Mono', monospace;
-      font-size: 11px;
-      font-weight: 700;
-      border: 1.5px solid var(--ink900);
+      font-size: 9px;
+      color: var(--lime-yellow);
+      letter-spacing: 1px;
+      margin-top: 4px;
+    }
+
+    .sidebar-menu {
+      padding: 20px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex: 1;
+    }
+
+    .nav-item {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 12px;
+      padding: 12px 16px;
+      font-family: 'Space Mono', monospace;
+      font-size: 11.5px;
+      font-weight: 700;
+      color: #94A3B8;
+      border-radius: 12px;
+      border: 1.5px solid transparent;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .nav-item:hover {
+      background-color: #1A2814;
+      color: var(--white);
+    }
+
+    .nav-item.active {
+      background-color: var(--white);
+      color: var(--ink900);
+      border-color: var(--ink900);
+      box-shadow: 3px 3px 0px var(--green-neon);
+    }
+
+    .sidebar-footer {
+      padding: 16px 14px 24px 14px;
+      border-top: 2px solid #223319;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .admin-pill {
+      background-color: #1A2814;
+      border: 1px solid var(--green-neon);
+      border-radius: 12px;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
     }
 
     .status-dot {
@@ -105,42 +188,24 @@
       border-radius: 50%;
     }
 
-    /* NAVIGATION TABS */
-    nav {
-      background-color: var(--paper);
-      padding: 16px 32px 0 32px;
-      border-bottom: 2px solid var(--ink900);
-      display: flex;
-      gap: 12px;
-      overflow-x: auto;
-    }
-
-    .nav-btn {
-      padding: 10px 20px;
+    .btn-logout {
+      background-color: #EF4444;
+      color: var(--white);
+      border: 1.5px solid var(--ink900);
+      border-radius: 10px;
+      padding: 8px 12px;
       font-family: 'Space Mono', monospace;
-      font-size: 12px;
+      font-size: 10.5px;
       font-weight: 700;
-      border: 2px solid var(--ink900);
-      border-bottom: none;
-      border-radius: 12px 12px 0 0;
-      background-color: var(--white);
-      color: var(--ink900);
       cursor: pointer;
-      transition: all 0.15s ease;
-    }
-
-    .nav-btn.active {
-      background-color: var(--ink900);
-      color: var(--lime-yellow);
+      box-shadow: 2px 2px 0px var(--ink900);
     }
 
     /* MAIN CONTENT WRAPPER */
-    main {
+    main.main-content {
       padding: 28px 32px 60px 32px;
-      max-width: 1300px;
-      margin: 0 auto;
-      width: 100%;
       flex: 1;
+      overflow-y: auto;
     }
 
     .tab-content {
@@ -177,7 +242,7 @@
     /* GRID & CARDS */
     .grid-4 {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1;));
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
       gap: 18px;
       margin-bottom: 24px;
     }
@@ -198,68 +263,35 @@
     .card-label {
       font-family: 'Space Mono', monospace;
       font-size: 10px;
-      font-weight: 700;
       color: var(--muted);
       letter-spacing: 1px;
+      margin-bottom: 6px;
     }
+
     .neo-card.dark .card-label {
       color: var(--lime-yellow);
     }
 
     .card-value {
       font-family: 'Anton', sans-serif;
-      font-size: 42px;
-      margin: 8px 0 4px 0;
+      font-size: 44px;
       line-height: 1;
+      margin-bottom: 6px;
     }
 
     .card-subtext {
       font-size: 12px;
       color: var(--muted);
-    }
-    .neo-card.dark .card-subtext {
-      color: #94A3B8;
+      font-weight: 600;
     }
 
-    /* BUTTONS */
-    .btn-action {
-      background-color: var(--ink900);
-      color: var(--lime-yellow);
-      font-family: 'Space Mono', monospace;
-      font-size: 12px;
-      font-weight: 700;
-      padding: 12px 20px;
-      border: 2px solid var(--ink900);
-      border-radius: 14px;
-      box-shadow: 3px 3px 0px var(--green-neon);
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      transition: transform 0.1s ease;
-    }
-
-    .btn-action:hover {
-      transform: translate(-1px, -1px);
-    }
-    .btn-action:active {
-      transform: translate(2px, 2px);
-      box-shadow: 1px 1px 0px var(--green-neon);
-    }
-
-    .btn-secondary {
-      background-color: var(--white);
-      color: var(--ink900);
-      box-shadow: 3px 3px 0px var(--ink900);
-    }
-
-    /* DATA TABLE FOR USER MANAGEMENT */
+    /* TABLES */
     .table-container {
       background-color: var(--white);
-      border: 2px solid var(--ink900);
+      border: 2.5px solid var(--ink900);
       border-radius: 16px;
-      box-shadow: 4px 4px 0px var(--ink900);
       overflow: hidden;
+      box-shadow: 4px 4px 0px var(--ink900);
     }
 
     table {
@@ -270,12 +302,12 @@
 
     th {
       background-color: var(--ink900);
-      color: var(--white);
+      color: var(--lime-yellow);
       font-family: 'Space Mono', monospace;
-      font-size: 11px;
-      font-weight: 700;
-      padding: 14px 18px;
+      font-size: 10px;
       letter-spacing: 1px;
+      padding: 14px 18px;
+      border-bottom: 2px solid var(--ink900);
     }
 
     td {
@@ -289,74 +321,59 @@
     }
 
     .badge-role {
-      display: inline-block;
       padding: 4px 10px;
       border-radius: 999px;
       font-family: 'Space Mono', monospace;
-      font-size: 9px;
+      font-size: 9.5px;
       font-weight: 700;
       border: 1px solid var(--ink900);
     }
-    .badge-admin {
-      background-color: var(--ink900);
-      color: var(--lime-yellow);
-    }
-    .badge-manager {
-      background-color: #64748B;
-      color: var(--white);
-    }
-    .badge-caller {
+
+    .badge-caller { background-color: var(--paper); color: var(--ink900); }
+    .badge-manager { background-color: var(--lime-yellow); color: var(--ink900); }
+    .badge-admin { background-color: var(--green-neon); color: var(--ink900); }
+
+    /* BUTTONS */
+    .btn-action {
       background-color: var(--green-neon);
       color: var(--ink900);
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 10px 18px;
+      border-radius: 10px;
+      border: 2px solid var(--ink900);
+      box-shadow: 3px 3px 0px var(--ink900);
+      cursor: pointer;
+      transition: transform 0.1s ease;
+    }
+
+    .btn-action:active {
+      transform: translate(2px, 2px);
+      box-shadow: 1px 1px 0px var(--ink900);
+    }
+
+    .btn-secondary {
+      background-color: var(--white);
     }
 
     .btn-sm {
-      padding: 6px 12px;
-      font-size: 10px;
-      border-radius: 8px;
-      cursor: pointer;
+      padding: 5px 10px;
       font-family: 'Space Mono', monospace;
+      font-size: 10px;
       font-weight: 700;
-      border: 1px solid var(--ink900);
+      border-radius: 6px;
+      border: 1.5px solid var(--ink900);
+      cursor: pointer;
+      margin-right: 4px;
     }
-    .btn-edit {
-      background-color: var(--white);
-      color: var(--ink900);
-    }
-    .btn-delete {
-      background-color: #EF4444;
-      color: var(--white);
-    }
+    .btn-edit { background-color: var(--lime-yellow); color: var(--ink900); }
+    .btn-delete { background-color: #EF4444; color: var(--white); }
 
-    /* MODAL DIALOG */
-    .modal-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      background-color: rgba(16, 24, 12, 0.75);
-      display: none;
-      justify-content: center;
-      align-items: center;
-      z-index: 1000;
-    }
-    .modal-overlay.active {
-      display: flex;
-    }
-
-    .modal-card {
-      background-color: var(--paper);
-      border: 2.5px solid var(--ink900);
-      border-radius: 20px;
-      width: 100%;
-      max-width: 500px;
-      padding: 28px;
-      box-shadow: 6px 6px 0px var(--ink900);
-    }
-
+    /* FORM CONTROLS */
     .form-group {
-      margin-bottom: 16px;
+      margin-bottom: 14px;
+      text-align: left;
     }
 
     .form-label {
@@ -364,225 +381,441 @@
       font-size: 10px;
       font-weight: 700;
       color: var(--muted);
+      margin-bottom: 4px;
       display: block;
-      margin-bottom: 6px;
     }
 
     .form-control {
       width: 100%;
-      padding: 12px 14px;
-      border: 1.5px solid var(--ink900);
-      border-radius: 12px;
-      background-color: var(--white);
+      padding: 10px 14px;
       font-family: 'Space Mono', monospace;
-      font-size: 13px;
-      color: var(--ink900);
-      box-shadow: 2px 2px 0px var(--ink900);
+      font-size: 12px;
+      border: 2px solid var(--ink900);
+      border-radius: 10px;
+      background-color: var(--paper);
     }
 
-    /* PODIUM FOR LEADERBOARD */
+    /* MODAL DIALOG */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: rgba(16, 24, 12, 0.7);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal-card {
+      background-color: var(--white);
+      border: 3px solid var(--ink900);
+      border-radius: 20px;
+      padding: 24px;
+      width: 90%;
+      max-width: 480px;
+      box-shadow: 8px 8px 0px var(--ink900);
+    }
+
+    /* PODIUM LEADERBOARD */
     .podium-container {
       display: flex;
+      justify-content: center;
       align-items: flex-end;
       gap: 16px;
-      margin-bottom: 24px;
+      margin: 20px 0 30px 0;
     }
 
     .podium-step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
       flex: 1;
-      text-align: center;
+      max-width: 180px;
     }
+
     .podium-block {
-      border: 2px solid var(--ink900);
-      border-radius: 16px;
+      width: 100%;
+      border: 2.5px solid var(--ink900);
+      border-radius: 16px 16px 0 0;
       padding: 16px;
+      text-align: center;
       box-shadow: 4px 4px 0px var(--ink900);
     }
-    .podium-block.rank-1 {
-      height: 180px;
-      background-color: var(--ink900);
-      color: var(--white);
-    }
-    .podium-block.rank-2 {
-      height: 140px;
-      background-color: var(--white);
-    }
-    .podium-block.rank-3 {
-      height: 110px;
-      background-color: var(--white);
-    }
+
+    .rank-1 { height: 170px; background-color: var(--ink900); color: var(--white); border-color: var(--green-neon); }
+    .rank-2 { height: 140px; background-color: var(--white); }
+    .rank-3 { height: 120px; background-color: var(--paper); }
   </style>
 </head>
 <body>
 
-  <!-- HEADER BAR -->
-  <header>
-    <div class="brand-group">
-      <img src="/uploads/ask_eva_logo.jpg" onError="this.src='/assets/images/ask_eva_logo.jpg'" alt="ASK EVA" class="brand-logo" />
-      <div class="brand-title">ASK EVA <span>TELESALES ADMIN</span></div>
+  <!-- 1. WEB APP LOGIN SCREEN OVERLAY -->
+  <div id="webLoginOverlay">
+    <div class="login-card">
+      <img src="ask_eva_logo.jpg" alt="ASK EVA Logo" class="login-logo" onerror="this.onerror=null; this.src='ask_eva_logo.png';" />
+      <h2 style="font-family: 'Anton', sans-serif; font-size: 28px; letter-spacing: 1px;">ASK EVA <span style="color: var(--green-neon);">ADMIN</span></h2>
+      <p style="font-family: 'Space Mono', monospace; font-size: 11px; color: var(--muted); margin-top: 4px; margin-bottom: 20px;">Telesales Telemetry Portal</p>
+
+      <div id="webLoginError" style="display: none; background-color: #FEE2E2; border: 1.5px solid #EF4444; color: #991B1B; padding: 10px; border-radius: 10px; font-size: 11px; font-weight: 700; margin-bottom: 14px;">
+        Invalid credentials. Please check your email and password.
+      </div>
+
+      <form onsubmit="handleWebLogin(event)">
+        <div class="form-group">
+          <label class="form-label">EMAIL ADDRESS / USERNAME</label>
+          <input type="text" id="webLoginEmail" class="form-control" placeholder="Enter admin email address..." required />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">PASSWORD</label>
+          <input type="password" id="webLoginPassword" class="form-control" placeholder="Enter password..." required />
+        </div>
+
+        <button type="submit" class="btn-action" style="width: 100%; margin-top: 10px; padding: 12px;">SIGN IN TO DASHBOARD →</button>
+      </form>
     </div>
+  </div>
 
-    <div class="user-profile-pill">
-      <div class="status-dot"></div>
-      <span id="currentAdminName">RASMI DESAI (ADMIN)</span>
-    </div>
-  </header>
+  <!-- 2. MAIN APPLICATION VIEWPORT -->
+  <div id="appViewport" style="display: none; width: 100%; min-height: 100vh;">
 
-  <!-- NAVIGATION TABS -->
-  <nav>
-    <button class="nav-btn active" onclick="switchTab('dashboard')">📊 DASHBOARD</button>
-    <button class="nav-btn" onclick="switchTab('users')">👥 USER MANAGEMENT</button>
-    <button class="nav-btn" onclick="switchTab('leaderboard')">🏆 LEADERBOARD</button>
-    <button class="nav-btn" onclick="switchTab('recordings')">🎙️ CALL RECORDINGS</button>
-    <button class="nav-btn" onclick="switchTab('leads')">🎯 LEADS PIPELINE</button>
-  </nav>
-
-  <!-- MAIN CONTAINER -->
-  <main>
-
-    <!-- 1. DASHBOARD TAB -->
-    <div id="tab-dashboard" class="tab-content active">
-      <div class="section-header">
-        <div class="section-title">
-          <div class="square-indicator"></div>
-          REALTIME TEAM TELEMETRY & CALL METRICS
-        </div>
-        <button class="btn-action btn-secondary" onclick="loadDashboardData()">🔄 REFRESH METRICS</button>
-      </div>
-
-      <div class="grid-4">
-        <div class="neo-card dark">
-          <div class="card-label">01 · TOTAL CALLS</div>
-          <div class="card-value" id="statTotalCalls">0</div>
-          <div class="card-subtext" id="statTalkTime">0h 00m total talk time</div>
-        </div>
-
-        <div class="neo-card">
-          <div class="card-label">02 · CONNECTED CALLS</div>
-          <div class="card-value" id="statConnected">0</div>
-          <div class="card-subtext" id="statUniqueClients">0 unique clients</div>
-        </div>
-
-        <div class="neo-card">
-          <div class="card-label">03 · OUTGOING CALLS</div>
-          <div class="card-value" id="statOutgoing" style="color: var(--green-grass);">0</div>
-          <div class="card-subtext">Active dialer dispatches</div>
-        </div>
-
-        <div class="neo-card">
-          <div class="card-label">04 · MISSED / UNATTENDED</div>
-          <div class="card-value" id="statMissed" style="color: #EF4444;">0</div>
-          <div class="card-subtext" id="statNeverAttended">0 never attended</div>
+    <!-- SIDE NAVIGATION BAR -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <img src="ask_eva_logo.jpg" alt="ASK EVA Logo" class="sidebar-logo" onerror="this.onerror=null; this.src='ask_eva_logo.png';" />
+        <div>
+          <div class="sidebar-brand-title">ASK EVA <span>ADMIN</span></div>
+          <div class="sidebar-brand-sub">TELESALES MONITOR</div>
         </div>
       </div>
 
-      <!-- Top Performer Hero Card -->
-      <div class="neo-card dark" style="margin-bottom: 24px; border-color: var(--green-neon);">
-        <div class="section-title" style="color: var(--lime-yellow); margin-bottom: 8px;">
-          👑 TOP PERFORMING CALLER TODAY
+      <div class="sidebar-menu">
+        <div class="nav-item active" onclick="switchTab('dashboard', this)">
+          <span>📊</span> DASHBOARD
         </div>
-        <div style="font-family: 'Anton', sans-serif; font-size: 28px;" id="topPerformerName">PRIYANKA PANCHAL</div>
-        <div style="font-size: 13px; color: #94A3B8; margin-top: 4px;" id="topPerformerTalkTime">Talk Time: 4h 12m · 95 calls logged</div>
-      </div>
-    </div>
-
-    <!-- 2. USER MANAGEMENT TAB (CRUD) -->
-    <div id="tab-users" class="tab-content">
-      <div class="section-header">
-        <div class="section-title">
-          <div class="square-indicator"></div>
-          TELESALES TEAM USERS & SALES AGENTS
+        <div class="nav-item" onclick="switchTab('calls', this)">
+          <span>📞</span> CALL DETAILS
         </div>
-        <button class="btn-action" onclick="openAddUserModal()">+ ADD NEW USER</button>
-      </div>
-
-      <div class="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th>USER NAME</th>
-              <th>PHONE / SIM NUMBER</th>
-              <th>ROLE</th>
-              <th>TEAM / DEPT</th>
-              <th>DAILY TARGET</th>
-              <th>STATUS</th>
-              <th>ACTIONS</th>
-            </tr>
-          </thead>
-          <tbody id="usersTableBody">
-            <!-- Dynamic Users Injected via JS -->
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- 3. LEADERBOARD TAB -->
-    <div id="tab-leaderboard" class="tab-content">
-      <div class="section-header">
-        <div class="section-title">
-          <div class="square-indicator"></div>
-          TOP PERFORMERS PODIUM & CALLER RANKINGS
+        <div class="nav-item" onclick="switchTab('users', this)">
+          <span>👥</span> USER MANAGEMENT
+        </div>
+        <div class="nav-item" onclick="switchTab('leaderboard', this)">
+          <span>🏆</span> LEADERBOARD
+        </div>
+        <div class="nav-item" onclick="switchTab('recordings', this)">
+          <span>🎙️</span> CALL RECORDINGS
+        </div>
+        <div class="nav-item" onclick="switchTab('leads', this)">
+          <span>🎯</span> LEADS PIPELINE
         </div>
       </div>
 
-      <div class="podium-container">
-        <div class="podium-step">
-          <div style="font-weight: 700; margin-bottom: 4px;" id="p2Name">Nimmy S.</div>
-          <div class="podium-block rank-2">
-            <span class="badge-role badge-manager">2ND SILVER</span>
-            <div style="font-family: 'Anton', sans-serif; font-size: 32px; margin-top: 12px;">#2</div>
-            <div style="font-size: 11px; margin-top: 4px;" id="p2Calls">78 calls</div>
+      <div class="sidebar-footer">
+        <div class="admin-pill">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div class="status-dot"></div>
+            <span style="font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; color: var(--white);" id="sidebarUserName">ADMIN</span>
+          </div>
+          <span style="font-family: 'Space Mono', monospace; font-size: 9px; color: var(--lime-yellow);">ONLINE</span>
+        </div>
+        <button class="btn-logout" onclick="handleLogout()">🚪 LOGOUT</button>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT AREA -->
+    <main class="main-content">
+
+      <!-- 1. DASHBOARD TAB -->
+      <div id="tab-dashboard" class="tab-content active">
+        <div class="section-header">
+          <div class="section-title">
+            <div class="square-indicator"></div>
+            REALTIME TEAM TELEMETRY & CALL METRICS
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <select id="dashTeamFilter" onchange="onGlobalFilterChange()" class="form-control" style="width: auto; padding: 6px 12px; cursor: pointer; font-weight: 700; background-color: #1E293B; color: #FFF; border: 1.5px solid #334155;">
+              <option value="ALL">🏢 ALL TEAMS</option>
+            </select>
+            <select id="dashManagerFilter" onchange="onGlobalFilterChange()" class="form-control" style="width: auto; padding: 6px 12px; cursor: pointer;">
+              <option value="ALL">👥 ALL MANAGERS</option>
+            </select>
+            <button class="btn-action btn-secondary" onclick="onGlobalFilterChange()">🔄 REFRESH TELEMETRY</button>
           </div>
         </div>
 
-        <div class="podium-step">
-          <div style="font-size: 22px;">👑</div>
-          <div style="font-weight: 800; margin-bottom: 4px;" id="p1Name">Priyanka P.</div>
-          <div class="podium-block rank-1">
-            <span class="badge-role badge-caller">1ST GOLD 👑</span>
-            <div style="font-family: 'Anton', sans-serif; font-size: 42px; margin-top: 12px; color: var(--lime-yellow);">#1</div>
-            <div style="font-size: 12px; margin-top: 4px;" id="p1Calls">95 calls</div>
+        <div class="grid-4">
+          <div class="neo-card dark">
+            <div class="card-label">01 · TOTAL CALLS</div>
+            <div class="card-value" id="statTotalCalls">0</div>
+            <div class="card-subtext" id="statTalkTime">0h 00m total talk time</div>
+          </div>
+
+          <div class="neo-card">
+            <div class="card-label">02 · CONNECTED CALLS</div>
+            <div class="card-value" id="statConnected">0</div>
+            <div class="card-subtext" id="statUniqueClients">0 unique clients</div>
+          </div>
+
+          <div class="neo-card">
+            <div class="card-label">03 · INBOUND CALLS</div>
+            <div class="card-value" id="statIncoming" style="color: #3B82F6;">0</div>
+            <div class="card-subtext" id="statInboundPercent">0% of total volume</div>
+          </div>
+
+          <div class="neo-card">
+            <div class="card-label">04 · OUTBOUND CALLS</div>
+            <div class="card-value" id="statOutgoing" style="color: var(--green-grass);">0</div>
+            <div class="card-subtext" id="statOutboundPercent">0% of total volume</div>
           </div>
         </div>
 
-        <div class="podium-step">
-          <div style="font-weight: 700; margin-bottom: 4px;" id="p3Name">Hardik V.</div>
-          <div class="podium-block rank-3">
-            <span class="badge-role badge-manager">3RD BRONZE</span>
-            <div style="font-family: 'Anton', sans-serif; font-size: 28px; margin-top: 8px;">#3</div>
-            <div style="font-size: 11px; margin-top: 4px;" id="p3Calls">64 calls</div>
+        <!-- Salestrail Key Ratios & Analytics Grid -->
+        <div class="grid-4" style="margin-bottom: 24px;">
+          <div class="neo-card" style="background: linear-gradient(135deg, #10180C 0%, #1E293B 100%); color: var(--white); border-color: var(--lime-yellow);">
+            <div class="card-label" style="color: var(--lime-yellow);">📈 DIAL-TO-CONNECT RATIO</div>
+            <div class="card-value" id="statConnectRatio" style="color: var(--lime-yellow);">0.0%</div>
+            <div class="card-subtext" style="color: #94A3B8;">Connect Efficiency Index</div>
+          </div>
+
+          <div class="neo-card" style="background: linear-gradient(135deg, #10180C 0%, #0F172A 100%); color: var(--white); border-color: var(--green-neon);">
+            <div class="card-label" style="color: var(--green-neon);">🎯 CONVERSION RATIO</div>
+            <div class="card-value" id="statConversionRatio" style="color: var(--green-neon);">0.0%</div>
+            <div class="card-subtext" style="color: #94A3B8;">Lead Success Index</div>
+          </div>
+
+          <div class="neo-card">
+            <div class="card-label">⚡ CALL QUALITY INDEX</div>
+            <div class="card-value" id="statQualityIndex" style="font-size: 24px; color: var(--ink900);">OPTIMAL</div>
+            <div class="card-subtext">Duration & Connect Balance</div>
+          </div>
+
+          <div class="neo-card">
+            <div class="card-label">⚠️ UNATTENDED CALLS</div>
+            <div class="card-value" id="statMissed" style="color: #EF4444;">0</div>
+            <div class="card-subtext" id="statNeverAttended">0 never attended</div>
           </div>
         </div>
-      </div>
-    </div>
 
-    <!-- 4. RECORDINGS TAB -->
-    <div id="tab-recordings" class="tab-content">
-      <div class="section-header">
-        <div class="section-title">
-          <div class="square-indicator"></div>
-          HARDWARE SIM AUDIO CALL RECORDINGS
+        <!-- Live Caller Activity Monitor -->
+        <div class="neo-card dark" style="margin-bottom: 24px;">
+          <div class="section-title" style="color: var(--lime-yellow); margin-bottom: 12px;">
+            📡 REALTIME CALLER LIVE-ACTIVITY MONITOR
+          </div>
+          <div id="callerLiveFeed" style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <div style="font-size: 12px; color: var(--muted);">Loading real-time caller statuses...</div>
+          </div>
+        </div>
+
+        <!-- Top Performer Hero Card -->
+        <div class="neo-card dark" style="margin-bottom: 24px; border-color: var(--green-neon);">
+          <div class="section-title" style="color: var(--lime-yellow); margin-bottom: 8px;">
+            👑 TOP PERFORMING CALLER TODAY
+          </div>
+          <div style="font-family: 'Anton', sans-serif; font-size: 28px;" id="topPerformerName">NO CALLS LOGGED YET</div>
+          <div style="font-size: 13px; color: #94A3B8; margin-top: 4px;" id="topPerformerTalkTime">Talk Time: 0h 00m</div>
+        </div>
+
+        <!-- Team Members Dashboard Overview -->
+        <div class="section-header">
+          <div class="section-title">
+            <div class="square-indicator"></div>
+            REGISTERED TEAM MEMBERS PERFORMANCE & CALL METRICS
+          </div>
+        </div>
+
+        <div class="table-container" style="margin-bottom: 24px;">
+          <table>
+            <thead>
+              <tr>
+                <th>TEAM MEMBER</th>
+                <th>ROLE</th>
+                <th>PHONE / SIM</th>
+                <th>TOTAL CALLS</th>
+                <th>CONNECTED CALLS</th>
+                <th>TALK TIME</th>
+                <th>DAILY TARGET</th>
+              </tr>
+            </thead>
+            <tbody id="dashboardTeamBody">
+              <!-- Dynamic Team Performance Injected via JS -->
+            </tbody>
+          </table>
         </div>
       </div>
-      <div id="recordingsList" class="grid-4" style="grid-template-columns: 1fr;">
-        <!-- Recordings Injected via JS -->
-      </div>
-    </div>
 
-    <!-- 5. LEADS PIPELINE TAB -->
-    <div id="tab-leads" class="tab-content">
-      <div class="section-header">
-        <div class="section-title">
-          <div class="square-indicator"></div>
-          CRM PIPELINE & LEAD STATUSES
+      <!-- 2. LIVE CALL DETAILS TAB -->
+      <div id="tab-calls" class="tab-content">
+        <div class="section-header">
+          <div class="section-title">
+            <div class="square-indicator"></div>
+            LIVE HARDWARE TRACKED CALLS LOG
+          </div>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <input type="text" id="inputCallSearch" oninput="loadCallsData()" class="form-control" placeholder="🔍 Search caller, client, phone..." style="width: 240px; padding: 6px 12px;" />
+            <button class="btn-action btn-secondary" onclick="loadCallsData()">🔄 REFRESH LOGS</button>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;">
+          <button class="btn-sm filter-call-btn btn-edit" onclick="setCallTypeFilter('all', this)">ALL CALLS</button>
+          <button class="btn-sm filter-call-btn" onclick="setCallTypeFilter('inbound', this)">📥 INBOUND ONLY</button>
+          <button class="btn-sm filter-call-btn" onclick="setCallTypeFilter('outbound', this)">📤 OUTBOUND ONLY</button>
+          <button class="btn-sm filter-call-btn" onclick="setCallTypeFilter('missed', this)">⚠️ MISSED / UNATTENDED</button>
+        </div>
+
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>CALLER NAME</th>
+                <th>CONTACT / CLIENT</th>
+                <th>PHONE NUMBER</th>
+                <th>CALL TYPE</th>
+                <th>DURATION</th>
+                <th>DATE & TIME</th>
+                <th>SIM</th>
+              </tr>
+            </thead>
+            <tbody id="callsTableBody">
+              <!-- Dynamic Live Calls Injected via JS -->
+            </tbody>
+          </table>
         </div>
       </div>
-      <div id="leadsList" class="grid-4" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
-        <!-- Leads Injected via JS -->
-      </div>
-    </div>
 
-  </main>
+      <!-- 3. USER MANAGEMENT TAB (CRUD) -->
+      <div id="tab-users" class="tab-content">
+        <div class="section-header">
+          <div class="section-title">
+            <div class="square-indicator"></div>
+            TELESALES TEAM USERS & SALES AGENTS
+          </div>
+          <button class="btn-action" onclick="openAddUserModal()">+ ADD NEW USER</button>
+        </div>
+
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>USER NAME</th>
+                <th>LOGIN EMAIL</th>
+                <th>PHONE / SIM NUMBER</th>
+                <th>ROLE</th>
+                <th>ASSIGNED MANAGER</th>
+                <th>TEAM / DEPT</th>
+                <th>DAILY TARGET</th>
+                <th>STATUS</th>
+                <th>ACTIONS</th>
+              </tr>
+            </thead>
+            <tbody id="usersTableBody">
+              <!-- Dynamic Users Injected via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 3. LEADERBOARD TAB -->
+      <div id="tab-leaderboard" class="tab-content">
+        <div class="section-header">
+          <div class="section-title">
+            <div class="square-indicator"></div>
+            TOP PERFORMERS PODIUM & CALLER RANKINGS
+          </div>
+        </div>
+
+        <div class="podium-container">
+          <div class="podium-step">
+            <div style="font-weight: 700; margin-bottom: 4px;" id="p2Name">-</div>
+            <div class="podium-block rank-2">
+              <span class="badge-role badge-manager">2ND SILVER</span>
+              <div style="font-family: 'Anton', sans-serif; font-size: 32px; margin-top: 12px;">#2</div>
+              <div style="font-size: 11px; margin-top: 4px;" id="p2Calls">0 calls</div>
+            </div>
+          </div>
+
+          <div class="podium-step">
+            <div style="font-size: 22px;">👑</div>
+            <div style="font-weight: 800; margin-bottom: 4px;" id="p1Name">-</div>
+            <div class="podium-block rank-1">
+              <span class="badge-role badge-caller">1ST GOLD 👑</span>
+              <div style="font-family: 'Anton', sans-serif; font-size: 42px; margin-top: 12px; color: var(--lime-yellow);">#1</div>
+              <div style="font-size: 12px; margin-top: 4px;" id="p1Calls">0 calls</div>
+            </div>
+          </div>
+
+          <div class="podium-step">
+            <div style="font-weight: 700; margin-bottom: 4px;" id="p3Name">-</div>
+            <div class="podium-block rank-3">
+              <span class="badge-role badge-manager">3RD BRONZE</span>
+              <div style="font-family: 'Anton', sans-serif; font-size: 28px; margin-top: 8px;">#3</div>
+              <div style="font-size: 11px; margin-top: 4px;" id="p3Calls">0 calls</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Leaderboard Table -->
+        <div class="table-container" style="margin-top: 24px;">
+          <table>
+            <thead>
+              <tr>
+                <th>RANK</th>
+                <th>CALLER / AGENT NAME</th>
+                <th>ROLE</th>
+                <th>PHONE / SIM</th>
+                <th>TOTAL CALLS</th>
+                <th>CONNECTED CALLS</th>
+                <th>TALK TIME</th>
+              </tr>
+            </thead>
+            <tbody id="leaderboardBody">
+              <!-- Dynamic Leaderboard Injected via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 5. RECORDINGS TAB -->
+      <div id="tab-recordings" class="tab-content">
+        <div class="section-header">
+          <div class="section-title">
+            <div class="square-indicator"></div>
+            HARDWARE SIM AUDIO CALL RECORDINGS
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; align-items: center;">
+          <button id="recFilterAll" class="btn-sm filter-rec-btn" style="background: #CCFF00; color: #0F172A; font-weight: 800; border: 2px solid #0F172A; border-radius: 999px; padding: 7px 16px; box-shadow: 2px 2px 0px #0F172A; cursor: pointer;" onclick="setRecTypeFilter('all', this)">ALL RECORDINGS</button>
+          <button class="btn-sm filter-rec-btn" style="background: #FFFFFF; color: #0F172A; font-weight: 700; border: 2px solid #0F172A; border-radius: 999px; padding: 7px 16px; box-shadow: 2px 2px 0px #0F172A; cursor: pointer;" onclick="setRecTypeFilter('inbound', this)">📥 INBOUND AUDIO</button>
+          <button class="btn-sm filter-rec-btn" style="background: #FFFFFF; color: #0F172A; font-weight: 700; border: 2px solid #0F172A; border-radius: 999px; padding: 7px 16px; box-shadow: 2px 2px 0px #0F172A; cursor: pointer;" onclick="setRecTypeFilter('outbound', this)">📤 OUTBOUND AUDIO</button>
+          <button class="btn-sm filter-duration-btn" style="background: #FFFFFF; color: #0F172A; font-weight: 700; border: 2px solid #0F172A; border-radius: 999px; padding: 7px 16px; box-shadow: 2px 2px 0px #0F172A; cursor: pointer;" onclick="setRecDurationFilter('over5', this)">⏱️ OVER 5M</button>
+          <button class="btn-sm filter-duration-btn" style="background: #FFFFFF; color: #0F172A; font-weight: 700; border: 2px solid #0F172A; border-radius: 999px; padding: 7px 16px; box-shadow: 2px 2px 0px #0F172A; cursor: pointer;" onclick="setRecDurationFilter('under5', this)">⏱️ UNDER 5M</button>
+        </div>
+
+        <div id="recordingsList" class="grid-4" style="grid-template-columns: 1fr;">
+          <!-- Recordings Injected via JS -->
+        </div>
+      </div>
+
+      <!-- 5. LEADS PIPELINE TAB -->
+      <div id="tab-leads" class="tab-content">
+        <div class="section-header">
+          <div class="section-title">
+            <div class="square-indicator"></div>
+            CRM PIPELINE & LEAD STATUSES
+          </div>
+        </div>
+        <div id="leadsList" class="grid-4" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
+          <!-- Leads Injected via JS -->
+        </div>
+      </div>
+
+    </main>
+  </div>
 
   <!-- ADD / EDIT USER MODAL DIALOG -->
   <div id="userModal" class="modal-overlay">
@@ -597,7 +830,17 @@
 
         <div class="form-group">
           <label class="form-label">FULL USER NAME</label>
-          <input type="text" id="inputName" class="form-control" placeholder="e.g. Priyanka Panchal" required />
+          <input type="text" id="inputName" class="form-control" placeholder="e.g. Rahul Sharma" required />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">LOGIN EMAIL ADDRESS</label>
+          <input type="email" id="inputEmail" class="form-control" placeholder="e.g. admin@askeva.com" required />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">LOGIN PASSWORD</label>
+          <input type="password" id="inputPassword" class="form-control" placeholder="e.g. admin123 (Leave blank to keep current)" />
         </div>
 
         <div class="form-group">
@@ -607,70 +850,266 @@
 
         <div class="form-group">
           <label class="form-label">USER ROLE</label>
-          <select id="inputRole" class="form-control" style="cursor: pointer;">
+          <select id="inputRole" class="form-control" style="cursor: pointer;" onchange="onRoleChange()">
             <option value="caller">📱 CALLER AGENT</option>
             <option value="manager">👔 MANAGER</option>
-            <option value="admin">👑 ADMIN / SUPERVISOR</option>
+            <option value="admin">⚡ SYSTEM ADMIN</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">ASSIGN MANAGER</label>
+          <select id="inputManager" class="form-control" style="cursor: pointer;">
+            <option value="">(No Assigned Manager)</option>
           </select>
         </div>
 
         <div class="form-group">
           <label class="form-label">TEAM / DEPARTMENT</label>
-          <input type="text" id="inputTeam" class="form-control" placeholder="e.g. Telesales Mumbai" value="Telesales Team" />
+          <input type="text" id="inputTeam" class="form-control" value="Telesales Team" required />
         </div>
 
         <div class="form-group">
           <label class="form-label">DAILY TARGET CALLS</label>
-          <input type="number" id="inputTarget" class="form-control" placeholder="100" value="100" />
+          <input type="number" id="inputTarget" class="form-control" value="100" required />
         </div>
 
-        <div style="display: flex; gap: 12px; margin-top: 24px;">
-          <button type="button" class="btn-action btn-secondary" style="flex: 1;" onclick="closeAddUserModal()">CANCEL</button>
-          <button type="submit" class="btn-action" style="flex: 1;">SAVE USER →</button>
+        <div style="display: flex; gap: 10px; margin-top: 20px;">
+          <button type="submit" class="btn-action" style="flex: 1;">SAVE USER</button>
+          <button type="button" class="btn-action btn-secondary" onclick="closeAddUserModal()">CANCEL</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- JAVASCRIPT LOGIC -->
   <script>
-    let API_BASE = '/api';
-    if (window.location.protocol === 'file:') {
+    let API_BASE = 'http://localhost:5004/api';
+    if (window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1' && window.location.protocol !== 'file:') {
       API_BASE = 'https://telesales.askeva.io/api';
     }
 
+    // In-memory User Dictionary and Managers List
+    window.usersMap = {};
+    window.managersList = [];
 
-    function switchTab(tabId) {
-      document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+    // Auth Check on Init
+    window.addEventListener('DOMContentLoaded', () => {
+      const token = localStorage.getItem('askeva_admin_token');
+      document.getElementById('sidebarUserName').innerText = 'ADMIN';
+      if (token) {
+        document.getElementById('webLoginOverlay').style.display = 'none';
+        document.getElementById('appViewport').style.display = 'flex';
+        loadDashboardData();
+      } else {
+        document.getElementById('webLoginOverlay').style.display = 'flex';
+        document.getElementById('appViewport').style.display = 'none';
+      }
+    });
+
+    async function handleWebLogin(e) {
+      e.preventDefault();
+      const email = document.getElementById('webLoginEmail').value.trim();
+      const password = document.getElementById('webLoginPassword').value.trim();
+      const errBox = document.getElementById('webLoginError');
+      errBox.style.display = 'none';
+
+      try {
+        const res = await fetch(`${API_BASE}/auth/admin-login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+        const json = await res.json();
+        if (json.success) {
+          localStorage.setItem('askeva_admin_token', json.user.token || 'admin_session_active');
+          localStorage.setItem('askeva_admin_name', 'Admin');
+          document.getElementById('sidebarUserName').innerText = 'ADMIN';
+          document.getElementById('webLoginOverlay').style.display = 'none';
+          document.getElementById('appViewport').style.display = 'flex';
+          loadDashboardData();
+        } else {
+          errBox.innerText = json.message || 'Invalid email or password. Please try again.';
+          errBox.style.display = 'block';
+        }
+      } catch (err) {
+        errBox.innerText = 'Login error: ' + err.message;
+        errBox.style.display = 'block';
+      }
+    }
+
+    function handleLogout() {
+      localStorage.removeItem('askeva_admin_token');
+      localStorage.removeItem('askeva_admin_name');
+      document.getElementById('webLoginOverlay').style.display = 'flex';
+      document.getElementById('appViewport').style.display = 'none';
+    }
+
+    window.activeTab = 'dashboard';
+    window.activeCallFilter = 'all';
+    window.activeRecFilter = 'all';
+
+    function switchTab(tabId, el) {
+      window.activeTab = tabId;
+      document.querySelectorAll('.nav-item').forEach(btn => btn.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
 
-      event.target.classList.add('active');
+      if (el) el.classList.add('active');
       document.getElementById(`tab-${tabId}`).classList.add('active');
 
+      refreshActiveTab();
+    }
+
+    function refreshActiveTab() {
+      const tabId = window.activeTab || 'dashboard';
       if (tabId === 'dashboard') loadDashboardData();
+      if (tabId === 'calls') loadCallsData();
       if (tabId === 'users') loadUsersData();
       if (tabId === 'leaderboard') loadLeaderboardData();
       if (tabId === 'recordings') loadRecordingsData();
       if (tabId === 'leads') loadLeadsData();
     }
 
+    function populateManagerDropdowns(userRole = 'caller', selectedMgrId = '') {
+      const dashSelect = document.getElementById('dashManagerFilter');
+      const inputSelect = document.getElementById('inputManager');
+
+      const currentDashVal = dashSelect ? dashSelect.value : 'ALL';
+
+      if (dashSelect) {
+        dashSelect.innerHTML = `<option value="ALL">👥 ALL MANAGERS & TEAMS</option>`;
+        window.managersList.forEach(m => {
+          const val = m.id || m._id;
+          dashSelect.innerHTML += `<option value="${val}">${m.name} (${m.role.toUpperCase()})</option>`;
+        });
+        dashSelect.value = currentDashVal;
+      }
+
+      if (inputSelect) {
+        inputSelect.innerHTML = `<option value="">(No Assigned Manager)</option>`;
+        
+        // Filter managersList: If role is manager, ONLY show ADMIN in dropdown
+        const filteredManagers = window.managersList.filter(m => {
+          if (userRole === 'manager') {
+            return m.role === 'admin';
+          }
+          return m.role === 'manager' || m.role === 'admin';
+        });
+
+        filteredManagers.forEach(m => {
+          const val = m.id || m._id;
+          inputSelect.innerHTML += `<option value="${val}">${m.name} (${m.role.toUpperCase()})</option>`;
+        });
+
+        if (selectedMgrId) {
+          inputSelect.value = selectedMgrId;
+        } else {
+          inputSelect.value = '';
+        }
+      }
+    }
+
+    function populateTeamDropdowns(teamsList) {
+      const select = document.getElementById('dashTeamFilter');
+      if (!select || !teamsList) return;
+      const currentVal = select.value || 'ALL';
+      select.innerHTML = '<option value="ALL">🏢 ALL TEAMS</option>';
+      teamsList.forEach(t => {
+        if (t && t !== 'ALL TEAMS') {
+          select.innerHTML += `<option value="${t}">🏢 ${t.toUpperCase()}</option>`;
+        }
+      });
+      if (Array.from(select.options).some(opt => opt.value === currentVal)) {
+        select.value = currentVal;
+      } else {
+        select.value = 'ALL';
+      }
+    }
+
+    function onGlobalFilterChange() {
+      loadDashboardData();
+      loadLeaderboardData();
+      loadCallsData();
+      loadRecordingsData();
+    }
+
     async function loadDashboardData() {
       try {
-        const res = await fetch(`${API_BASE}/admin/dashboard`);
+        const selectedMgr = document.getElementById('dashManagerFilter')?.value || 'ALL';
+        const selectedTeam = document.getElementById('dashTeamFilter')?.value || 'ALL';
+        const res = await fetch(`${API_BASE}/admin/dashboard?managerId=${selectedMgr}&team=${selectedTeam}`);
         const json = await res.json();
         if (json.success) {
           const d = json.data;
+          if (d.teams) {
+            populateTeamDropdowns(d.teams);
+          }
           document.getElementById('statTotalCalls').innerText = d.totalCalls || 0;
           document.getElementById('statTalkTime').innerText = `${d.talkTimeFormatted || '0h 00m'} total talk time`;
           document.getElementById('statConnected').innerText = d.connectedCalls || 0;
           document.getElementById('statUniqueClients').innerText = `${d.uniqueClients || 0} unique clients`;
+          
+          if (document.getElementById('statIncoming')) document.getElementById('statIncoming').innerText = d.incoming || 0;
+          if (document.getElementById('statInboundPercent')) document.getElementById('statInboundPercent').innerText = `${d.inboundPercent || 0}% of volume`;
+          
           document.getElementById('statOutgoing').innerText = d.outgoing || 0;
+          if (document.getElementById('statOutboundPercent')) document.getElementById('statOutboundPercent').innerText = `${d.outboundPercent || 0}% of volume`;
+          
           document.getElementById('statMissed').innerText = d.missed || 0;
           document.getElementById('statNeverAttended').innerText = `${d.neverAttended || 0} never attended`;
+
+          if (document.getElementById('statConnectRatio')) document.getElementById('statConnectRatio').innerText = `${d.connectRatioPercent || 0}%`;
+          if (document.getElementById('statConversionRatio')) document.getElementById('statConversionRatio').innerText = `${d.conversionRatioPercent || 0}%`;
+
+          // Live Caller Activity Monitor Feed
+          const liveFeed = document.getElementById('callerLiveFeed');
+          if (liveFeed && d.callerLiveStatuses && d.callerLiveStatuses.length > 0) {
+            liveFeed.innerHTML = '';
+            d.callerLiveStatuses.forEach(c => {
+              liveFeed.innerHTML += `
+                <div style="background-color: #1E293B; border: 1.5px solid #334155; border-radius: 12px; padding: 8px 14px; display: flex; align-items: center; gap: 8px;">
+                  <span style="display: inline-block; width: 9px; height: 9px; border-radius: 50%; background-color: ${c.statusColor}; box-shadow: 0 0 6px ${c.statusColor};"></span>
+                  <span style="font-weight: 700; color: #FFF; font-size: 13px;">${c.name}</span>
+                  <span style="font-family: 'Space Mono', monospace; font-size: 10px; color: ${c.statusColor}; font-weight: 700;">${c.status}</span>
+                  <span style="font-family: 'Space Mono', monospace; font-size: 10px; color: #94A3B8;">(${c.totalCalls} calls)</span>
+                </div>
+              `;
+            });
+          } else if (liveFeed) {
+            liveFeed.innerHTML = `<div style="font-size: 12px; color: #94A3B8;">No active callers registered yet. Add callers in User Management to track live activity.</div>`;
+          }
 
           if (d.topPerformer) {
             document.getElementById('topPerformerName').innerText = d.topPerformer.name;
             document.getElementById('topPerformerTalkTime').innerText = `Talk Time: ${d.topPerformer.duration}`;
+          }
+
+          if (d.managersList) {
+            window.managersList = d.managersList;
+            populateManagerDropdowns();
+          }
+
+          if (d.teamMembers && d.teamMembers.length > 0) {
+            const tbody = document.getElementById('dashboardTeamBody');
+            if (tbody) {
+              tbody.innerHTML = '';
+              d.teamMembers.forEach(m => {
+                const roleClass = m.role === 'admin' ? 'badge-admin' : (m.role === 'manager' ? 'badge-manager' : 'badge-caller');
+                tbody.innerHTML += `
+                  <tr>
+                    <td style="font-weight: 700;">${m.name}</td>
+                    <td><span class="badge-role ${roleClass}">${m.role.toUpperCase()}</span></td>
+                    <td style="font-family: 'Space Mono', monospace;">${m.phone}</td>
+                    <td style="font-family: 'Space Mono', monospace; font-weight: 700;">${m.totalCalls} calls</td>
+                    <td style="font-family: 'Space Mono', monospace; color: var(--green-neon); font-weight: 700;">${m.connectedCalls} connected</td>
+                    <td style="font-family: 'Space Mono', monospace;">${m.talkTimeFormatted}</td>
+                    <td style="font-family: 'Space Mono', monospace;">${m.totalCalls} / ${m.dailyTarget} (${m.progressPercent}%)</td>
+                  </tr>
+                `;
+              });
+            }
+          } else {
+            const tbody = document.getElementById('dashboardTeamBody');
+            if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--muted);">No caller agents registered yet. Add callers in User Management to track live performance metrics.</td></tr>`;
           }
         }
       } catch (err) {
@@ -684,21 +1123,32 @@
         const json = await res.json();
         const tbody = document.getElementById('usersTableBody');
         tbody.innerHTML = '';
+        window.usersMap = {};
 
         if (json.success && json.users) {
+          window.managersList = json.users.filter(u => u.role === 'manager' || u.role === 'admin');
+          populateManagerDropdowns();
+
           json.users.forEach(u => {
+            const uKey = u.id || u._id;
+            window.usersMap[uKey] = u;
+
             const roleClass = u.role === 'admin' ? 'badge-admin' : (u.role === 'manager' ? 'badge-manager' : 'badge-caller');
+            const displayEmail = u.email || `${(u.name || 'user').toLowerCase().replace(/\s+/g, '')}@askeva.com`;
+            const mgrNameDisplay = u.managerName ? `👔 ${u.managerName}` : '<span style="color: var(--muted);">-</span>';
             const row = `
               <tr>
                 <td style="font-weight: 700;">${u.name}</td>
+                <td style="font-family: 'Space Mono', monospace; font-size: 11px;">${displayEmail}</td>
                 <td style="font-family: 'Space Mono', monospace;">${u.phone}</td>
                 <td><span class="badge-role ${roleClass}">${u.role.toUpperCase()}</span></td>
+                <td>${mgrNameDisplay}</td>
                 <td>${u.team || 'Telesales'}</td>
                 <td style="font-family: 'Space Mono', monospace;">${u.dailyTarget || 100} calls</td>
                 <td><span style="color: var(--green-neon); font-weight: 700;">● ACTIVE</span></td>
                 <td>
-                  <button class="btn-sm btn-edit" onclick="openEditUserModal('${u.id}', '${u.name}', '${u.phone}', '${u.role}', '${u.team}', ${u.dailyTarget})">EDIT</button>
-                  <button class="btn-sm btn-delete" onclick="handleDeleteUser('${u.id}')">DELETE</button>
+                  <button class="btn-sm btn-edit" onclick="openEditUserModal('${uKey}')">EDIT</button>
+                  <button class="btn-sm btn-delete" onclick="handleDeleteUser('${uKey}')">DELETE</button>
                 </td>
               </tr>
             `;
@@ -714,17 +1164,70 @@
       document.getElementById('modalTitle').innerText = 'ADD NEW SALES AGENT / USER';
       document.getElementById('userId').value = '';
       document.getElementById('userForm').reset();
+      document.getElementById('inputRole').value = 'caller';
+      populateManagerDropdowns('caller', '');
       document.getElementById('userModal').classList.add('active');
     }
 
-    function openEditUserModal(id, name, phone, role, team, target) {
+    async function openEditUserModal(uKey) {
+      const u = window.usersMap[uKey];
+      if (!u) {
+        alert('User details not found');
+        return;
+      }
+
+      // Ensure managersList is populated
+      if (!window.managersList || window.managersList.length === 0) {
+        try {
+          const res = await fetch(`${API_BASE}/admin/users`);
+          const json = await res.json();
+          if (json.success && json.users) {
+            window.managersList = json.users.filter(usr => usr.role === 'manager' || usr.role === 'admin');
+          }
+        } catch (err) {}
+      }
+
+      const displayEmail = u.email || `${(u.name || 'user').toLowerCase().replace(/\s+/g, '')}@askeva.com`;
+
+      // Match assigned manager flexibly by managerId, managerName, or Mongo _id
+      let foundMgrVal = '';
+      let mgrObj = null;
+
+      if (u.managerId || u.managerName) {
+        mgrObj = window.managersList.find(m => 
+          (u.managerId && (m.id === u.managerId || m._id === u.managerId)) ||
+          (u.managerName && (m.name.toLowerCase() === u.managerName.toLowerCase() || m.id === u.managerName || m._id === u.managerName))
+        );
+      }
+
+      // Fallback matching if unassigned in DB
+      if (!mgrObj) {
+        if (u.role === 'manager') {
+          mgrObj = window.managersList.find(m => m.role === 'admin');
+        } else if (u.role === 'caller') {
+          mgrObj = window.managersList.find(m => m.role === 'manager') || window.managersList.find(m => m.role === 'admin');
+        }
+      }
+
+      if (mgrObj) {
+        foundMgrVal = mgrObj.id || mgrObj._id;
+      } else if (u.managerId) {
+        foundMgrVal = u.managerId;
+      }
+
       document.getElementById('modalTitle').innerText = 'EDIT USER / SALES AGENT';
-      document.getElementById('userId').value = id;
-      document.getElementById('inputName').value = name;
-      document.getElementById('inputPhone').value = phone;
-      document.getElementById('inputRole').value = role;
-      document.getElementById('inputTeam').value = team;
-      document.getElementById('inputTarget').value = target;
+      document.getElementById('userId').value = u.id || u._id;
+      document.getElementById('inputName').value = u.name || '';
+      document.getElementById('inputEmail').value = displayEmail;
+      document.getElementById('inputPassword').value = u.password || 'admin123';
+      document.getElementById('inputPhone').value = u.phone || '';
+      document.getElementById('inputRole').value = u.role || 'caller';
+      document.getElementById('inputTeam').value = u.team || 'Telesales Team';
+      document.getElementById('inputTarget').value = u.dailyTarget || 100;
+
+      // Populate manager dropdown for specific user role and select assigned manager
+      populateManagerDropdowns(u.role || 'caller', foundMgrVal);
+
       document.getElementById('userModal').classList.add('active');
     }
 
@@ -735,10 +1238,17 @@
     async function handleSaveUser(e) {
       e.preventDefault();
       const id = document.getElementById('userId').value;
+      const selectedMgrId = document.getElementById('inputManager').value;
+      const selectedMgrObj = window.managersList.find(m => m.id === selectedMgrId || m._id === selectedMgrId);
+
       const payload = {
         name: document.getElementById('inputName').value,
+        email: document.getElementById('inputEmail').value,
+        password: document.getElementById('inputPassword').value,
         phone: document.getElementById('inputPhone').value,
         role: document.getElementById('inputRole').value,
+        managerId: selectedMgrId,
+        managerName: selectedMgrObj ? selectedMgrObj.name : '',
         team: document.getElementById('inputTeam').value,
         dailyTarget: parseInt(document.getElementById('inputTarget').value) || 100,
       };
@@ -756,19 +1266,27 @@
         if (json.success) {
           closeAddUserModal();
           loadUsersData();
+          loadDashboardData();
+        } else {
+          alert('Failed: ' + (json.message || json.error));
         }
       } catch (err) {
         alert('Error saving user: ' + err.message);
       }
     }
 
-    async function handleDeleteUser(id) {
-      if (!confirm('Are you sure you want to delete this user?')) return;
+    async function handleDeleteUser(uKey) {
+      const u = window.usersMap[uKey];
+      const userName = u ? u.name : 'this user';
+      if (!confirm(`Are you sure you want to delete ${userName}?`)) return;
+
       try {
-        const res = await fetch(`${API_BASE}/admin/users/${id}`, { method: 'DELETE' });
+        const res = await fetch(`${API_BASE}/admin/users/${uKey}`, { method: 'DELETE' });
         const json = await res.json();
         if (json.success) {
           loadUsersData();
+        } else {
+          alert('Failed to delete: ' + (json.message || json.error));
         }
       } catch (err) {
         alert('Error deleting user: ' + err.message);
@@ -777,21 +1295,54 @@
 
     async function loadLeaderboardData() {
       try {
-        const res = await fetch(`${API_BASE}/admin/leaderboard`);
+        const selectedMgr = document.getElementById('dashManagerFilter')?.value || 'ALL';
+        const selectedTeam = document.getElementById('dashTeamFilter')?.value || 'ALL';
+        const res = await fetch(`${API_BASE}/admin/leaderboard?managerId=${selectedMgr}&team=${selectedTeam}`);
         const json = await res.json();
+        const tbody = document.getElementById('leaderboardBody');
+        if (tbody) tbody.innerHTML = '';
+
         if (json.success && json.employees && json.employees.length > 0) {
-          const emp = json.employees;
-          if (emp[0]) {
-            document.getElementById('p1Name').innerText = emp[0].name;
-            document.getElementById('p1Calls').innerText = `${emp[0].totalCalls || 0} calls`;
+          const emp = json.employees
+            .filter(e => e.role === 'caller' && !e.name.toLowerCase().includes('manager') && !e.name.toLowerCase().includes('admin'))
+            .map((e, idx) => ({ ...e, rank: idx + 1 }));
+
+          document.getElementById('p1Name').innerText = emp[0] ? emp[0].name : '-';
+          document.getElementById('p1Calls').innerText = emp[0] ? `${emp[0].totalCalls || 0} calls` : '0 calls';
+
+          document.getElementById('p2Name').innerText = emp[1] ? emp[1].name : '-';
+          document.getElementById('p2Calls').innerText = emp[1] ? `${emp[1].totalCalls || 0} calls` : '0 calls';
+
+          document.getElementById('p3Name').innerText = emp[2] ? emp[2].name : '-';
+          document.getElementById('p3Calls').innerText = emp[2] ? `${emp[2].totalCalls || 0} calls` : '0 calls';
+
+          if (tbody && emp.length > 0) {
+            emp.forEach(e => {
+              const roleClass = e.role === 'admin' ? 'badge-admin' : (e.role === 'manager' ? 'badge-manager' : 'badge-caller');
+              tbody.innerHTML += `
+                <tr>
+                  <td style="font-weight: 800; font-family: 'Anton', sans-serif;">#${e.rank}</td>
+                  <td style="font-weight: 700;">${e.name}</td>
+                  <td><span class="badge-role ${roleClass}">${e.role.toUpperCase()}</span></td>
+                  <td style="font-family: 'Space Mono', monospace;">${e.phone}</td>
+                  <td style="font-family: 'Space Mono', monospace; font-weight: 700;">${e.totalCalls} calls</td>
+                  <td style="font-family: 'Space Mono', monospace; color: var(--green-neon); font-weight: 700;">${e.connectedCalls} connected</td>
+                  <td style="font-family: 'Space Mono', monospace;">${e.talkTimeFormatted || '0h 00m'}</td>
+                </tr>
+              `;
+            });
+          } else if (tbody) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--muted);">No caller agents registered yet. Add callers in User Management to populate the leaderboard.</td></tr>`;
           }
-          if (emp[1]) {
-            document.getElementById('p2Name').innerText = emp[1].name;
-            document.getElementById('p2Calls').innerText = `${emp[1].totalCalls || 0} calls`;
-          }
-          if (emp[2]) {
-            document.getElementById('p3Name').innerText = emp[2].name;
-            document.getElementById('p3Calls').innerText = `${emp[2].totalCalls || 0} calls`;
+        } else {
+          document.getElementById('p1Name').innerText = '-';
+          document.getElementById('p1Calls').innerText = '0 calls';
+          document.getElementById('p2Name').innerText = '-';
+          document.getElementById('p2Calls').innerText = '0 calls';
+          document.getElementById('p3Name').innerText = '-';
+          document.getElementById('p3Calls').innerText = '0 calls';
+          if (tbody) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--muted);">No caller agents registered yet. Add callers in User Management to populate the leaderboard.</td></tr>`;
           }
         }
       } catch (err) {
@@ -799,27 +1350,435 @@
       }
     }
 
+    async function loadCallsData() {
+      try {
+        const selectedMgr = document.getElementById('dashManagerFilter')?.value || 'ALL';
+        const selectedTeam = document.getElementById('dashTeamFilter')?.value || 'ALL';
+        const type = window.activeCallFilter || 'all';
+        const search = document.getElementById('inputCallSearch')?.value || '';
+        const res = await fetch(`${API_BASE}/admin/calls?managerId=${selectedMgr}&team=${selectedTeam}&type=${type}&search=${encodeURIComponent(search)}`);
+        const json = await res.json();
+        const tbody = document.getElementById('callsTableBody');
+        if (tbody) tbody.innerHTML = '';
+
+        if (json.success && json.calls && json.calls.length > 0) {
+          json.calls.forEach(c => {
+            const dateStr = new Date(c.timestamp).toLocaleString();
+            const badgeClass = c.type === 'INBOUND' ? 'badge-admin' : (c.type === 'OUTBOUND' ? 'badge-caller' : 'badge-manager');
+            const isUnsaved = !c.contactName || c.contactName === 'Unknown Contact' || c.contactName === c.phoneNumber;
+            const contactDisplay = `
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="font-weight: 700; color: #0F172A;">${c.contactName}</span>
+                <button class="btn-sm" style="padding: 2px 6px; font-size: 9px; background: ${isUnsaved ? '#CCFF00' : '#E2E8F0'}; color: #0F172A; border: 1px solid #0F172A; border-radius: 4px; cursor: pointer;" onclick="promptSaveContact('${c.phoneNumber}', '${(c.contactName || '').replace(/'/g, "\\'")}')">
+                  ${isUnsaved ? '+ SAVE' : '✎ EDIT'}
+                </button>
+              </div>
+            `;
+            const row = `
+              <tr>
+                <td style="font-weight: 700;">${c.callerName}</td>
+                <td>${contactDisplay}</td>
+                <td style="font-family: 'Space Mono', monospace;">${c.phoneNumber}</td>
+                <td><span class="badge-role ${badgeClass}">${c.type}</span></td>
+                <td style="font-family: 'Space Mono', monospace; font-weight: 700;">${c.durationStr}</td>
+                <td style="font-family: 'Space Mono', monospace; font-size: 11px;">${dateStr}</td>
+                <td><span style="font-family: 'Space Mono', monospace; font-size: 11px;">SIM ${c.simSlot}</span></td>
+              </tr>
+            `;
+            if (tbody) tbody.innerHTML += row;
+          });
+        } else if (tbody) {
+          tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--muted);">No call logs found. Device hardware call dispatches will sync here in real time.</td></tr>`;
+        }
+      } catch (err) {
+        console.error('Error loading calls logs:', err);
+      }
+    }
+
+    async function promptSaveContact(phone, currentName) {
+      const isUnsaved = !currentName || currentName === 'Unknown Contact' || currentName === 'Client' || currentName === phone;
+      const newName = prompt(`Enter Contact / Client Name for ${phone}:`, isUnsaved ? '' : currentName);
+      if (!newName || !newName.trim()) return;
+
+      try {
+        const res = await fetch(`${API_BASE}/user/contacts/save`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phoneNumber: phone, name: newName.trim() })
+        });
+        const json = await res.json();
+        if (json.success) {
+          alert(`✓ Contact "${newName.trim()}" saved successfully!`);
+          loadCallsData();
+          loadRecordingsData();
+          if (typeof loadLeadsData === 'function') loadLeadsData();
+        } else {
+          alert(json.message || 'Failed to save contact');
+        }
+      } catch (err) {
+        alert('Error saving contact: ' + err.message);
+      }
+    }
+
+    function setCallTypeFilter(type, el) {
+      window.activeCallFilter = type;
+      document.querySelectorAll('.filter-call-btn').forEach(b => b.classList.remove('btn-edit'));
+      if (el) el.classList.add('btn-edit');
+      loadCallsData();
+    }
+
+    function setRecTypeFilter(type, el) {
+      window.activeRecFilter = type;
+      document.querySelectorAll('.filter-rec-btn').forEach(b => {
+        b.style.background = '#FFFFFF';
+        b.style.fontWeight = '700';
+      });
+      if (el) {
+        el.style.background = '#CCFF00';
+        el.style.fontWeight = '800';
+      }
+      loadRecordingsData();
+    }
+
+    function setRecDurationFilter(dur, el) {
+      if (window.activeDurationFilter === dur) {
+        window.activeDurationFilter = 'all';
+        if (el) {
+          el.style.background = '#FFFFFF';
+          el.style.fontWeight = '700';
+        }
+      } else {
+        window.activeDurationFilter = dur;
+        document.querySelectorAll('.filter-duration-btn').forEach(b => {
+          b.style.background = '#FFFFFF';
+          b.style.fontWeight = '700';
+        });
+        if (el) {
+          el.style.background = '#CCFF00';
+          el.style.fontWeight = '800';
+        }
+      }
+      loadRecordingsData();
+    }
+
+    function formatRecDuration(sec) {
+      sec = parseInt(sec || '0', 10);
+      const m = Math.floor(sec / 60);
+      const s = sec % 60;
+      return `${m}m ${s}s`;
+    }
+
     async function loadRecordingsData() {
       try {
-        const res = await fetch(`${API_BASE}/admin/recordings`);
+        const selectedMgr = document.getElementById('dashManagerFilter')?.value || 'ALL';
+        const selectedTeam = document.getElementById('dashTeamFilter')?.value || 'ALL';
+        const type = window.activeRecFilter || 'all';
+        const res = await fetch(`${API_BASE}/admin/recordings?managerId=${selectedMgr}&team=${selectedTeam}&type=${type}`);
         const json = await res.json();
         const container = document.getElementById('recordingsList');
         container.innerHTML = '';
 
-        if (json.success && json.recordings) {
-          json.recordings.forEach(r => {
+        if (json.success && json.recordings && json.recordings.length > 0) {
+          let recs = json.recordings;
+
+          if (window.activeDurationFilter === 'over5') {
+            recs = recs.filter(r => (r.durationSeconds || 0) >= 300);
+          } else if (window.activeDurationFilter === 'under5') {
+            recs = recs.filter(r => (r.durationSeconds || 0) < 300);
+          }
+
+          if (recs.length === 0) {
+            container.innerHTML = `<div class="neo-card" style="grid-column: 1 / -1; text-align: center; color: #0F172A; font-weight: 700;">No call audio recordings match the selected duration filter.</div>`;
+            return;
+          }
+
+          recs.forEach(r => {
+            const currentRating = r.rating || 0;
+            const currentComment = r.comment || '';
+            const recId = r.id || r._id;
+            const formattedDur = formatRecDuration(r.durationSeconds);
+
+            let starsHtml = '';
+            for (let i = 1; i <= 5; i++) {
+              const starChar = i <= currentRating ? '★' : '☆';
+              const activeStyle = i <= currentRating ? 'color: #F59E0B;' : 'color: #CBD5E1;';
+              starsHtml += `<span style="cursor: pointer; font-size: 22px; ${activeStyle} margin-right: 4px; user-select: none;" onclick="setCardRating('${recId}', ${i})">${starChar}</span>`;
+            }
+
+            const ratingLabel = currentRating > 0 ? `${currentRating}/5 STARS` : 'NOT RATED';
+            const feedbackInfo = r.commentedBy ? `
+              <div style="background: #0F172A; color: #FFFFFF; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; margin-top: 8px; display: inline-flex; align-items: center; gap: 6px;">
+                <span style="color: #CCFF00;">★</span> Feedback by ${r.commentedBy} (${(r.commentedByRole || 'Admin').toUpperCase()}): "${currentComment || 'Reviewed'}"
+              </div>` : '';
+
+            const rawAudioUrl = r.audioUrl || '';
+            const fullAudioUrl = rawAudioUrl ? (rawAudioUrl.startsWith('http') ? rawAudioUrl : `${API_BASE.replace('/api', '')}${rawAudioUrl}`) : '';
+            const safeTranscript = (r.transcript || 'Call recording logged').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+
+            const isUnsaved = !r.contactName || r.contactName === 'Unknown' || r.contactName === 'Client' || r.contactName === r.phoneNumber;
+
             const item = `
-              <div class="neo-card">
-                <div style="font-weight: 700; font-size: 14px;">${r.callerName} → ${r.contactName}</div>
-                <div style="font-family: 'Space Mono', monospace; font-size: 11px; color: var(--muted); margin-top: 2px;">Recorded · ${r.durationSeconds}s</div>
-                <div style="font-style: italic; margin-top: 8px; font-size: 12px;">"${r.transcript || 'Voice recording'}"</div>
+              <div class="neo-card" style="margin-bottom: 16px; background: #FFFFFF; border: 2px solid #0F172A; box-shadow: 4px 4px 0px #0F172A;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <span style="font-weight: 800; font-size: 16px; color: #0F172A;">${r.callerName} → ${r.contactName}</span>
+                      <button class="btn-sm" style="padding: 2px 6px; font-size: 9px; background: ${isUnsaved ? '#CCFF00' : '#E2E8F0'}; color: #0F172A; border: 1px solid #0F172A; border-radius: 4px; cursor: pointer;" onclick="promptSaveContact('${r.phoneNumber}', '${(r.contactName || '').replace(/'/g, "\\'")}')">
+                        ${isUnsaved ? '+ SAVE' : '✎ EDIT'}
+                      </button>
+                    </div>
+                    <div style="font-family: 'Space Mono', monospace; font-size: 12px; color: #475569; font-weight: 700; margin-top: 3px;">${r.dateStr || 'Today'} · ${formattedDur}</div>
+                  </div>
+                  <button id="playBtn_${recId}" class="btn-sm" style="background: #CCFF00; color: #0F172A; font-weight: 800; padding: 8px 18px; display: flex; align-items: center; gap: 8px; border-radius: 999px; border: 2px solid #0F172A; box-shadow: 2px 2px 0px #0F172A; cursor: pointer;" onclick="toggleAudioPlayback('${recId}', '${fullAudioUrl}', '${safeTranscript}', ${r.durationSeconds || 30})">
+                    <span id="playIcon_${recId}">▶</span> <span id="playText_${recId}">PLAY AUDIO</span>
+                  </button>
+                </div>
+
+                <!-- Audio Track Progress Line Bar -->
+                <div id="audioTrackBar_${recId}" style="display: none; margin-top: 12px;">
+                  <div style="display: flex; justify-content: space-between; font-size: 11px; font-family: 'Space Mono', monospace; font-weight: 700; color: #0F172A; margin-bottom: 4px;">
+                    <span id="audioCurrTime_${recId}">0m 00s</span>
+                    <span id="audioTotTime_${recId}">${formattedDur}</span>
+                  </div>
+                  <div style="width: 100%; height: 8px; background: #E2E8F0; border-radius: 999px; overflow: hidden; border: 1.5px solid #0F172A;">
+                    <div id="audioFillBar_${recId}" style="height: 100%; width: 0%; background: #10B981; transition: width 0.15s ease;"></div>
+                  </div>
+                </div>
+
+                <audio id="audioEl_${recId}" src="${fullAudioUrl}" style="display: none;" ontimeupdate="onAudioTimeUpdate('${recId}')" onended="onAudioEnded('${recId}')" onerror="onAudioError('${recId}', '${safeTranscript}', ${r.durationSeconds || 30})"></audio>
+
+                <div style="font-style: italic; margin-top: 12px; font-size: 13px; color: #0F172A; background: #F8FAFC; border: 1.5px solid #CBD5E1; padding: 12px 14px; border-radius: 8px; font-weight: 600; line-height: 1.5;">
+                  "${r.transcript || 'Voice call recording logged.'}"
+                </div>
+                
+                <div style="margin-top: 14px; padding-top: 12px; border-top: 1.5px dashed #CBD5E1;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <div style="font-size: 11px; font-weight: 800; letter-spacing: 0.08em; color: #0F172A;">CALL QUALITY</div>
+                    <div style="font-size: 11px; font-weight: 800; color: ${currentRating > 0 ? '#16A34A' : '#64748B'};" id="ratingLabel_${recId}">${ratingLabel}</div>
+                  </div>
+                  
+                  <div style="display: flex; align-items: center; gap: 4px;" id="starsContainer_${recId}" data-rating="${currentRating}">
+                    ${starsHtml}
+                  </div>
+
+                  ${feedbackInfo}
+
+                  <div style="display: flex; gap: 8px; margin-top: 12px;">
+                    <input type="text" id="commentInput_${recId}" class="form-control" style="flex: 1; padding: 10px 14px; font-size: 13px; color: #0F172A; font-weight: 600; background: #FFFFFF; border: 2px solid #0F172A; border-radius: 8px;" placeholder="Comment on call quality..." value="${currentComment.replace(/"/g, '&quot;')}" />
+                    <button class="btn-sm btn-edit" style="background: #CCFF00; color: #0F172A; font-weight: 800; padding: 10px 20px; border: 2px solid #0F172A; border-radius: 8px; box-shadow: 2px 2px 0px #0F172A; cursor: pointer;" onclick="saveRecordingComment('${recId}')">SAVE</button>
+                  </div>
+                </div>
               </div>
             `;
             container.innerHTML += item;
           });
+        } else {
+          container.innerHTML = `<div class="neo-card" style="grid-column: 1 / -1; text-align: center; color: #0F172A; font-weight: 700;">No call audio recordings logged yet. Hardware call logs recorded on phones will sync here automatically.</div>`;
         }
       } catch (err) {
         console.error('Error loading recordings:', err);
+      }
+    }
+
+    function toggleAudioPlayback(recId, url, transcript, durationSec) {
+      const audioEl = document.getElementById(`audioEl_${recId}`);
+      const btn = document.getElementById(`playBtn_${recId}`);
+      const icon = document.getElementById(`playIcon_${recId}`);
+      const text = document.getElementById(`playText_${recId}`);
+      const trackBar = document.getElementById(`audioTrackBar_${recId}`);
+      const fillBar = document.getElementById(`audioFillBar_${recId}`);
+
+      // If already playing audio element
+      if (audioEl && !audioEl.paused) {
+        audioEl.pause();
+        audioEl.currentTime = 0;
+        if (icon) icon.innerText = '▶';
+        if (text) text.innerText = 'PLAY AUDIO';
+        if (btn) btn.style.background = '#CCFF00';
+        if (trackBar) trackBar.style.display = 'none';
+        if (fillBar) fillBar.style.width = '0%';
+        return;
+      }
+
+      // If speaking via speech synthesis
+      if (window.activeSpeechRecId === recId && window.speechSynthesis && window.speechSynthesis.speaking) {
+        window.speechSynthesis.cancel();
+        window.activeSpeechRecId = null;
+        clearInterval(window.activeSpeechTimer);
+        if (icon) icon.innerText = '▶';
+        if (text) text.innerText = 'PLAY AUDIO';
+        if (btn) btn.style.background = '#CCFF00';
+        if (trackBar) trackBar.style.display = 'none';
+        if (fillBar) fillBar.style.width = '0%';
+        return;
+      }
+
+      // Stop any other active audios
+      document.querySelectorAll('audio').forEach(a => {
+        a.pause();
+        a.currentTime = 0;
+      });
+      document.querySelectorAll('[id^="playIcon_"]').forEach(i => i.innerText = '▶');
+      document.querySelectorAll('[id^="playText_"]').forEach(t => t.innerText = 'PLAY AUDIO');
+      document.querySelectorAll('[id^="playBtn_"]').forEach(b => b.style.background = '#CCFF00');
+      document.querySelectorAll('[id^="audioTrackBar_"]').forEach(b => b.style.display = 'none');
+      document.querySelectorAll('[id^="audioFillBar_"]').forEach(f => f.style.width = '0%');
+      clearInterval(window.activeSpeechTimer);
+
+      if (audioEl && url && url.length > 5) {
+        if (trackBar) trackBar.style.display = 'block';
+        audioEl.play().then(() => {
+          if (icon) icon.innerText = '⏸';
+          if (text) text.innerText = 'PAUSE';
+          if (btn) btn.style.background = '#34C759';
+        }).catch((err) => {
+          console.warn('Audio URL stream fallback to voice synthesis:', err);
+          speakTranscript(transcript, recId, durationSec || 15);
+        });
+      } else {
+        speakTranscript(transcript, recId, durationSec || 15);
+      }
+    }
+
+    function onAudioTimeUpdate(recId) {
+      const audioEl = document.getElementById(`audioEl_${recId}`);
+      const fillBar = document.getElementById(`audioFillBar_${recId}`);
+      const currTime = document.getElementById(`audioCurrTime_${recId}`);
+      if (audioEl && audioEl.duration) {
+        const pct = Math.min((audioEl.currentTime / audioEl.duration) * 100, 100);
+        if (fillBar) fillBar.style.width = `${pct}%`;
+        if (currTime) {
+          const curSec = Math.floor(audioEl.currentTime);
+          const m = Math.floor(curSec / 60);
+          const s = curSec % 60;
+          currTime.innerText = `${m}m ${s < 10 ? '0' : ''}${s}s`;
+        }
+      }
+    }
+
+    function onAudioEnded(recId) {
+      const icon = document.getElementById(`playIcon_${recId}`);
+      const text = document.getElementById(`playText_${recId}`);
+      const btn = document.getElementById(`playBtn_${recId}`);
+      const trackBar = document.getElementById(`audioTrackBar_${recId}`);
+      const fillBar = document.getElementById(`audioFillBar_${recId}`);
+      if (icon) icon.innerText = '▶';
+      if (text) text.innerText = 'PLAY AUDIO';
+      if (btn) btn.style.background = '#CCFF00';
+      if (trackBar) trackBar.style.display = 'none';
+      if (fillBar) fillBar.style.width = '0%';
+    }
+
+    function onAudioError(recId, transcript, durationSec) {
+      console.warn('Audio element error, falling back to voice synthesis');
+      speakTranscript(transcript, recId, durationSec || 15);
+    }
+
+    function speakTranscript(text, recId, durationSec) {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        window.activeSpeechRecId = recId;
+        clearInterval(window.activeSpeechTimer);
+
+        const cleanText = (text || 'Voice recording logged').replace(/^["']|["']$/g, '');
+        const utter = new SpeechSynthesisUtterance(cleanText);
+        utter.rate = 0.95;
+        utter.pitch = 1.0;
+
+        const btn = document.getElementById(`playBtn_${recId}`);
+        const icon = document.getElementById(`playIcon_${recId}`);
+        const playText = document.getElementById(`playText_${recId}`);
+        const trackBar = document.getElementById(`audioTrackBar_${recId}`);
+        const fillBar = document.getElementById(`audioFillBar_${recId}`);
+        const currTime = document.getElementById(`audioCurrTime_${recId}`);
+
+        const estimatedSec = Math.max(durationSec || 10, 5);
+        let elapsed = 0;
+
+        utter.onstart = () => {
+          if (icon) icon.innerText = '🔊';
+          if (playText) playText.innerText = 'PLAYING...';
+          if (btn) btn.style.background = '#34C759';
+          if (trackBar) trackBar.style.display = 'block';
+
+          window.activeSpeechTimer = setInterval(() => {
+            elapsed += 0.2;
+            const pct = Math.min((elapsed / estimatedSec) * 100, 98);
+            if (fillBar) fillBar.style.width = `${pct}%`;
+            if (currTime) {
+              const curSec = Math.floor(elapsed);
+              const m = Math.floor(curSec / 60);
+              const s = curSec % 60;
+              currTime.innerText = `${m}m ${s < 10 ? '0' : ''}${s}s`;
+            }
+          }, 200);
+        };
+
+        const cleanup = () => {
+          window.activeSpeechRecId = null;
+          clearInterval(window.activeSpeechTimer);
+          if (icon) icon.innerText = '▶';
+          if (playText) playText.innerText = 'PLAY AUDIO';
+          if (btn) btn.style.background = '#CCFF00';
+          if (trackBar) trackBar.style.display = 'none';
+          if (fillBar) fillBar.style.width = '0%';
+        };
+
+        utter.onend = cleanup;
+        utter.onerror = cleanup;
+
+        window.speechSynthesis.speak(utter);
+      }
+    }
+
+    function setCardRating(recId, rating) {
+      const container = document.getElementById(`starsContainer_${recId}`);
+      if (container) {
+        container.setAttribute('data-rating', rating);
+        let starsHtml = '';
+        for (let i = 1; i <= 5; i++) {
+          const starChar = i <= rating ? '★' : '☆';
+          const activeStyle = i <= rating ? 'color: #CCFF00;' : 'color: #475569;';
+          starsHtml += `<span style="cursor: pointer; font-size: 18px; ${activeStyle} margin-right: 2px;" onclick="setCardRating('${recId}', ${i})">${starChar}</span>`;
+        }
+        container.innerHTML = starsHtml;
+      }
+      const label = document.getElementById(`ratingLabel_${recId}`);
+      if (label) {
+        label.innerText = `${rating}/5 STARS`;
+        label.style.color = '#34C759';
+      }
+    }
+
+    async function saveRecordingComment(recId) {
+      try {
+        const commentInput = document.getElementById(`commentInput_${recId}`);
+        const starsContainer = document.getElementById(`starsContainer_${recId}`);
+        const rating = parseInt(starsContainer?.getAttribute('data-rating') || '0', 10);
+        const comment = commentInput ? commentInput.value.trim() : '';
+
+        const adminName = localStorage.getItem('askeva_admin_name') || 'Admin';
+
+        const res = await fetch(`${API_BASE}/admin/recordings/${recId}/comment`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            rating: rating,
+            comment: comment,
+            commentedBy: adminName,
+            commentedByRole: 'admin',
+          })
+        });
+
+        const json = await res.json();
+        if (json.success) {
+          alert('Call quality rating and comment saved successfully!');
+          loadRecordingsData();
+        } else {
+          alert(json.message || 'Failed to save comment');
+        }
+      } catch (err) {
+        alert('Error saving comment: ' + err.message);
       }
     }
 
@@ -830,7 +1789,7 @@
         const container = document.getElementById('leadsList');
         container.innerHTML = '';
 
-        if (json.success && json.leads) {
+        if (json.success && json.leads && json.leads.length > 0) {
           json.leads.forEach(l => {
             const item = `
               <div class="neo-card">
@@ -843,14 +1802,20 @@
             `;
             container.innerHTML += item;
           });
+        } else {
+          container.innerHTML = `<div class="neo-card" style="grid-column: 1 / -1; text-align: center; color: #94A3B8;">No leads registered in CRM pipeline. Add leads via the mobile app or API to track dispatches.</div>`;
         }
       } catch (err) {
         console.error('Error loading leads:', err);
       }
     }
 
-    // Initial Load
-    loadDashboardData();
+    // Live Realtime Polling: Refresh active tab every 10 seconds automatically
+    setInterval(() => {
+      if (document.getElementById('appViewport').style.display !== 'none') {
+        refreshActiveTab();
+      }
+    }, 10000);
   </script>
 </body>
 </html>

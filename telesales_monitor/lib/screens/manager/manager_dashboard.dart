@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/neo_card.dart';
 import '../../widgets/top_header.dart';
+import '../../widgets/create_user_dialog.dart';
 import '../../providers/tele_provider.dart';
 
 class ManagerDashboard extends StatelessWidget {
@@ -24,8 +25,17 @@ class ManagerDashboard extends StatelessWidget {
     final missed = stats != null ? (stats['missed'] as int? ?? tele.trackedMissedCalls) : tele.trackedMissedCalls;
     final neverAttended = stats != null ? (stats['neverAttended'] as int? ?? tele.trackedNeverAttendedCalls) : tele.trackedNeverAttendedCalls;
 
-    final topTalkTimeName = tele.callerName.isNotEmpty ? tele.callerName.toUpperCase().split(' ').first : 'PRIYANKA';
-    final topTalkTimeDuration = tele.trackedTalkTimeFormatted.toUpperCase();
+    String topTalkTimeName = 'NO CALLS LOGGED YET';
+    String topTalkTimeDuration = '0H 00M';
+
+    if (stats != null && stats['topPerformer'] != null) {
+      final top = stats['topPerformer'] as Map<String, dynamic>;
+      topTalkTimeName = top['name']?.toString() ?? 'NO CALLS LOGGED YET';
+      topTalkTimeDuration = top['duration']?.toString() ?? '0H 00M';
+    } else if (tele.trackedTotalCalls > 0) {
+      topTalkTimeName = tele.currentUserName.toUpperCase();
+      topTalkTimeDuration = tele.trackedTalkTimeFormatted.toUpperCase();
+    }
 
     // Dynamic Hourly Bar Pattern (9AM - 6PM)
     final List<int> hourCounts = List.filled(10, 0);
@@ -67,12 +77,81 @@ class ManagerDashboard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Top Header
-            const TopHeader(
+            TopHeader(
               title: 'DASHBOARD',
-              userName: 'RASMI DESAI',
+              userName: tele.currentUserName,
               selectedSimIndex: 1,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
+
+            // Action Row: Team Selector & + ADD USER Button
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppTheme.ink900,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppTheme.ink800, width: 1.5),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.groups_outlined, color: AppTheme.limeYellow, size: 16),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              dropdownColor: AppTheme.ink900,
+                              isExpanded: true,
+                              value: tele.availableTeams.contains(tele.selectedTeamFilter) ? tele.selectedTeamFilter : tele.availableTeams.first,
+                              icon: const Icon(Icons.arrow_drop_down, color: AppTheme.limeYellow, size: 18),
+                              style: AppTheme.headline(size: 10.5, color: AppTheme.greenNeon),
+                              onChanged: (val) {
+                                if (val != null) {
+                                  tele.setTeamFilter(val);
+                                }
+                              },
+                              items: tele.availableTeams.map((t) {
+                                return DropdownMenuItem<String>(
+                                  value: t,
+                                  child: Text(t == 'ALL' ? '🏢 ALL TEAMS' : '🏢 ${t.toUpperCase()}', overflow: TextOverflow.ellipsis),
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () => CreateUserDialog.show(context),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.greenNeon,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppTheme.ink900, width: 1.5),
+                      boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.person_add_alt_1_rounded, size: 16, color: AppTheme.ink900),
+                        const SizedBox(width: 4),
+                        Text(
+                          '+ CREATE USER',
+                          style: AppTheme.label(size: 9.5, color: AppTheme.ink900, letterSpacing: 0.1),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
 
             // Card 01: REALTIME TEAM CALL METRICS
             NeoCard(
@@ -306,25 +385,35 @@ class ManagerDashboard extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
-                      const Text('🏆 ', style: TextStyle(fontSize: 16)),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'TOP TALK TIME: $topTalkTimeName ($topTalkTimeDuration)',
-                            style: AppTheme.label(size: 10, color: AppTheme.white, letterSpacing: 0.12),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        const Text('🏆 ', style: TextStyle(fontSize: 16)),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'TOP TALK TIME: $topTalkTimeName ($topTalkTimeDuration)',
+                                style: AppTheme.label(size: 10, color: AppTheme.white, letterSpacing: 0.12),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Tap to view team leaderboard & rankings',
+                                style: AppTheme.body(size: 11, color: AppTheme.white.withValues(alpha: 0.85)),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Tap to view team leaderboard & rankings',
-                            style: AppTheme.body(size: 11, color: AppTheme.white.withValues(alpha: 0.85)),
-                          ),
-                        ],
-                      ),
-                    ],
+                        ),
+                      ],
+                    ),
                   ),
+                  const SizedBox(width: 8),
                   const Icon(Icons.arrow_forward, size: 18, color: AppTheme.white),
                 ],
               ),

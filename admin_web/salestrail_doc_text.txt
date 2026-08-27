@@ -1,0 +1,147 @@
+﻿
+Salestrail
+
+ App Analysis
+
+User side (Caller) A
+
+pp
+
+:
+
+Opening: 
+
+As soon as we enter the app all the permission are received from the user side properly and transparently with their consents.
+
+1595120
+
+52388
+
+Permissions Asked:
+
+After Login
+
+:
+
+Page-1
+
+Tracked Calls
+
+Details of the calls tracked, 
+
+dialpad
+
+, Addition of call details manually at be added at the top
+
+Page-2
+
+Add Tracked Call Page
+
+ (Manual Addition of calls to be tracked)
+
+Page-3
+
+Untracked Calls
+
+Calls received or dialled after the mentioned business time will be stored here 
+
+and also has the option to change the status of the call to untrack.
+
+Page-4
+
+ Settings 
+
+Setting Business Time
+
+Profile and details of the Caller
+
+Application version and permissions
+
+Admin Side 
+
+WebPage
+
+Overview:
+
+Analytics Page:
+
+Calls Details Page:
+
+Recordings Page
+
+Team Management Page
+
+User (Callers Details) Page:
+
+Things to Include in Our App:
+
+add the business working time to enhance privacy
+
+add important key metrics like call quality ratio, and conversion ratio, dial to connect ratio
+
+.
+
+3) add the logo of 
+
+AskEVA
+
+ at each and every screen
+
+ at 
+
+left top
+
+ to create branding impact and uniformity
+
+. 
+
+Add Search for contacts
+
+ and auto Sync of Contacts saved in the phone 
+
+5)Addition of Live- Status tracking of the 
+
+Callers in the Managers application
+
+6) Show Transparent Permission Acquired from the Users for trust
+
+7) 
+
+Currently the Selection of the SIM is present inside the settings page 
+
+and not done initially so both 
+
+sims
+
+ are taken into 
+
+tracking while the user has dual sim in his phone.
+
+So
+
+making the person to choose the sim initially during login itself would be great
+
+incase
+
+ of 
+
+device with dual sims.
+
+8)Use of Professional Wordings like Inbound and Outbound
+
+9) Offline Sync
+
+ option to not miss any call recordings even when we are offline 
+
+(
+
+If your phone is temporarily offline, 
+
+Salestrail
+
+ queues the call events and syncs them automatically when the connection returns.
+
+)
+
+10)Filter option in recordings tab in manager to classify as Incoming and Outgoing.
+

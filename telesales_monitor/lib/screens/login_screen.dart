@@ -18,6 +18,9 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePass = true;
   bool _isLoading = false;
   UserRole _selectedRole = UserRole.manager;
+  String? _usernameError;
+  String? _passwordError;
+  String? _authError;
 
   @override
   void dispose() {
@@ -29,6 +32,11 @@ class _LoginScreenState extends State<LoginScreen> {
   void _selectRole(UserRole role) {
     setState(() {
       _selectedRole = role;
+      _usernameError = null;
+      _passwordError = null;
+      _authError = null;
+      _usernameCtrl.clear();
+      _passwordCtrl.clear();
     });
   }
 
@@ -36,19 +44,35 @@ class _LoginScreenState extends State<LoginScreen> {
     final userText = _usernameCtrl.text.trim();
     final passText = _passwordCtrl.text.trim();
 
+    setState(() {
+      _usernameError = null;
+      _passwordError = null;
+      _authError = null;
+    });
+
+    bool isValid = true;
+
     if (userText.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: AppTheme.ink900,
-          content: Text('Please enter a username or email', style: AppTheme.bodyBold(size: 12, color: AppTheme.limeYellow)),
-        ),
-      );
-      return;
+      setState(() => _usernameError = 'Please enter an email or username');
+      isValid = false;
+    } else if (userText.contains('@') && !RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(userText)) {
+      setState(() => _usernameError = 'Please enter a valid email address');
+      isValid = false;
     }
+
+    if (passText.isEmpty) {
+      setState(() => _passwordError = 'Please enter your password');
+      isValid = false;
+    } else if (passText.length < 3) {
+      setState(() => _passwordError = 'Password must be at least 3 characters');
+      isValid = false;
+    }
+
+    if (!isValid) return;
 
     setState(() => _isLoading = true);
 
-    final success = await tele.performLogin(
+    final result = await tele.performLogin(
       username: userText,
       password: passText,
       role: _selectedRole,
@@ -56,11 +80,15 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (mounted) {
       setState(() => _isLoading = false);
-      if (!success) {
+      if (result['requiresPhoneInput'] == true) {
+        _showMobileNumberVerificationSheet(context, tele, result['user'] as Map<String, dynamic>?);
+      } else if (result['success'] != true) {
+        final errMsg = result['message'] as String? ?? 'Invalid credentials. User not found in database or incorrect password.';
+        setState(() => _authError = errMsg);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: AppTheme.ink900,
-            content: Text('Authentication failed. Please check credentials.', style: AppTheme.bodyBold(size: 12, color: AppTheme.redMissed)),
+            content: Text(errMsg, style: AppTheme.bodyBold(size: 12, color: AppTheme.redMissed)),
           ),
         );
       }
@@ -270,6 +298,29 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ],
                                 ),
                               ),
+                              if (_authError != null) ...[
+                                const SizedBox(height: 12),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFEF2F2),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: AppTheme.redMissed, width: 1.5),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.error_outline, color: AppTheme.redMissed, size: 18),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          _authError!,
+                                          style: AppTheme.bodyBold(size: 11, color: AppTheme.redMissed),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                               const SizedBox(height: 16),
 
                               // Username Input
@@ -280,8 +331,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                 decoration: BoxDecoration(
                                   color: AppTheme.white,
                                   borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(color: AppTheme.ink900, width: 1.5),
-                                  boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+                                  border: Border.all(color: _usernameError != null ? AppTheme.redMissed : AppTheme.ink900, width: 1.5),
+                                  boxShadow: AppTheme.neoShadowSm(color: _usernameError != null ? AppTheme.redMissed : AppTheme.ink900),
                                 ),
                                 child: TextField(
                                   controller: _usernameCtrl,
@@ -295,6 +346,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                                 ),
                               ),
+                              if (_usernameError != null) ...[
+                                const SizedBox(height: 4),
+                                Text(_usernameError!, style: AppTheme.label(size: 9.5, color: AppTheme.redMissed)),
+                              ],
                               const SizedBox(height: 14),
 
                               // Password Input
@@ -305,8 +360,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                 decoration: BoxDecoration(
                                   color: AppTheme.white,
                                   borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(color: AppTheme.ink900, width: 1.5),
-                                  boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+                                  border: Border.all(color: _passwordError != null ? AppTheme.redMissed : AppTheme.ink900, width: 1.5),
+                                  boxShadow: AppTheme.neoShadowSm(color: _passwordError != null ? AppTheme.redMissed : AppTheme.ink900),
                                 ),
                                 child: TextField(
                                   controller: _passwordCtrl,
@@ -329,6 +384,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                                 ),
                               ),
+                              if (_passwordError != null) ...[
+                                const SizedBox(height: 4),
+                                Text(_passwordError!, style: AppTheme.label(size: 9.5, color: AppTheme.redMissed)),
+                              ],
                               const SizedBox(height: 20),
 
                               // Sign In Button
@@ -386,6 +445,143 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  void _showMobileNumberVerificationSheet(BuildContext context, TeleProvider tele, Map<String, dynamic>? user) {
+    final phoneCtrl = TextEditingController();
+    String? sheetErr;
+    bool isVerifying = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          return Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+            child: Container(
+              padding: const EdgeInsets.all(22),
+              decoration: const BoxDecoration(
+                color: AppTheme.paper,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: AppTheme.muted,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      const Icon(Icons.sim_card_outlined, color: AppTheme.greenDark, size: 24),
+                      const SizedBox(width: 8),
+                      Text(
+                        'VERIFY DEVICE SIM NUMBER',
+                        style: AppTheme.headline(size: 16, color: AppTheme.ink900),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'You logged in as ${user?['email'] ?? 'Caller'}. Please enter your 10-digit mobile SIM number inserted in this phone to complete hardware verification:',
+                    style: AppTheme.body(size: 12, color: AppTheme.ink700),
+                  ),
+                  const SizedBox(height: 16),
+
+                  if (sheetErr != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppTheme.redMissed, width: 1),
+                      ),
+                      child: Text(
+                        sheetErr!,
+                        style: AppTheme.bodyBold(size: 11, color: AppTheme.redMissed),
+                      ),
+                    ),
+                  ],
+
+                  Text('SIM MOBILE NUMBER', style: AppTheme.label(size: 9, color: AppTheme.muted)),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    decoration: BoxDecoration(
+                      color: AppTheme.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppTheme.ink900, width: 1.5),
+                    ),
+                    child: TextField(
+                      controller: phoneCtrl,
+                      keyboardType: TextInputType.phone,
+                      style: AppTheme.mono(size: 14, color: AppTheme.ink900),
+                      decoration: const InputDecoration(
+                        hintText: 'Enter 10-digit SIM number (e.g. 9842399615)...',
+                        border: InputBorder.none,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  NeoButton.accent(
+                    gradient: null,
+                    backgroundColor: AppTheme.orangePill,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    onTap: isVerifying
+                        ? () {}
+                        : () async {
+                            final raw = phoneCtrl.text.trim();
+                            if (raw.isEmpty) {
+                              setSheetState(() => sheetErr = 'Please enter your mobile SIM number.');
+                              return;
+                            }
+                            setSheetState(() {
+                              isVerifying = true;
+                              sheetErr = null;
+                            });
+                            final res = await tele.linkAndVerifySimPhone(
+                              userId: user?['id']?.toString() ?? '',
+                              email: user?['email']?.toString() ?? '',
+                              inputPhone: raw,
+                            );
+                            if (res['success'] == true) {
+                              if (ctx.mounted) Navigator.of(ctx).pop();
+                            } else {
+                              setSheetState(() {
+                                isVerifying = false;
+                                sheetErr = res['message'] as String? ?? 'SIM verification failed.';
+                              });
+                            }
+                          },
+                    child: Center(
+                      child: isVerifying
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(color: AppTheme.white, strokeWidth: 2),
+                            )
+                          : Text('VERIFY & LINK SIM', style: AppTheme.headline(size: 14, color: AppTheme.white)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }

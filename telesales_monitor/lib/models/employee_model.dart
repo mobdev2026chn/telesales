@@ -2,6 +2,7 @@ class EmployeeModel {
   final String id;
   final String name;
   final String phone;
+  final String role;
   final int totalCalls;
   final int connectedCalls;
   final Duration totalTalkTime;
@@ -15,6 +16,7 @@ class EmployeeModel {
     required this.id,
     required this.name,
     required this.phone,
+    this.role = 'caller',
     required this.totalCalls,
     required this.connectedCalls,
     required this.totalTalkTime,

@@ -17,8 +17,8 @@ router.post('/calls/sync', async (req, res) => {
     for (const call of calls) {
       const log = await CallLog.create({
         callerId: callerId || 'caller_1',
-        callerName: callerName || 'Priyanka Panchal',
-        callerPhone: callerPhone || '+91 98250 12340',
+        callerName: callerName || 'Caller Agent',
+        callerPhone: callerPhone || '+91 98250 00000',
         contactName: call.contactName || 'Unknown',
         phoneNumber: call.phoneNumber,
         type: call.type || 'outgoing',

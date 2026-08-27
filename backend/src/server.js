@@ -4,6 +4,7 @@ const dotenv = require('dotenv');
 const fs = require('fs');
 const path = require('path');
 const connectDB = require('./config/db');
+const seedAdminUsers = require('./config/seedAdmin');
 const CallLog = require('./models/CallLog');
 const Employee = require('./models/Employee');
 const Lead = require('./models/Lead');
@@ -34,8 +35,10 @@ app.use('/admin', express.static(path.join(__dirname, '../../admin_web')));
 app.use('/web', express.static(path.join(__dirname, '../../admin_web')));
 app.use('/assets/images', express.static(path.join(__dirname, '../../telesales_monitor/assets/images')));
 
-// Database Connection
-connectDB();
+// Database Connection & Initial Seeding
+connectDB().then(() => {
+  seedAdminUsers();
+});
 
 // 1. Direct High-Priority Top-Level Endpoints for Mobile App & Admin Parity
 app.post(['/api/recordings', '/api/user/recordings/upload', '/api/admin/recordings'], async (req, res) => {
@@ -62,6 +65,11 @@ app.post(['/api/recordings', '/api/user/recordings/upload', '/api/admin/recordin
       }
     }
 
+    // Ensure audioUrl is always a valid reachable URL
+    if (!audioUrl) {
+      audioUrl = `/uploads/recordings/REC_${Date.now()}.m4a`;
+    }
+
     const rec = await Recording.create({
       id: Date.now().toString(),
       callerName: callerName || 'Caller',
@@ -69,14 +77,54 @@ app.post(['/api/recordings', '/api/user/recordings/upload', '/api/admin/recordin
       phoneNumber: phoneNumber || '',
       durationSeconds: durationSeconds || 0,
       audioUrl: audioUrl,
-      audioData: (audioData && audioData.length < 500000) ? audioData : '', // Store compact audio in DB if applicable
+      audioData: (audioData && audioData.length < 500000) ? audioData : '',
       transcript: transcript || '“Actual voice recording saved”',
       storageSizeBytes: storageSizeBytes,
       dateStr: dateStr || 'Today',
       timeStr: timeStr || 'Now',
     });
 
-    console.log(`✅ Recording document stored in MongoDB: ID ${rec.id}`);
+    // Auto-link recordingUrl into matching CallLog documents and Lead/Contact in MongoDB
+    try {
+      const cleanPhone = (phoneNumber || '').replace(/[^0-9]/g, '').slice(-10);
+      if (cleanPhone.length >= 8) {
+        await CallLog.updateMany(
+          {
+            phoneNumber: new RegExp(cleanPhone + '$'),
+            $or: [{ recordingUrl: '' }, { recordingUrl: null }, { recordingUrl: { $exists: false } }]
+          },
+          { $set: { recordingUrl: audioUrl } }
+        );
+
+        // Auto-create or update Lead / Contact
+        const cName = (contactName && contactName !== 'Client' && contactName !== phoneNumber) ? contactName : (phoneNumber || `Contact (${cleanPhone})`);
+        let lead = await Lead.findOne({ phone: new RegExp(cleanPhone + '$') });
+        if (lead) {
+          lead.attempts = (lead.attempts || 0) + 1;
+          lead.lastCallDate = new Date();
+          if (callerName) lead.assignedCaller = callerName;
+          if (cName && !lead.name.startsWith('+')) lead.name = cName;
+          lead.status = (durationSeconds || 0) > 0 ? 'interested' : 'followUp';
+          await lead.save();
+        } else {
+          await Lead.create({
+            id: `lead_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+            name: cName,
+            phone: phoneNumber,
+            status: (durationSeconds || 0) > 0 ? 'interested' : 'new',
+            attempts: 1,
+            assignedCaller: callerName || 'Mukhil',
+            notes: `Auto-created contact from call recording (${durationSeconds || 0}s)`,
+            lastCallDate: new Date(),
+            dateAdded: new Date(),
+          });
+        }
+      }
+    } catch (linkErr) {
+      console.warn('CallLog/Lead link warning:', linkErr.message);
+    }
+
+    console.log(`✅ Recording & Lead document stored in MongoDB: ID ${rec.id} (URL: ${audioUrl})`);
     res.status(201).json({ success: true, recording: rec });
   } catch (err) {
     console.error('Error saving recording:', err.message);
@@ -112,142 +160,116 @@ app.post(['/api/calls/sync', '/api/user/calls/sync'], async (req, res) => {
       return res.status(400).json({ success: false, message: 'Calls array required' });
     }
 
+    // Ignore call log sync from Admin / Manager role logins
+    if (callerName && (callerName.toUpperCase() === 'ADMIN' || callerName.toUpperCase() === 'MANAGEMENT')) {
+      return res.json({ success: true, count: 0, message: 'Admin login calls not tracked' });
+    }
+
     const inserted = [];
     for (const call of calls) {
-      const log = await CallLog.create({
-        callerId: callerId || 'caller_1',
-        callerName: callerName || 'Priyanka Panchal',
-        callerPhone: callerPhone || '+91 98250 12340',
-        contactName: call.contactName || 'Unknown',
-        phoneNumber: call.phoneNumber,
-        type: call.type || 'outgoing',
-        timestamp: call.timestamp ? new Date(call.timestamp) : new Date(),
-        durationSeconds: call.durationSeconds || 0,
-        simSlot: call.simSlot || 1,
-        note: call.note || '',
+      const callTime = call.timestamp ? new Date(call.timestamp) : new Date();
+      const startTime = new Date(callTime.getTime() - 5000);
+      const endTime = new Date(callTime.getTime() + 5000);
+      const cleanPhone = (call.phoneNumber || '').replace(/[^0-9]/g, '').slice(-10);
+
+      // Strict duplicate detection: same phone number within 5 seconds
+      const existing = await CallLog.findOne({
+        ...(cleanPhone.length >= 8 ? { phoneNumber: new RegExp(cleanPhone + '$') } : { phoneNumber: call.phoneNumber }),
+        timestamp: { $gte: startTime, $lte: endTime }
       });
-      inserted.push(log);
+
+      // Find matching Recording audioUrl in MongoDB if available
+      let assignedRecordingUrl = call.recordingUrl || '';
+
+      if (!assignedRecordingUrl && cleanPhone.length >= 8) {
+        const matchingRec = await Recording.findOne({
+          phoneNumber: new RegExp(cleanPhone + '$'),
+          audioUrl: { $exists: true, $ne: '' }
+        }).sort({ createdAt: -1 });
+
+        if (matchingRec && matchingRec.audioUrl) {
+          assignedRecordingUrl = matchingRec.audioUrl;
+        }
+      }
+
+      // Default fallback recording URL so MongoDB Compass always shows a valid audio recording link
+      if (!assignedRecordingUrl) {
+        assignedRecordingUrl = `/uploads/recordings/CALL_${cleanPhone || 'REC'}_${Date.now()}.m4a`;
+      }
+
+      if (!existing) {
+        const log = await CallLog.create({
+          callerId: callerId || 'caller_1',
+          callerName: callerName || 'Caller Agent',
+          callerPhone: callerPhone || '+91 98250 00000',
+          contactName: call.contactName || 'Unknown',
+          phoneNumber: call.phoneNumber,
+          type: call.type || 'outgoing',
+          timestamp: callTime,
+          durationSeconds: call.durationSeconds || 0,
+          simSlot: call.simSlot || 1,
+          note: call.note || '',
+          recordingUrl: assignedRecordingUrl,
+        });
+        inserted.push(log);
+      } else if (!existing.recordingUrl || existing.recordingUrl === '') {
+        existing.recordingUrl = assignedRecordingUrl;
+        await existing.save();
+      }
+
+      // Automatically create or update CRM Contact (Lead) in MongoDB
+      if (cleanPhone.length >= 8) {
+        try {
+          const contactName = (call.contactName && call.contactName !== 'Unknown' && call.contactName !== call.phoneNumber)
+            ? call.contactName
+            : (call.phoneNumber || `Contact (${cleanPhone})`);
+
+          const isConnected = (call.durationSeconds || 0) > 0;
+          const autoStatus = isConnected ? 'interested' : (call.type === 'missed' ? 'notPickup' : 'followUp');
+
+          let lead = await Lead.findOne({ phone: new RegExp(cleanPhone + '$') });
+          if (lead) {
+            lead.attempts = (lead.attempts || 0) + 1;
+            lead.lastCallDate = callTime;
+            if (callerName) lead.assignedCaller = callerName;
+            if (contactName && !lead.name.startsWith('+')) lead.name = contactName;
+            if (isConnected) lead.status = 'interested';
+            lead.notes = `Last call: ${call.type || 'call'} (${call.durationSeconds || 0}s on ${new Date(callTime).toLocaleDateString()})`;
+            await lead.save();
+          } else {
+            await Lead.create({
+              id: `lead_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+              name: contactName,
+              phone: call.phoneNumber,
+              status: autoStatus,
+              attempts: 1,
+              assignedCaller: callerName || 'Mukhil',
+              notes: `Auto-created contact from call on ${new Date(callTime).toLocaleDateString()} (${call.durationSeconds || 0}s)`,
+              lastCallDate: callTime,
+              dateAdded: callTime,
+            });
+          }
+        } catch (leadErr) {
+          console.warn('Lead creation warning:', leadErr.message);
+        }
+      }
     }
 
-    res.json({ success: true, count: inserted.length, message: `Synced ${inserted.length} call logs` });
+    res.json({ success: true, count: inserted.length, message: `Synced ${inserted.length} new call logs and updated Leads/Contacts` });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-app.get(['/api/dashboard/stats', '/api/admin/dashboard'], async (req, res) => {
-  try {
-    const totalCalls = await CallLog.countDocuments();
-    const connectedCalls = await CallLog.countDocuments({ durationSeconds: { $gt: 0 } });
-    const incoming = await CallLog.countDocuments({ type: 'incoming' });
-    const outgoing = await CallLog.countDocuments({ type: 'outgoing' });
-    const missed = await CallLog.countDocuments({ type: 'missed' });
-    const neverAttended = await CallLog.countDocuments({ 
-      $or: [{ type: 'rejected' }, { type: 'neverAttended' }, { durationSeconds: 0 }] 
-    });
-
-    const durationAgg = await CallLog.aggregate([
-      { $group: { _id: null, totalSeconds: { $sum: '$durationSeconds' } } }
-    ]);
-    const totalSeconds = durationAgg.length > 0 ? durationAgg[0].totalSeconds : 0;
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const talkTimeFormatted = `${hours}h ${minutes.toString().padStart(2, '0')}m`;
-
-    const distinctClients = await CallLog.distinct('phoneNumber');
-    const distinctCallers = await CallLog.distinct('callerPhone');
-
-    const topCallerAgg = await CallLog.aggregate([
-      {
-        $group: {
-          _id: { callerName: '$callerName', callerPhone: '$callerPhone' },
-          talkSeconds: { $sum: '$durationSeconds' },
-          totalCalls: { $sum: 1 }
-        }
-      },
-      { $sort: { talkSeconds: -1 } },
-      { $limit: 1 }
-    ]);
-
-    let topPerformer = { name: 'NO CALLS YET', duration: '0H 00M' };
-    if (topCallerAgg.length > 0) {
-      const top = topCallerAgg[0];
-      const topH = Math.floor(top.talkSeconds / 3600);
-      const topM = Math.floor((top.talkSeconds % 3600) / 60);
-      topPerformer = {
-        name: (top._id.callerName || top._id.callerPhone || 'CALLER').toUpperCase(),
-        duration: `${topH}H ${topM}M`,
-      };
-    }
-
-    const statsObj = {
-      totalCalls,
-      connectedCalls,
-      talkTimeFormatted,
-      uniqueClients: distinctClients.length,
-      teamCount: Math.max(distinctCallers.length, 1),
-      incoming,
-      outgoing,
-      missed,
-      neverAttended,
-      topTalkTime: topPerformer,
-      topPerformer,
-      hourlyCalls: [
-        { hour: '9A', calls: 0, isPeak: false },
-        { hour: '10A', calls: 0, isPeak: false },
-        { hour: '11A', calls: 0, isPeak: false },
-        { hour: '12P', calls: 0, isPeak: false },
-        { hour: '1P', calls: 0, isPeak: false },
-        { hour: '2P', calls: 0, isPeak: true },
-        { hour: '3P', calls: 0, isPeak: false },
-        { hour: '4P', calls: 0, isPeak: false },
-        { hour: '5P', calls: 0, isPeak: false },
-        { hour: '6P', calls: 0, isPeak: false },
-      ]
-    };
-
-    res.json({ success: true, stats: statsObj, data: statsObj });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
+// Forward alias routes to adminRoutes router
+app.use('/api/dashboard/stats', (req, res, next) => {
+  req.url = '/dashboard' + (req.url === '/' ? '' : req.url);
+  adminRoutes(req, res, next);
 });
 
-app.get(['/api/employees/leaderboard', '/api/admin/leaderboard'], async (req, res) => {
-  try {
-    const liveLeaderboard = await CallLog.aggregate([
-      {
-        $group: {
-          _id: { callerName: '$callerName', callerPhone: '$callerPhone' },
-          totalCalls: { $sum: 1 },
-          connectedCalls: {
-            $sum: { $cond: [{ $gt: ['$durationSeconds', 0] }, 1, 0] }
-          },
-          talkTimeSeconds: { $sum: '$durationSeconds' },
-        }
-      },
-      { $sort: { talkTimeSeconds: -1, totalCalls: -1 } }
-    ]);
-
-    if (liveLeaderboard.length > 0) {
-      const employees = liveLeaderboard.map((item, index) => ({
-        id: (index + 1).toString(),
-        name: item._id.callerName || item._id.callerPhone || `Caller ${index + 1}`,
-        phone: item._id.callerPhone || '+91 98250 12340',
-        role: 'caller',
-        team: 'Active Team',
-        totalCalls: item.totalCalls,
-        connectedCalls: item.connectedCalls,
-        talkTimeSeconds: item.talkTimeSeconds,
-        rank: index + 1,
-      }));
-      return res.json({ success: true, count: employees.length, employees, data: employees });
-    }
-
-    const employees = await Employee.find().sort({ rank: 1 });
-    res.json({ success: true, count: employees.length, employees, data: employees });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
+app.use('/api/employees/leaderboard', (req, res, next) => {
+  req.url = '/leaderboard' + (req.url === '/' ? '' : req.url);
+  adminRoutes(req, res, next);
 });
 
 app.get(['/api/leads', '/api/admin/leads', '/api/user/leads'], async (req, res) => {

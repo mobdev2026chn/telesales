@@ -10,7 +10,7 @@ const LeadSchema = new mongoose.Schema({
     default: 'new' 
   },
   attempts: { type: Number, default: 0 },
-  assignedCaller: { type: String, default: 'Priyanka Panchal' },
+  assignedCaller: { type: String, default: 'Unassigned' },
   notes: { type: String, default: '' },
   lastCallDate: { type: Date, default: Date.now },
   dateAdded: { type: Date, default: Date.now },
