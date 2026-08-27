@@ -694,7 +694,10 @@
             <div class="square-indicator"></div>
             TELESALES TEAM USERS & SALES AGENTS
           </div>
-          <button class="btn-action" onclick="openAddUserModal()">+ ADD NEW USER</button>
+          <div style="display: flex; gap: 10px;">
+            <button class="btn-action" style="background: #EF4444; color: #FFFFFF;" onclick="handlePurgeAllData()">🗑️ RESET ALL DATA (START FRESH)</button>
+            <button class="btn-action" onclick="openAddUserModal()">+ ADD NEW USER</button>
+          </div>
         </div>
 
         <div class="table-container">
@@ -941,6 +944,24 @@
       localStorage.removeItem('askeva_admin_name');
       document.getElementById('webLoginOverlay').style.display = 'flex';
       document.getElementById('appViewport').style.display = 'none';
+    }
+
+    async function handlePurgeAllData() {
+      if (!confirm('⚠️ WARNING: Are you sure you want to PURGE ALL DATA?\n\nThis will remove all call logs, recordings, leads, and test callers, leaving ONLY the clean Admin account to start freshly.')) {
+        return;
+      }
+      try {
+        const res = await fetch(`${API_BASE}/admin/purge-all-data`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          alert('✓ All test data successfully purged! Clean Admin account is ready.');
+          loadDashboardData();
+        } else {
+          alert('Error: ' + (data.error || data.message));
+        }
+      } catch (e) {
+        alert('Failed to purge data: ' + e.message);
+      }
     }
 
     window.activeTab = 'dashboard';

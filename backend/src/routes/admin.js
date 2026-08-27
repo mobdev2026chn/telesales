@@ -6,6 +6,49 @@ const Lead = require('../models/Lead');
 const Recording = require('../models/Recording');
 const Notification = require('../models/Notification');
 
+// 0. RESET / PURGE ALL TEST DATA (Retains ONLY Admin account)
+router.all('/purge-all-data', async (req, res) => {
+  try {
+    const callRes = await CallLog.deleteMany({});
+    const leadRes = await Lead.deleteMany({});
+    const recRes = await Recording.deleteMany({});
+    const notifRes = await Notification.deleteMany({});
+    const empRes = await Employee.deleteMany({});
+
+    const cleanAdmin = await Employee.create({
+      id: 'admin_1',
+      name: 'Admin',
+      email: 'admin@askeva.com',
+      phone: '+91 98250 00000',
+      password: 'admin123',
+      role: 'admin',
+      team: 'Management',
+      dailyTarget: 150,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    res.json({
+      success: true,
+      message: 'All test data purged successfully. Only clean Admin account remains.',
+      deleted: {
+        calls: callRes.deletedCount,
+        leads: leadRes.deletedCount,
+        recordings: recRes.deletedCount,
+        notifications: notifRes.deletedCount,
+        employees: empRes.deletedCount,
+      },
+      admin: {
+        email: cleanAdmin.email,
+        name: cleanAdmin.name,
+        role: cleanAdmin.role,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Helper: Build query filters for Team-wise, Manager-wise, and Caller-wise telemetry
 async function buildTelemetryQuery(queryParams) {
   const { team, managerId, callerPhone, callerId, callerName } = queryParams;
