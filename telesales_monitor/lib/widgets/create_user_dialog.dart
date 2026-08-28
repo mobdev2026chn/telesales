@@ -260,8 +260,8 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                           ),
                           child: Center(
                             child: Text(
-                              '📞 CALLER',
-                              style: AppTheme.label(size: 10, color: AppTheme.ink900),
+                              '📱 CALLER AGENT',
+                              style: AppTheme.label(size: 9.5, color: AppTheme.ink900),
                             ),
                           ),
                         ),
@@ -280,8 +280,8 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                           ),
                           child: Center(
                             child: Text(
-                              '👔 MANAGER',
-                              style: AppTheme.label(size: 10, color: AppTheme.ink900),
+                              '👔 ADMIN / MANAGER',
+                              style: AppTheme.label(size: 9.5, color: AppTheme.ink900),
                             ),
                           ),
                         ),

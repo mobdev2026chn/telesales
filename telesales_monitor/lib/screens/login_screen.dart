@@ -290,9 +290,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                           ),
                                           child: Center(
                                             child: Text(
-                                              '👔 MANAGER',
+                                              '👔 ADMIN / MANAGER',
                                               style: AppTheme.label(
-                                                size: 10,
+                                                size: 9.5,
                                                 color: _selectedRole == UserRole.manager ? AppTheme.limeYellow : AppTheme.ink900,
                                               ),
                                             ),
@@ -313,7 +313,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                             child: Text(
                                               '📱 CALLER AGENT',
                                               style: AppTheme.label(
-                                                size: 10,
+                                                size: 9.5,
                                                 color: _selectedRole == UserRole.caller ? AppTheme.limeYellow : AppTheme.ink900,
                                               ),
                                             ),
@@ -437,7 +437,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                         )
                                       : Text(
                                           _selectedRole == UserRole.manager
-                                              ? 'SIGN IN AS MANAGER →'
+                                              ? 'SIGN IN AS ADMIN / MANAGER →'
                                               : 'SIGN IN AS CALLER →',
                                           style: AppTheme.label(size: 11.5, color: AppTheme.limeYellow, letterSpacing: 0.14),
                                         ),
