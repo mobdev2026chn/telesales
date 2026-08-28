@@ -1168,7 +1168,7 @@
             <span class="green-square"></span>
             <span>TEAM USERS · SALES AGENTS</span>
           </div>
-          <button id="toggleAddUserBtn" class="btn-action-primary" onclick="toggleAddUserForm()">+ ADD NEW USER</button>
+          <button id="toggleAddUserBtn" class="btn-action-primary" onclick="openAddUserModal()">+ ADD NEW USER</button>
         </div>
 
         <div class="pill-group" style="margin-bottom: 16px;">
@@ -1178,52 +1178,6 @@
           <button class="filter-chip active" onclick="setUserRoleFilter('ALL', this)">ALL USERS</button>
           <button class="filter-chip" onclick="setUserRoleFilter('MANAGER', this)">MANAGERS</button>
           <button class="filter-chip" onclick="setUserRoleFilter('CALLER', this)">CALLERS</button>
-        </div>
-
-        <!-- Inline Add/Edit User Form Box -->
-        <div id="inlineUserFormBox" class="dash-box" style="display: none; margin-bottom: 18px; animation: fadeUp 0.35s ease both;">
-          <div class="dash-box-title" id="inlineFormTitle">ADD NEW USER</div>
-          <form id="inlineUserForm" onsubmit="handleSaveInlineUser(event)">
-            <input type="hidden" id="formUserId" value="" />
-            <div style="display: grid; grid-template-columns: 1.1fr 1.3fr 1fr 0.9fr 0.8fr 1fr 0.7fr auto; gap: 10px; align-items: end;">
-              <div>
-                <div class="form-label">NAME</div>
-                <input type="text" id="formName" class="form-control" placeholder="e.g. Rahul Sharma" required />
-              </div>
-              <div>
-                <div class="form-label">LOGIN EMAIL</div>
-                <input type="email" id="formEmail" class="form-control" placeholder="rahul@askeva.com" required />
-              </div>
-              <div>
-                <div class="form-label">PHONE / SIM</div>
-                <input type="text" id="formPhone" class="form-control" placeholder="+91 98250 12340" required />
-              </div>
-              <div>
-                <div class="form-label">PASSWORD</div>
-                <input type="text" id="formPassword" class="form-control" placeholder="e.g. 123456" value="123456" required />
-              </div>
-              <div>
-                <div class="form-label">ROLE</div>
-                <select id="formRole" class="form-control" style="cursor: pointer;" onchange="onFormRoleChange(this.value)">
-                  <option value="CALLER">CALLER</option>
-                  <option value="MANAGER">MANAGER</option>
-                  <option value="ADMIN">ADMIN</option>
-                </select>
-              </div>
-              <div>
-                <div class="form-label">REPORTS TO</div>
-                <select id="formManager" class="form-control" style="cursor: pointer;">
-                  <!-- Dynamic Managers -->
-                </select>
-              </div>
-              <div>
-                <div class="form-label">TARGET/DAY</div>
-                <input type="number" id="formTarget" class="form-control" value="40" required />
-              </div>
-              <button type="submit" class="btn-action-lime">SAVE USER</button>
-            </div>
-            <div id="formErrorMessage" style="display: none; margin-top: 12px; font-family: var(--font-mono); font-size: 11px; color: var(--danger); font-weight: 700;"></div>
-          </form>
         </div>
 
         <!-- View A: User List Table -->
@@ -1474,6 +1428,102 @@
           <div style="color: var(--text-muted); font-size: 10px;">PEAK HOUR VOLUME</div>
           <div style="font-weight: 700; font-size: 14px; color: var(--ink-900); margin-top: 2px;" id="modalPeakHourText">—</div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= POPUP MODAL: ADD / EDIT USER DIALOG ================= -->
+  <div id="editUserModal" style="display: none; position: fixed; inset: 0; background: rgba(16, 24, 12, 0.65); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 9999; align-items: center; justify-content: center; padding: 20px;">
+    <div class="dash-box" style="width: 100%; max-width: 580px; background: var(--white); border: 2.5px solid var(--ink-900); border-radius: 20px; box-shadow: 8px 8px 0 var(--ink-900); padding: 26px; animation: modalPop 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both;">
+      <!-- Modal Header -->
+      <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid var(--ink-900); padding-bottom: 14px; margin-bottom: 18px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span class="green-square"></span>
+          <span style="font-family: var(--font-display); font-size: 20px; letter-spacing: 0.04em;" id="editModalHeaderTitle">EDIT USER DETAILS</span>
+        </div>
+        <button class="filter-chip" style="padding: 4px 10px; font-size: 11px; font-weight: 700;" onclick="closeEditUserModal()">✕ CLOSE</button>
+      </div>
+
+      <!-- Modal Edit Form -->
+      <form id="editUserModalForm" onsubmit="handleSaveModalUser(event)">
+        <input type="hidden" id="modalUserId" value="" />
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;">
+          <div>
+            <div class="form-label">FULL NAME</div>
+            <input type="text" id="modalUserName" class="form-control" placeholder="e.g. Rahul Sharma" required />
+          </div>
+          <div>
+            <div class="form-label">LOGIN EMAIL</div>
+            <input type="email" id="modalUserEmail" class="form-control" placeholder="rahul@askeva.com" required />
+          </div>
+          <div>
+            <div class="form-label">PHONE / SIM NUMBER</div>
+            <input type="text" id="modalUserPhone" class="form-control" placeholder="+91 98250 12340" required />
+          </div>
+          <div>
+            <div class="form-label">PASSWORD</div>
+            <input type="text" id="modalUserPassword" class="form-control" placeholder="e.g. 123456" required />
+          </div>
+          <div>
+            <div class="form-label">ROLE</div>
+            <select id="modalUserRole" class="form-control" style="cursor: pointer;" onchange="onModalRoleChange(this.value)">
+              <option value="CALLER">CALLER</option>
+              <option value="MANAGER">MANAGER</option>
+              <option value="ADMIN">ADMIN</option>
+            </select>
+          </div>
+          <div>
+            <div class="form-label">REPORTS TO (MANAGER)</div>
+            <select id="modalUserManager" class="form-control" style="cursor: pointer;">
+              <!-- Dynamic Managers -->
+            </select>
+          </div>
+        </div>
+
+        <div style="margin-bottom: 18px;">
+          <div class="form-label">DAILY CALL TARGET</div>
+          <input type="number" id="modalUserTarget" class="form-control" value="40" required />
+        </div>
+
+        <div id="modalUserErrorMsg" style="display: none; margin-bottom: 14px; font-family: var(--font-mono); font-size: 11px; color: var(--danger); font-weight: 700;"></div>
+
+        <!-- Modal Footer Actions -->
+        <div style="display: flex; justify-content: flex-end; gap: 10px; border-top: 1.5px dashed var(--ink-900); padding-top: 16px;">
+          <button type="button" class="filter-chip" style="padding: 8px 18px; font-size: 12px;" onclick="closeEditUserModal()">CANCEL</button>
+          <button type="submit" class="btn-action-lime" style="padding: 8px 20px; font-size: 12px;">💾 SAVE USER</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================= POPUP MODAL: DELETE USER CONFIRMATION DIALOG ================= -->
+  <div id="deleteUserModal" style="display: none; position: fixed; inset: 0; background: rgba(16, 24, 12, 0.65); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 9999; align-items: center; justify-content: center; padding: 20px;">
+    <div class="dash-box" style="width: 100%; max-width: 480px; background: var(--white); border: 2.5px solid var(--danger); border-radius: 20px; box-shadow: 8px 8px 0 var(--ink-900); padding: 24px; animation: modalPop 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both;">
+      <!-- Header -->
+      <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid var(--danger); padding-bottom: 14px; margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="display: inline-block; width: 12px; height: 12px; background: var(--danger); border: 1.5px solid var(--ink-900); transform: rotate(45deg);"></span>
+          <span style="font-family: var(--font-display); font-size: 20px; color: var(--danger); letter-spacing: 0.04em;">CONFIRM USER DELETION</span>
+        </div>
+        <button class="filter-chip" style="padding: 4px 10px; font-size: 11px; font-weight: 700;" onclick="closeDeleteUserModal()">✕</button>
+      </div>
+
+      <!-- Warning Body -->
+      <div style="margin-bottom: 18px;">
+        <div style="font-size: 13.5px; line-height: 1.5; color: var(--ink-900); margin-bottom: 14px;">
+          Are you sure you want to delete this user? Their profile and account credentials will be permanently removed.
+        </div>
+
+        <!-- User Snippet Card -->
+        <div id="deleteModalUserCard" style="background: var(--paper); border: 1.5px solid var(--ink-900); border-radius: 12px; padding: 14px 16px; display: flex; align-items: center; gap: 14px;">
+          <!-- User Details Injected via JS -->
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div style="display: flex; justify-content: flex-end; gap: 10px; border-top: 1.5px dashed var(--ink-900); padding-top: 16px;">
+        <button type="button" class="filter-chip" style="padding: 8px 18px; font-size: 12px;" onclick="closeDeleteUserModal()">CANCEL</button>
+        <button type="button" class="filter-chip" style="background: var(--danger); color: #fff; border-color: var(--danger); padding: 8px 20px; font-size: 12px; font-weight: 700;" onclick="executeDeleteUser()">🗑️ YES, DELETE USER</button>
       </div>
     </div>
   </div>
@@ -2181,18 +2231,52 @@
       document.getElementById('toggleAddUserBtn').innerText = Store.inlineFormOpen ? '× CLOSE FORM' : '+ ADD NEW USER';
       document.getElementById('inlineFormTitle').innerText = 'ADD NEW USER';
       document.getElementById('inlineUserForm').reset();
-      document.getElementById('formUserId').value = '';
-      document.getElementById('formPassword').value = '123456';
-      populateManagerDropdown();
+    let deletingUserId = null;
+
+    function openAddUserModal() {
+      Store.editingUserId = null;
+      document.getElementById('editModalHeaderTitle').innerText = 'ADD NEW USER';
+      document.getElementById('editUserModalForm').reset();
+      document.getElementById('modalUserId').value = '';
+      document.getElementById('modalUserPassword').value = '123456';
+      document.getElementById('modalUserTarget').value = '40';
+      document.getElementById('modalUserErrorMsg').style.display = 'none';
+      populateModalManagerDropdown();
+      const modal = document.getElementById('editUserModal');
+      modal.style.display = 'flex';
     }
 
-    function onFormRoleChange(role) {
-      populateManagerDropdown();
+    function editUser(userId) {
+      const u = Store.users.find(x => x.id === userId);
+      if (!u) return;
+      Store.editingUserId = userId;
+      document.getElementById('editModalHeaderTitle').innerText = 'EDIT USER · ' + u.name.toUpperCase();
+      document.getElementById('modalUserId').value = u.id;
+      document.getElementById('modalUserName').value = u.name;
+      document.getElementById('modalUserEmail').value = u.email;
+      document.getElementById('modalUserPhone').value = u.phone;
+      document.getElementById('modalUserPassword').value = u.password || '123456';
+      document.getElementById('modalUserRole').value = u.role;
+      document.getElementById('modalUserTarget').value = u.target || 40;
+      document.getElementById('modalUserErrorMsg').style.display = 'none';
+      populateModalManagerDropdown();
+      if (u.mgr) document.getElementById('modalUserManager').value = u.mgr;
+      const modal = document.getElementById('editUserModal');
+      modal.style.display = 'flex';
     }
 
-    function populateManagerDropdown() {
-      const role = document.getElementById('formRole').value;
-      const mgrSel = document.getElementById('formManager');
+    function closeEditUserModal() {
+      document.getElementById('editUserModal').style.display = 'none';
+      Store.editingUserId = null;
+    }
+
+    function onModalRoleChange(role) {
+      populateModalManagerDropdown();
+    }
+
+    function populateModalManagerDropdown() {
+      const role = document.getElementById('modalUserRole').value;
+      const mgrSel = document.getElementById('modalUserManager');
       const mgrs = Store.users.filter(u => u.role === 'MANAGER' && u.id !== Store.editingUserId);
 
       if (role === 'ADMIN') {
@@ -2207,39 +2291,20 @@
       }
     }
 
-    function editUser(userId) {
-      const u = Store.users.find(x => x.id === userId);
-      if (!u) return;
-      Store.editingUserId = userId;
-      Store.inlineFormOpen = true;
-      document.getElementById('inlineUserFormBox').style.display = 'block';
-      document.getElementById('toggleAddUserBtn').innerText = '× CLOSE FORM';
-      document.getElementById('inlineFormTitle').innerText = 'EDIT USER · ' + u.name.toUpperCase();
-      document.getElementById('formUserId').value = u.id;
-      document.getElementById('formName').value = u.name;
-      document.getElementById('formEmail').value = u.email;
-      document.getElementById('formPhone').value = u.phone;
-      document.getElementById('formPassword').value = u.password || '123456';
-      document.getElementById('formRole').value = u.role;
-      document.getElementById('formTarget').value = u.target || 40;
-      populateManagerDropdown();
-      if (u.mgr) document.getElementById('formManager').value = u.mgr;
-    }
-
-    async function handleSaveInlineUser(e) {
+    async function handleSaveModalUser(e) {
       e.preventDefault();
-      const id = document.getElementById('formUserId').value;
-      const name = document.getElementById('formName').value.trim();
-      const email = document.getElementById('formEmail').value.trim();
-      const phone = document.getElementById('formPhone').value.trim();
-      const password = document.getElementById('formPassword').value.trim() || '123456';
-      const role = document.getElementById('formRole').value;
-      const mgr = document.getElementById('formManager').value || null;
-      const target = parseInt(document.getElementById('formTarget').value) || 0;
+      const id = document.getElementById('modalUserId').value;
+      const name = document.getElementById('modalUserName').value.trim();
+      const email = document.getElementById('modalUserEmail').value.trim();
+      const phone = document.getElementById('modalUserPhone').value.trim();
+      const password = document.getElementById('modalUserPassword').value.trim() || '123456';
+      const role = document.getElementById('modalUserRole').value;
+      const mgr = document.getElementById('modalUserManager').value || null;
+      const target = parseInt(document.getElementById('modalUserTarget').value) || 0;
 
       if (!name || !email) {
-        document.getElementById('formErrorMessage').innerText = 'NAME AND VALID EMAIL REQUIRED.';
-        document.getElementById('formErrorMessage').style.display = 'block';
+        document.getElementById('modalUserErrorMsg').innerText = 'NAME AND VALID EMAIL REQUIRED.';
+        document.getElementById('modalUserErrorMsg').style.display = 'block';
         return;
       }
 
@@ -2268,7 +2333,7 @@
       } else {
         const newId = 'u' + Date.now();
         Store.users.push({ id: newId, name, email, phone, password, role, mgr, target });
-        showToast('USER ADDED · PASSWORD SAVED');
+        showToast('USER CREATED · PASSWORD SAVED');
 
         try {
           await fetch(`${API_BASE}/admin/users`, {
@@ -2281,8 +2346,49 @@
         }
       }
 
-      toggleAddUserForm();
+      closeEditUserModal();
       renderUserManagement();
+    }
+
+    function askDeleteUser(userId) {
+      const u = Store.users.find(x => x.id === userId);
+      if (!u) return;
+      deletingUserId = userId;
+      const card = document.getElementById('deleteModalUserCard');
+      card.innerHTML = `
+        <div style="width: 44px; height: 44px; border-radius: 999px; background: var(--ink-900); color: var(--lime-400); display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 16px; border: 1.5px solid var(--ink-900);">
+          ${u.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}
+        </div>
+        <div style="flex: 1;">
+          <div style="font-family: var(--font-display); font-size: 16px; display: flex; align-items: center; gap: 8px;">
+            ${u.name}
+            <span class="badge-role-pill ${u.role.toLowerCase()}" style="font-size: 9px; padding: 2px 6px;">${u.role}</span>
+          </div>
+          <div style="font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); margin-top: 2px;">
+            ${u.email} · ${u.phone}
+          </div>
+        </div>
+      `;
+      document.getElementById('deleteUserModal').style.display = 'flex';
+    }
+
+    function closeDeleteUserModal() {
+      document.getElementById('deleteUserModal').style.display = 'none';
+      deletingUserId = null;
+    }
+
+    async function executeDeleteUser() {
+      if (!deletingUserId) return;
+      const userId = deletingUserId;
+      Store.users = Store.users.filter(u => u.id !== userId);
+      showToast('USER DELETED');
+      closeDeleteUserModal();
+      renderUserManagement();
+      try {
+        await fetch(`${API_BASE}/admin/users/${userId}`, { method: 'DELETE' });
+      } catch (e) {
+        console.log('Delete user note:', e);
+      }
     }
 
     function impersonateUser(userId) {
@@ -2292,33 +2398,6 @@
       Store.reviewerId = userId;
       showToast(`LOGGED IN AS ${u.name.toUpperCase()}`);
       switchNavTab('dash');
-    }
-
-    function askDeleteUser(userId) {
-      const row = document.getElementById(`userRow_${userId}`);
-      if (row) {
-        row.querySelector('.normal-actions').style.display = 'none';
-        row.querySelector('.confirm-actions').style.display = 'flex';
-      }
-    }
-
-    function cancelDeleteUser(userId) {
-      const row = document.getElementById(`userRow_${userId}`);
-      if (row) {
-        row.querySelector('.confirm-actions').style.display = 'none';
-        row.querySelector('.normal-actions').style.display = 'flex';
-      }
-    }
-
-    async function confirmDeleteUser(userId) {
-      Store.users = Store.users.filter(u => u.id !== userId);
-      showToast('USER DELETED');
-      renderUserManagement();
-      try {
-        await fetch(`${API_BASE}/admin/users/${userId}`, { method: 'DELETE' });
-      } catch (e) {
-        console.log('Delete user note:', e);
-      }
     }
 
     function askResetAllData() {
@@ -2365,16 +2444,9 @@
             <span style="font-family: var(--font-mono); font-size: 12px; font-weight: 700;">${u.role === 'CALLER' ? `${todayCalls} calls` : '—'}</span>
             <span style="font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--green-600);">● ACTIVE</span>
             <div style="display: flex; gap: 6px; align-items: center;">
-              <div class="normal-actions" style="display: flex; gap: 6px;">
-                <button class="filter-chip" style="background: var(--green-500); padding: 3px 10px; font-size: 9.5px;" onclick="impersonateUser('${u.id}')">LOGIN →</button>
-                <button class="filter-chip" style="background: var(--lime-400); padding: 3px 10px; font-size: 9.5px;" onclick="editUser('${u.id}')">EDIT</button>
-                ${u.role !== 'ADMIN' ? `<button class="filter-chip" style="border-color: var(--danger); color: var(--danger); padding: 3px 10px; font-size: 9.5px;" onclick="askDeleteUser('${u.id}')">DELETE</button>` : ''}
-              </div>
-              <div class="confirm-actions" style="display: none; gap: 4px; align-items: center;">
-                <span style="font-family: var(--font-mono); font-size: 9.5px; font-weight: 700;">SURE?</span>
-                <button class="filter-chip" style="background: var(--danger); color: #fff; padding: 2px 8px; font-size: 9px;" onclick="confirmDeleteUser('${u.id}')">YES</button>
-                <button class="filter-chip" style="padding: 2px 8px; font-size: 9px;" onclick="cancelDeleteUser('${u.id}')">NO</button>
-              </div>
+              <button class="filter-chip" style="background: var(--green-500); padding: 3px 10px; font-size: 9.5px;" onclick="impersonateUser('${u.id}')">LOGIN →</button>
+              <button class="filter-chip" style="background: var(--lime-400); padding: 3px 10px; font-size: 9.5px;" onclick="editUser('${u.id}')">✏️ EDIT</button>
+              ${u.role !== 'ADMIN' ? `<button class="filter-chip" style="border-color: var(--danger); color: var(--danger); padding: 3px 10px; font-size: 9.5px;" onclick="askDeleteUser('${u.id}')">🗑️ DELETE</button>` : ''}
             </div>
           </div>
         `;
