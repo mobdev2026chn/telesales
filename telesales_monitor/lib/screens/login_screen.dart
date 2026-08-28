@@ -5,6 +5,7 @@ import '../widgets/neo_button.dart';
 import '../widgets/ticker_banner.dart';
 import '../providers/tele_provider.dart';
 import '../services/api_service.dart';
+import 'main_shell.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -98,7 +99,16 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() => _isLoading = false);
       if (result['requiresPhoneInput'] == true) {
         _showMobileNumberVerificationSheet(context, tele, result['user'] as Map<String, dynamic>?);
-      } else if (result['success'] != true) {
+      } else if (result['success'] == true) {
+        Navigator.of(context).pushReplacement(
+          PageRouteBuilder(
+            pageBuilder: (context, animation, secondaryAnimation) => const MainShell(),
+            transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+                FadeTransition(opacity: animation, child: child),
+            transitionDuration: const Duration(milliseconds: 300),
+          ),
+        );
+      } else {
         final errMsg = result['message'] as String? ?? 'Invalid credentials. User not found in database or incorrect password.';
         setState(() => _authError = errMsg);
         ScaffoldMessenger.of(context).showSnackBar(
