@@ -7,6 +7,7 @@ import '../../widgets/neo_card.dart';
 import '../../widgets/top_header.dart';
 import '../../widgets/create_user_dialog.dart';
 import '../../providers/tele_provider.dart';
+import '../login_screen.dart';
 
 class MoreScreen extends StatefulWidget {
   final VoidCallback onNavigateToBoard;
@@ -479,6 +480,30 @@ class _MoreScreenState extends State<MoreScreen> {
                   ],
                 ),
               ),
+              const SizedBox(height: 18),
+
+              // Card 5: Logout Action Card
+              GestureDetector(
+                onTap: () => _showMoreLogoutConfirmDialog(context, tele),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    color: AppTheme.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppTheme.redMissed, width: 1.5),
+                    boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.logout_rounded, color: AppTheme.redMissed, size: 18),
+                      const SizedBox(width: 8),
+                      Text('LOGOUT OF ASK EVA', style: AppTheme.headline(size: 13, color: AppTheme.redMissed)),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -515,6 +540,68 @@ class _MoreScreenState extends State<MoreScreen> {
             ),
           ),
       ],
+    );
+  }
+
+  void _showMoreLogoutConfirmDialog(BuildContext context, TeleProvider tele) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppTheme.ink900, width: 2),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: AppTheme.redMissed,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppTheme.ink900, width: 1.5),
+              ),
+              child: const Icon(Icons.logout_rounded, color: AppTheme.white, size: 16),
+            ),
+            const SizedBox(width: 10),
+            Text('LOGOUT', style: AppTheme.headline(size: 18)),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to log out from Ask Eva Telesales?',
+          style: AppTheme.body(size: 13, color: AppTheme.ink900),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text('CANCEL', style: AppTheme.label(size: 11, color: AppTheme.muted)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.redMissed,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: const BorderSide(color: AppTheme.ink900, width: 1.2),
+              ),
+            ),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              tele.purgeUserSession();
+              Navigator.of(context).pushAndRemoveUntil(
+                PageRouteBuilder(
+                  pageBuilder: (context, animation, secondaryAnimation) => const LoginScreen(),
+                  transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+                      FadeTransition(opacity: animation, child: child),
+                  transitionDuration: const Duration(milliseconds: 300),
+                ),
+                (route) => false,
+              );
+            },
+            child: Text('YES, LOGOUT', style: AppTheme.label(size: 11, color: AppTheme.white)),
+          ),
+        ],
+      ),
     );
   }
 }

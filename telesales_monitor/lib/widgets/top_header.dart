@@ -5,6 +5,7 @@ import '../theme/app_theme.dart';
 import 'sim_permission_dialog.dart';
 import 'notifications_sheet.dart';
 import '../providers/tele_provider.dart';
+import '../screens/login_screen.dart';
 
 class TopHeader extends StatelessWidget {
   final String title;
@@ -233,6 +234,15 @@ class TopHeader extends StatelessWidget {
             onPressed: () {
               Navigator.of(ctx).pop();
               tele.purgeUserSession();
+              Navigator.of(context).pushAndRemoveUntil(
+                PageRouteBuilder(
+                  pageBuilder: (context, animation, secondaryAnimation) => const LoginScreen(),
+                  transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+                      FadeTransition(opacity: animation, child: child),
+                  transitionDuration: const Duration(milliseconds: 300),
+                ),
+                (route) => false,
+              );
             },
             child: Text('LOGOUT', style: AppTheme.label(size: 11, color: AppTheme.limeYellow)),
           ),
