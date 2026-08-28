@@ -2224,13 +2224,6 @@
       renderUserManagement();
     }
 
-    function toggleAddUserForm() {
-      Store.inlineFormOpen = !Store.inlineFormOpen;
-      Store.editingUserId = null;
-      document.getElementById('inlineUserFormBox').style.display = Store.inlineFormOpen ? 'block' : 'none';
-      document.getElementById('toggleAddUserBtn').innerText = Store.inlineFormOpen ? '× CLOSE FORM' : '+ ADD NEW USER';
-      document.getElementById('inlineFormTitle').innerText = 'ADD NEW USER';
-      document.getElementById('inlineUserForm').reset();
     let deletingUserId = null;
 
     function openAddUserModal() {
@@ -3125,13 +3118,16 @@
       reader.readAsDataURL(file);
     }
 
-    // Auto fade out splash screen on load
-    window.addEventListener('load', () => {
-      setTimeout(() => {
-        const sp = document.getElementById('webSplashOverlay');
-        if (sp) sp.classList.add('splash-hide');
-      }, 1000);
-    });
+    // Auto fade out splash screen on load with multiple fail-safes
+    function dismissWebSplash() {
+      const sp = document.getElementById('webSplashOverlay');
+      if (sp && !sp.classList.contains('splash-hide')) {
+        sp.classList.add('splash-hide');
+      }
+    }
+    window.addEventListener('DOMContentLoaded', () => setTimeout(dismissWebSplash, 600));
+    window.addEventListener('load', () => setTimeout(dismissWebSplash, 300));
+    setTimeout(dismissWebSplash, 1000); // Guarantees splash dismissal even if file:// or offline
   </script>
 </body>
 </html>
