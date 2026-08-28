@@ -28,34 +28,44 @@ class TopHeader extends StatelessWidget {
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // Title & User Name
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  title.toUpperCase(),
-                  style: AppTheme.headline(size: 26, color: AppTheme.ink900),
+        // Title & User Name (Auto-scaled to prevent overflow)
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title.toUpperCase(),
+                      style: AppTheme.headline(size: 23, color: AppTheme.ink900),
+                    ),
+                    Text(
+                      '.',
+                      style: AppTheme.headline(size: 23, color: AppTheme.greenNeon),
+                    ),
+                  ],
                 ),
-                Text(
-                  '.',
-                  style: AppTheme.headline(size: 26, color: AppTheme.greenNeon),
-                ),
-              ],
-            ),
-            const SizedBox(height: 1),
-            Text(
-              userName.toUpperCase(),
-              style: AppTheme.mono(size: 9, color: AppTheme.muted),
-            ),
-          ],
+              ),
+              const SizedBox(height: 1),
+              Text(
+                userName.toUpperCase(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTheme.mono(size: 8.5, color: AppTheme.muted),
+              ),
+            ],
+          ),
         ),
+        const SizedBox(width: 6),
 
-        // Notification Bell Icon (CALLER ONLY) + SIM Filter Selector Pill
+        // Controls Group (Notifications, SIM Pill, Avatar, Logout)
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -69,8 +79,8 @@ class TopHeader extends StatelessWidget {
                   clipBehavior: Clip.none,
                   children: [
                     Container(
-                      width: 32,
-                      height: 32,
+                      width: 30,
+                      height: 30,
                       decoration: BoxDecoration(
                         color: AppTheme.white,
                         shape: BoxShape.circle,
@@ -79,7 +89,7 @@ class TopHeader extends StatelessWidget {
                       ),
                       child: const Icon(
                         Icons.notifications_outlined,
-                        size: 18,
+                        size: 16,
                         color: AppTheme.ink900,
                       ),
                     ),
@@ -88,17 +98,17 @@ class TopHeader extends StatelessWidget {
                         top: -3,
                         right: -3,
                         child: Container(
-                          padding: const EdgeInsets.all(4),
+                          padding: const EdgeInsets.all(3),
                           decoration: BoxDecoration(
                             color: AppTheme.orangePill,
                             shape: BoxShape.circle,
-                            border: Border.all(color: AppTheme.white, width: 1.5),
+                            border: Border.all(color: AppTheme.white, width: 1.2),
                           ),
-                          constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                          constraints: const BoxConstraints(minWidth: 15, minHeight: 15),
                           child: Center(
                             child: Text(
                               '$unreadCount',
-                              style: AppTheme.label(size: 8, color: AppTheme.white),
+                              style: AppTheme.label(size: 7.5, color: AppTheme.white),
                             ),
                           ),
                         ),
@@ -106,12 +116,12 @@ class TopHeader extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 5),
             ],
 
             // SIM Filter Selector Pill (SIM 1 | SIM 2)
             Container(
-              height: 32,
+              height: 30,
               padding: const EdgeInsets.all(2),
               decoration: BoxDecoration(
                 color: AppTheme.paper,
@@ -127,7 +137,7 @@ class TopHeader extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 5),
 
             // User Profile Photo Avatar
             GestureDetector(
@@ -135,8 +145,8 @@ class TopHeader extends StatelessWidget {
                 tele.setActiveTabIndex(4); // Switch to Profile tab
               },
               child: Container(
-                width: 32,
-                height: 32,
+                width: 30,
+                height: 30,
                 decoration: BoxDecoration(
                   color: AppTheme.limeYellow,
                   shape: BoxShape.circle,
@@ -147,27 +157,27 @@ class TopHeader extends StatelessWidget {
                   child: tele.profilePhotoBase64.isNotEmpty
                       ? Image.memory(
                           base64Decode(tele.profilePhotoBase64.contains(',') ? tele.profilePhotoBase64.split(',').last : tele.profilePhotoBase64),
-                          width: 32,
-                          height: 32,
+                          width: 30,
+                          height: 30,
                           fit: BoxFit.cover,
                         )
                       : Center(
                           child: Text(
                             tele.currentUserName.isNotEmpty ? tele.currentUserName[0].toUpperCase() : '👤',
-                            style: AppTheme.headline(size: 13, color: AppTheme.ink900),
+                            style: AppTheme.headline(size: 12, color: AppTheme.ink900),
                           ),
                         ),
                 ),
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 5),
 
             // Dedicated Round Logout Button
             GestureDetector(
               onTap: () => _showLogoutConfirmDialog(context, tele),
               child: Container(
-                width: 32,
-                height: 32,
+                width: 30,
+                height: 30,
                 decoration: BoxDecoration(
                   color: AppTheme.white,
                   shape: BoxShape.circle,
@@ -177,7 +187,7 @@ class TopHeader extends StatelessWidget {
                 child: const Center(
                   child: Icon(
                     Icons.logout_rounded,
-                    size: 16,
+                    size: 15,
                     color: AppTheme.ink900,
                   ),
                 ),
