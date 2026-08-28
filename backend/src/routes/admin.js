@@ -298,7 +298,8 @@ router.get('/dashboard', async (req, res) => {
   try {
     const managersList = await Employee.find({ role: { $in: ['manager', 'admin'] } }).select('id name email phone role team');
     const distinctTeams = await Employee.distinct('team');
-    const teamsList = ['ALL TEAMS', ...distinctTeams.filter(Boolean)];
+    const validTeams = distinctTeams.filter(t => t && !['BD TEAM - AE', 'BDE', 'Telesales Mumbai'].includes(t));
+    const teamsList = ['ALL TEAMS', ...(validTeams.length > 0 ? validTeams : ['Telesales Team', 'Management'])];
 
     const { employeeQuery, callLogQuery } = await buildTelemetryQuery(req.query);
 

@@ -426,8 +426,14 @@ class TeleProvider extends ChangeNotifier {
         _backendStats = stats;
         if (stats['teams'] != null) {
           final rawTeams = List<String>.from((stats['teams'] as List).map((t) => t.toString()));
-          final filtered = rawTeams.where((t) => t != 'ALL' && t != 'ALL TEAMS').toList();
-          _availableTeams = ['ALL', ...filtered];
+          final filtered = rawTeams.where((t) =>
+            t != 'ALL' &&
+            t != 'ALL TEAMS' &&
+            t != 'BD TEAM - AE' &&
+            t != 'BDE' &&
+            t != 'Telesales Mumbai'
+          ).toList();
+          _availableTeams = ['ALL', ...(filtered.isNotEmpty ? filtered : ['Telesales Team', 'Management'])];
         }
         if (stats['allUsers'] != null) {
           _allUsers = List<Map<String, dynamic>>.from((stats['allUsers'] as List).map((u) => Map<String, dynamic>.from(u)));
