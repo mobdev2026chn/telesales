@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -384,12 +385,20 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   }) {
     ImageProvider? imageProvider;
     if (photoBase64 != null && photoBase64.isNotEmpty) {
-      try {
-        final cleanBase64 = photoBase64.contains(',') ? photoBase64.split(',').last : photoBase64;
-        final bytes = base64Decode(cleanBase64);
-        imageProvider = MemoryImage(bytes);
-      } catch (_) {}
-    } else if (avatarUrl != null && avatarUrl.isNotEmpty) {
+      if (photoBase64.startsWith('/') || photoBase64.contains(':\\')) {
+        final f = File(photoBase64);
+        if (f.existsSync()) {
+          imageProvider = FileImage(f);
+        }
+      } else {
+        try {
+          final cleanBase64 = photoBase64.contains(',') ? photoBase64.split(',').last : photoBase64;
+          final bytes = base64Decode(cleanBase64);
+          imageProvider = MemoryImage(bytes);
+        } catch (_) {}
+      }
+    }
+    if (imageProvider == null && avatarUrl != null && avatarUrl.isNotEmpty) {
       imageProvider = NetworkImage(avatarUrl);
     }
 

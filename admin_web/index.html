@@ -1779,15 +1779,23 @@
         const usersRes = await fetch(`${API_BASE}/admin/users`);
         const usersJson = await usersRes.json();
         if (usersJson.success && usersJson.users && usersJson.users.length > 0) {
-          Store.users = usersJson.users.map(u => ({
-            id: u.id || u._id,
-            name: u.name,
-            email: u.email || `${u.name.toLowerCase().replace(/\s+/g, '')}@askeva.com`,
-            phone: u.phone,
-            role: (u.role || 'CALLER').toUpperCase(),
-            target: u.dailyTarget || (u.role === 'caller' ? 40 : 0),
-            mgr: u.managerId || null
-          }));
+          Store.users = usersJson.users.map(u => {
+            const photo = u.photoBase64 || u.photo || u.profilePhoto || u.avatarUrl || '';
+            if (photo) {
+              Store.photos[u.id || u._id] = photo;
+            }
+            return {
+              id: u.id || u._id,
+              name: u.name,
+              email: u.email || `${u.name.toLowerCase().replace(/\s+/g, '')}@askeva.com`,
+              phone: u.phone,
+              role: (u.role || 'CALLER').toUpperCase(),
+              target: u.dailyTarget || (u.role === 'caller' ? 40 : 0),
+              mgr: u.managerId || null,
+              photoBase64: photo,
+              avatarUrl: u.avatarUrl || ''
+            };
+          });
         }
 
         // 2. Fetch Leads
@@ -2506,7 +2514,10 @@
 
     function getUserAvatarHtml(u, size = 40) {
       if (!u) return '';
-      const photo = Store.photos[u.id] || u.avatarUrl || u.photoBase64;
+      let photo = Store.photos[u.id] || u.avatarUrl || u.photoBase64 || u.photo || u.profilePhoto;
+      if (photo && !photo.startsWith('data:') && !photo.startsWith('http') && !photo.startsWith('/')) {
+        photo = 'data:image/png;base64,' + photo;
+      }
       const initials = (u.name || 'User').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
       if (photo) {
         return `<div style="width: ${size}px; height: ${size}px; border-radius: 999px; border: 1.5px solid var(--ink-900); background-image: url(${photo}); background-size: cover; background-position: center; flex-shrink: 0; box-shadow: 2px 2px 0 var(--ink-900);"></div>`;

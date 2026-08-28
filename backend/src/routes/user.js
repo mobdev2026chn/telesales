@@ -4,6 +4,7 @@ const CallLog = require('../models/CallLog');
 const Lead = require('../models/Lead');
 const Recording = require('../models/Recording');
 const Notification = require('../models/Notification');
+const Employee = require('../models/Employee');
 
 // 1. POST /api/user/calls/sync - Sync device call logs
 router.post('/calls/sync', async (req, res) => {
@@ -215,6 +216,43 @@ router.post(['/contacts/save', '/leads/save-contact'], async (req, res) => {
     );
 
     res.json({ success: true, lead, message: `Contact "${name}" saved successfully!` });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 10. POST /api/user/photo - Update Profile Photo Base64
+router.post('/photo', async (req, res) => {
+  try {
+    const { id, userId, name, phone, email, photoBase64 } = req.body;
+    const query = [];
+    if (id) query.push({ id });
+    if (userId) query.push({ id: userId });
+    if (phone) query.push({ phone });
+    if (email) query.push({ email: email.toLowerCase() });
+    if (name) query.push({ name: new RegExp(`^${name}$`, 'i') });
+
+    if (query.length === 0) {
+      return res.status(400).json({ success: false, message: 'User identifier is required' });
+    }
+
+    const emp = await Employee.findOne({ $or: query });
+    if (!emp) {
+      return res.status(404).json({ success: false, message: 'Employee not found' });
+    }
+
+    emp.photoBase64 = photoBase64 || '';
+    await emp.save();
+
+    res.json({
+      success: true,
+      message: 'Profile photo updated successfully',
+      employee: {
+        id: emp.id,
+        name: emp.name,
+        photoBase64: emp.photoBase64,
+      }
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

@@ -15,6 +15,8 @@ const EmployeeSchema = new mongoose.Schema({
   dailyTarget: { type: Number, default: 100 },
   managerId: { type: String, default: '' },
   managerName: { type: String, default: '' },
+  photoBase64: { type: String, default: '' },
+  avatarUrl: { type: String, default: '' },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Employee', EmployeeSchema);
