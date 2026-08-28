@@ -64,6 +64,7 @@ class TeleProvider extends ChangeNotifier {
   bool _setupCompleted = false;
   int _activeTabIndex = 1;
   DateTime? _loginSessionTimestamp;
+  final Completer<void> _initCompleter = Completer<void>();
 
   // Real Dynamic SIM Detection
   List<SimCardInfo> _detectedSims = [];
@@ -74,6 +75,7 @@ class TeleProvider extends ChangeNotifier {
   UserRole get currentRole => _currentRole;
   bool get isLoggedIn => _isLoggedIn;
   bool get setupCompleted => _setupCompleted;
+  Future<void> get initializationDone => _initCompleter.future;
   int get activeTabIndex => _activeTabIndex;
   DateTime? get loginSessionTimestamp => _loginSessionTimestamp;
   List<SimCardInfo> get detectedSims => _detectedSims;
@@ -240,9 +242,13 @@ class TeleProvider extends ChangeNotifier {
           decoded.forEach((k, v) => _leadNotes[k] = v.toString());
         } catch (_) {}
       }
-      notifyListeners();
     } catch (e) {
       debugPrint('Error loading saved preferences: $e');
+    } finally {
+      if (!_initCompleter.isCompleted) {
+        _initCompleter.complete();
+      }
+      notifyListeners();
     }
     await fetchDeviceSims();
     await fetchDeviceCallLogs();
@@ -265,7 +271,7 @@ class TeleProvider extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('is_logged_in', _isLoggedIn);
-      await prefs.setBool('setup_completed', _setupCompleted || true);
+      await prefs.setBool('setup_completed', _setupCompleted);
       await prefs.setString('auth_token', _authToken);
       await prefs.setString('verified_tracking_number', _verifiedTrackingNumber);
       await prefs.setString('caller_name', _callerName);

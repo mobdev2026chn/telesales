@@ -7,6 +7,7 @@ import '../../widgets/neo_button.dart';
 import '../../providers/tele_provider.dart';
 import '../../models/call_log_model.dart';
 import '../login_screen.dart';
+import '../main_shell.dart';
 
 class CallyzerSetupFlow extends StatefulWidget {
   const CallyzerSetupFlow({super.key});
@@ -140,7 +141,17 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
                     backgroundColor: AppTheme.greenNeon,
                     shadowColor: AppTheme.ink900,
                     padding: const EdgeInsets.symmetric(vertical: 12),
-                    onTap: () => Navigator.pop(ctx),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      Navigator.of(context).pushReplacement(
+                        PageRouteBuilder(
+                          pageBuilder: (context, animation, secondaryAnimation) => const MainShell(),
+                          transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+                              FadeTransition(opacity: animation, child: child),
+                          transitionDuration: const Duration(milliseconds: 300),
+                        ),
+                      );
+                    },
                     child: Center(
                       child: Text(
                         'Got it !',

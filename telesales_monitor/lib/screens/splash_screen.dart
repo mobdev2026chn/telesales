@@ -37,28 +37,37 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
     _animCtrl.forward();
 
-    Timer(const Duration(milliseconds: 1800), () {
-      if (mounted) {
-        final tele = Provider.of<TeleProvider>(context, listen: false);
-        Widget nextScreen;
-        if (!tele.setupCompleted) {
-          nextScreen = const CallyzerSetupFlow();
-        } else if (tele.isLoggedIn) {
-          nextScreen = const MainShell();
-        } else {
-          nextScreen = const LoginScreen();
-        }
+    _navigateNext();
+  }
 
-        Navigator.of(context).pushReplacement(
-          PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) => nextScreen,
-            transitionsBuilder: (context, animation, secondaryAnimation, child) =>
-                FadeTransition(opacity: animation, child: child),
-            transitionDuration: const Duration(milliseconds: 400),
-          ),
-        );
+  Future<void> _navigateNext() async {
+    final tele = Provider.of<TeleProvider>(context, listen: false);
+    // Wait for saved preferences (login state, setupCompleted) to load from device disk
+    await tele.initializationDone;
+    // Ensure the splash animation finishes smoothly
+    await Future.delayed(const Duration(milliseconds: 1400));
+
+    if (!mounted) return;
+
+    Widget nextScreen;
+    if (tele.setupCompleted) {
+      if (tele.isLoggedIn) {
+        nextScreen = const MainShell();
+      } else {
+        nextScreen = const LoginScreen();
       }
-    });
+    } else {
+      nextScreen = const CallyzerSetupFlow();
+    }
+
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => nextScreen,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+            FadeTransition(opacity: animation, child: child),
+        transitionDuration: const Duration(milliseconds: 400),
+      ),
+    );
   }
 
   @override
