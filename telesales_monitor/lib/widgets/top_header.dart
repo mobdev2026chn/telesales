@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
@@ -123,6 +124,39 @@ class TopHeader extends StatelessWidget {
                   _buildPillItem(context, 'SIM 1', 1),
                   _buildPillItem(context, 'SIM 2', 2),
                 ],
+              ),
+            ),
+            const SizedBox(width: 8),
+
+            // User Profile Photo Avatar
+            GestureDetector(
+              onTap: () {
+                tele.setActiveTabIndex(4); // Switch to Profile tab
+              },
+              child: Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: AppTheme.limeYellow,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppTheme.ink900, width: 1.5),
+                  boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+                ),
+                child: ClipOval(
+                  child: tele.profilePhotoBase64.isNotEmpty
+                      ? Image.memory(
+                          base64Decode(tele.profilePhotoBase64.contains(',') ? tele.profilePhotoBase64.split(',').last : tele.profilePhotoBase64),
+                          width: 32,
+                          height: 32,
+                          fit: BoxFit.cover,
+                        )
+                      : Center(
+                          child: Text(
+                            tele.currentUserName.isNotEmpty ? tele.currentUserName[0].toUpperCase() : '👤',
+                            style: AppTheme.headline(size: 13, color: AppTheme.ink900),
+                          ),
+                        ),
+                ),
               ),
             ),
             const SizedBox(width: 8),

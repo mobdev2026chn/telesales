@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/neo_card.dart';
 import '../../widgets/top_header.dart';
@@ -19,13 +20,31 @@ class CallerHistoryScreen extends StatefulWidget {
 
 class _CallerHistoryScreenState extends State<CallerHistoryScreen> {
   int _selectedFilterTab = 1; // 0 = ALL CALLS, 1 = UNIQUE, 2 = FILTER
+  final TextEditingController _searchCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final tele = Provider.of<TeleProvider>(context);
 
     final callerName = tele.callerName.isNotEmpty ? tele.callerName.toUpperCase() : 'CALLER AGENT';
-    final activeLogs = tele.filteredCallLogs;
+    final query = _searchCtrl.text.trim().toLowerCase();
+    final cleanDigits = query.replaceAll(RegExp(r'[^0-9]'), '');
+
+    final allLogs = tele.filteredCallLogs;
+    final activeLogs = query.isEmpty
+        ? allLogs
+        : allLogs.where((c) {
+            final nameMatch = c.contactName.toLowerCase().contains(query);
+            final phoneMatch = cleanDigits.isNotEmpty && c.phoneNumber.replaceAll(RegExp(r'[^0-9]'), '').contains(cleanDigits);
+            final rawPhone = c.phoneNumber.toLowerCase().contains(query);
+            return nameMatch || phoneMatch || rawPhone;
+          }).toList();
 
     // Grouping call logs by phone number for Unique View
     final Map<String, List<CallLogModel>> groupedByPhone = {};
@@ -115,7 +134,39 @@ class _CallerHistoryScreenState extends State<CallerHistoryScreen> {
                 userName: callerName,
                 selectedSimIndex: 1,
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
+
+              // Search Bar
+              Container(
+                decoration: BoxDecoration(
+                  color: AppTheme.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppTheme.ink900, width: 1.5),
+                  boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+                ),
+                child: TextField(
+                  controller: _searchCtrl,
+                  onChanged: (_) => setState(() {}),
+                  style: AppTheme.bodyBold(size: 13, color: AppTheme.ink900),
+                  decoration: InputDecoration(
+                    hintText: 'Search calls by name or phone...',
+                    hintStyle: AppTheme.body(size: 12, color: AppTheme.muted),
+                    prefixIcon: const Icon(Icons.search_rounded, size: 20, color: AppTheme.ink900),
+                    suffixIcon: _searchCtrl.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.close_rounded, size: 18, color: AppTheme.ink900),
+                            onPressed: () {
+                              _searchCtrl.clear();
+                              setState(() {});
+                            },
+                          )
+                        : null,
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
 
               // Filter Tabs (ALL CALLS | UNIQUE | FILTER)
               Row(
@@ -207,135 +258,302 @@ class _CallerHistoryScreenState extends State<CallerHistoryScreen> {
               const SizedBox(height: 14),
 
               // Call History Items List
-              if (displayItems.isEmpty) ...[
-                Padding(
-                  padding: const EdgeInsets.all(40),
-                  child: Center(
-                    child: Column(
-                      children: [
-                        const Icon(Icons.phone_missed, size: 44, color: AppTheme.muted),
-                        const SizedBox(height: 10),
-                        Text('NO LOGGED CALLS YET', style: AppTheme.headline(size: 18)),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Make or receive phone calls to view call history.',
-                          style: AppTheme.body(size: 12, color: AppTheme.muted),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ] else ...[
-                ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: displayItems.length,
-                  separatorBuilder: (ctx, i) => const SizedBox(height: 10),
-                  itemBuilder: (ctx, i) {
-                    final item = displayItems[i];
-                    final name = item['name'] as String;
-                    final phone = item['phone'] as String;
-                    final badge = item['badge'] as String;
-                    final totalTime = item['totalTime'] as String;
-                    final badgeStyle = item['badgeStyle'] as String;
-
-                    final isLime = badgeStyle == 'lime';
-
-                    final cleanName = name.replaceAll(RegExp(r'[\s+\-()]'), '');
-                    final cleanPhone = phone.replaceAll(RegExp(r'[\s+\-()]'), '');
-                    final isUnsaved = name.trim().isEmpty ||
-                        name == 'Unknown' ||
-                        name == 'Client' ||
-                        name == 'Unsaved' ||
-                        cleanName == cleanPhone ||
-                        cleanName.endsWith(cleanPhone) ||
-                        cleanPhone.endsWith(cleanName) ||
-                        RegExp(r'^\d+$').hasMatch(cleanName);
-
-                    return NeoCard(
-                      backgroundColor: AppTheme.white,
-                      shadowColor: AppTheme.ink900,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                      onTap: () => ContactHistorySheet.show(context, item),
+              if (_selectedFilterTab == 0) ...[
+                // ALL CALLS: Display every call individually one-by-one chronologically
+                if (activeLogs.isEmpty) ...[
+                  Padding(
+                    padding: const EdgeInsets.all(40),
+                    child: Center(
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Row(
-                                  children: [
-                                    Flexible(
-                                      child: Text(
-                                        name,
-                                        style: AppTheme.bodyBold(size: 14, color: AppTheme.ink900),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    GestureDetector(
-                                      onTap: () => SaveContactDialog.show(context, phone, initialName: isUnsaved ? null : name),
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                        decoration: BoxDecoration(
-                                          color: isUnsaved ? AppTheme.limeYellow : AppTheme.paper,
-                                          borderRadius: BorderRadius.circular(6),
-                                          border: Border.all(color: AppTheme.ink900, width: 1),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                              isUnsaved ? Icons.person_add_alt_1_rounded : Icons.edit_note_rounded,
-                                              size: 12,
-                                              color: AppTheme.ink900,
-                                            ),
-                                            const SizedBox(width: 3),
-                                            Text(
-                                              isUnsaved ? '+ SAVE' : 'EDIT',
-                                              style: AppTheme.label(size: 8, color: AppTheme.ink900),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: isLime ? AppTheme.greenGrass : AppTheme.white,
-                                  borderRadius: BorderRadius.circular(999),
-                                  border: Border.all(color: AppTheme.ink900, width: 1),
-                                ),
-                                child: Text(
-                                  badge,
-                                  style: AppTheme.label(size: 8.5, color: AppTheme.ink900),
-                                ),
-                              ),
-                            ],
-                          ),
+                          const Icon(Icons.phone_missed, size: 44, color: AppTheme.muted),
+                          const SizedBox(height: 10),
+                          Text('NO LOGGED CALLS YET', style: AppTheme.headline(size: 18)),
                           const SizedBox(height: 4),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                phone,
-                                style: AppTheme.mono(size: 11, color: AppTheme.ink700),
-                              ),
-                              Text(
-                                totalTime,
-                                style: AppTheme.mono(size: 10, color: AppTheme.muted),
-                              ),
-                            ],
+                          Text(
+                            'Make or receive phone calls to view call history.',
+                            style: AppTheme.body(size: 12, color: AppTheme.muted),
                           ),
                         ],
                       ),
-                    );
-                  },
-                ),
+                    ),
+                  ),
+                ] else ...[
+                  ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: activeLogs.length,
+                    separatorBuilder: (ctx, i) => const SizedBox(height: 10),
+                    itemBuilder: (ctx, i) {
+                      final c = activeLogs[i];
+                      final name = c.contactName;
+                      final phone = c.phoneNumber;
+                      final isConnected = c.duration.inSeconds > 0;
+                      final typeLabel = c.type == CallType.incoming
+                          ? 'INCOMING'
+                          : (c.type == CallType.outgoing
+                              ? 'OUTGOING'
+                              : (c.type == CallType.missed ? 'MISSED' : 'REJECTED'));
+                      final typeBg = c.type == CallType.incoming
+                          ? AppTheme.greenNeon
+                          : (c.type == CallType.outgoing ? AppTheme.ink900 : AppTheme.orangePill);
+                      final typeColor = c.type == CallType.outgoing ? AppTheme.limeYellow : AppTheme.ink900;
+                      final timeStr = DateFormat('d MMM · hh:mm a').format(c.timestamp);
+
+                      final cleanName = name.replaceAll(RegExp(r'[\s+\-()]'), '');
+                      final cleanPhone = phone.replaceAll(RegExp(r'[\s+\-()]'), '');
+                      final isUnsaved = name.trim().isEmpty ||
+                          name == 'Unknown' ||
+                          name == 'Client' ||
+                          name == 'Unsaved' ||
+                          cleanName == cleanPhone ||
+                          cleanName.endsWith(cleanPhone) ||
+                          cleanPhone.endsWith(cleanName) ||
+                          RegExp(r'^\d+$').hasMatch(cleanName);
+
+                      return NeoCard(
+                        backgroundColor: AppTheme.white,
+                        shadowColor: AppTheme.ink900,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        onTap: () {
+                          ContactHistorySheet.show(context, {
+                            'name': name != 'Unknown' ? name : phone,
+                            'phone': phone,
+                            'badge': typeLabel,
+                            'totalTime': c.durationFormatted,
+                            'badgeStyle': 'lime',
+                            'rawLogs': [c],
+                          });
+                        },
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Row(
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          name != 'Unknown' ? name : phone,
+                                          style: AppTheme.bodyBold(size: 14, color: AppTheme.ink900),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      GestureDetector(
+                                        onTap: () => SaveContactDialog.show(context, phone, initialName: isUnsaved ? null : name),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: isUnsaved ? AppTheme.limeYellow : AppTheme.paper,
+                                            borderRadius: BorderRadius.circular(6),
+                                            border: Border.all(color: AppTheme.ink900, width: 1),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                isUnsaved ? Icons.person_add_alt_1_rounded : Icons.edit_note_rounded,
+                                                size: 12,
+                                                color: AppTheme.ink900,
+                                              ),
+                                              const SizedBox(width: 3),
+                                              Text(
+                                                isUnsaved ? '+ LEAD' : 'EDIT',
+                                                style: AppTheme.label(size: 8, color: AppTheme.ink900),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: typeBg,
+                                    borderRadius: BorderRadius.circular(999),
+                                    border: Border.all(color: AppTheme.ink900, width: 1),
+                                  ),
+                                  child: Text(
+                                    typeLabel,
+                                    style: AppTheme.label(size: 8.5, color: typeColor),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  phone,
+                                  style: AppTheme.mono(size: 11, color: AppTheme.ink700),
+                                ),
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.paper,
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(color: AppTheme.ink900, width: 0.8),
+                                      ),
+                                      child: Text(
+                                        'SIM ${c.simSlot}',
+                                        style: AppTheme.mono(size: 8.5, color: AppTheme.ink900),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      '$timeStr · ${c.durationFormatted}',
+                                      style: AppTheme.mono(size: 10, color: isConnected ? AppTheme.greenDark : AppTheme.muted),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ] else ...[
+                // UNIQUE CONTACTS GROUPED VIEW
+                if (displayItems.isEmpty) ...[
+                  Padding(
+                    padding: const EdgeInsets.all(40),
+                    child: Center(
+                      child: Column(
+                        children: [
+                          const Icon(Icons.phone_missed, size: 44, color: AppTheme.muted),
+                          const SizedBox(height: 10),
+                          Text('NO UNIQUE NUMBERS', style: AppTheme.headline(size: 18)),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Logged calls grouped by caller will appear here.',
+                            style: AppTheme.body(size: 12, color: AppTheme.muted),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ] else ...[
+                  ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: displayItems.length,
+                    separatorBuilder: (ctx, i) => const SizedBox(height: 10),
+                    itemBuilder: (ctx, i) {
+                      final item = displayItems[i];
+                      final name = item['name'] as String;
+                      final phone = item['phone'] as String;
+                      final badge = item['badge'] as String;
+                      final totalTime = item['totalTime'] as String;
+                      final badgeStyle = item['badgeStyle'] as String;
+
+                      final isLime = badgeStyle == 'lime';
+
+                      final cleanName = name.replaceAll(RegExp(r'[\s+\-()]'), '');
+                      final cleanPhone = phone.replaceAll(RegExp(r'[\s+\-()]'), '');
+                      final isUnsaved = name.trim().isEmpty ||
+                          name == 'Unknown' ||
+                          name == 'Client' ||
+                          name == 'Unsaved' ||
+                          cleanName == cleanPhone ||
+                          cleanName.endsWith(cleanPhone) ||
+                          cleanPhone.endsWith(cleanName) ||
+                          RegExp(r'^\d+$').hasMatch(cleanName);
+
+                      return NeoCard(
+                        backgroundColor: AppTheme.white,
+                        shadowColor: AppTheme.ink900,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        onTap: () => ContactHistorySheet.show(context, item),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Row(
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          name,
+                                          style: AppTheme.bodyBold(size: 14, color: AppTheme.ink900),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      GestureDetector(
+                                        onTap: () => SaveContactDialog.show(context, phone, initialName: isUnsaved ? null : name),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: isUnsaved ? AppTheme.limeYellow : AppTheme.paper,
+                                            borderRadius: BorderRadius.circular(6),
+                                            border: Border.all(color: AppTheme.ink900, width: 1),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                isUnsaved ? Icons.person_add_alt_1_rounded : Icons.edit_note_rounded,
+                                                size: 12,
+                                                color: AppTheme.ink900,
+                                              ),
+                                              const SizedBox(width: 3),
+                                              Text(
+                                                isUnsaved ? '+ LEAD' : 'EDIT',
+                                                style: AppTheme.label(size: 8, color: AppTheme.ink900),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: isLime ? AppTheme.greenGrass : AppTheme.white,
+                                    borderRadius: BorderRadius.circular(999),
+                                    border: Border.all(color: AppTheme.ink900, width: 1),
+                                  ),
+                                  child: Text(
+                                    badge,
+                                    style: AppTheme.label(size: 8.5, color: AppTheme.ink900),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  phone,
+                                  style: AppTheme.mono(size: 11, color: AppTheme.ink700),
+                                ),
+                                Text(
+                                  totalTime,
+                                  style: AppTheme.mono(size: 10, color: AppTheme.muted),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ],
               ],
             ],
           ),

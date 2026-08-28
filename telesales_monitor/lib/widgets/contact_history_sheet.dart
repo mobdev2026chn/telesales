@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../theme/app_theme.dart';
 import 'neo_card.dart';
 import 'neo_button.dart';
@@ -20,7 +21,7 @@ class ContactHistorySheet extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => ContactHistorySheet(contactData: contactData),
+      builder: (_) => ContactHistorySheet(contactData: contactData),
     );
   }
 
@@ -51,7 +52,7 @@ class ContactHistorySheet extends StatelessWidget {
 
         historyEvents.add({
           'type': typeStr,
-          'time': '${c.timestamp.hour}:${c.timestamp.minute.toString().padLeft(2, '0')}',
+          'time': DateFormat('d MMM · hh:mm a').format(c.timestamp),
           'duration': c.duration.inSeconds > 0 ? c.durationFormatted : '0s',
           'icon': iconData,
         });

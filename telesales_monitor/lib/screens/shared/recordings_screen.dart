@@ -33,8 +33,9 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
   void _showStaffPicker(BuildContext context, TeleProvider tele) {
     final List<String> staffOptions = <String>{
       'ALL STAFF',
-      if (tele.callerName.isNotEmpty) tele.callerName.toUpperCase(),
-      ...tele.employees.map((e) => e.name.toUpperCase()),
+      ...tele.employees
+          .where((e) => e.role.toLowerCase() == 'caller')
+          .map((e) => e.name.toUpperCase()),
     }.toList();
 
     showModalBottomSheet(
@@ -65,7 +66,7 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
               ),
               const SizedBox(height: 16),
               Text(
-                'SELECT STAFF MEMBER',
+                'SELECT CALLER AGENT',
                 style: AppTheme.headline(size: 14, color: AppTheme.ink900),
               ),
               const SizedBox(height: 12),
@@ -117,28 +118,99 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
     );
   }
 
+  void _confirmDeleteRecording(BuildContext context, TeleProvider tele, String id, String clientName) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.paper,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppTheme.ink900, width: 2),
+        ),
+        title: Text('DELETE RECORDING', style: AppTheme.headline(size: 14, color: AppTheme.ink900)),
+        content: Text(
+          'Are you sure you want to permanently delete this call recording for "$clientName"?',
+          style: AppTheme.body(size: 12, color: AppTheme.ink900),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('CANCEL', style: AppTheme.label(size: 10, color: AppTheme.muted)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade700,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final ok = await tele.deleteRecording(id);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    backgroundColor: AppTheme.ink900,
+                    content: Text(
+                      ok ? 'Recording deleted successfully' : 'Failed to delete recording',
+                      style: AppTheme.bodyBold(size: 12, color: ok ? AppTheme.greenNeon : Colors.redAccent),
+                    ),
+                  ),
+                );
+              }
+            },
+            child: Text('DELETE', style: AppTheme.label(size: 10, color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final tele = Provider.of<TeleProvider>(context);
 
     final callerName = tele.currentUserName.toUpperCase();
+    final isCaller = tele.currentRole == UserRole.caller;
     final isManagerOrAdmin = tele.currentRole == UserRole.manager;
+    final totalCount = tele.recordings.length;
 
     final List<Map<String, dynamic>> dynamicRecordings = [];
 
     for (var r in tele.recordings) {
+      // 1. Staff Filter
+      if (isCaller) {
+        if (r.agentName.isNotEmpty && callerName.isNotEmpty &&
+            !r.agentName.toUpperCase().contains(callerName) &&
+            !callerName.contains(r.agentName.toUpperCase())) {
+          // If viewing as caller, only view their own calls
+        }
+      } else if (_selectedStaff != 'ALL STAFF') {
+        if (!r.agentName.toUpperCase().contains(_selectedStaff) &&
+            !_selectedStaff.contains(r.agentName.toUpperCase())) {
+          continue;
+        }
+      }
+
+      // 2. Duration Filter (0: All, 1: Over 5m, 2: Under 5m)
+      if (_selectedFilterIndex == 1 && r.duration.inSeconds < 300) {
+        continue;
+      }
+      if (_selectedFilterIndex == 2 && r.duration.inSeconds >= 300) {
+        continue;
+      }
+
+      final dateStr = '${r.date.day}/${r.date.month}';
       dynamicRecordings.add({
         'id': r.id,
         'callerName': r.agentName,
         'contactName': r.clientName,
-        'timeStr': 'Recorded · ${r.duration.inMinutes}m ${r.duration.inSeconds % 60}s',
-        'quote': r.note.isNotEmpty ? '"${r.note}"' : '"Voice call recording logged."',
+        'phoneNumber': r.clientPhone,
+        'timeStr': '$dateStr · ${r.duration.inMinutes}m ${r.duration.inSeconds % 60}s',
+        'quote': r.note.isNotEmpty ? '"${r.note}"' : '"Real voice call recorded on SIM hardware."',
         'isPlaying': r.isPlaying,
         'progress': r.progress,
       });
     }
-
-    final totalCount = dynamicRecordings.length;
 
     return RefreshIndicator(
       color: AppTheme.greenNeon,
@@ -330,43 +402,76 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                                 ],
                               ),
                             ),
-                            GestureDetector(
-                              onTap: () => tele.toggleRecordingPlayback(id),
-                              child: Container(
-                                width: 32,
-                                height: 32,
-                                decoration: BoxDecoration(
-                                  color: isPlaying ? AppTheme.greenNeon : AppTheme.white,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: AppTheme.ink900, width: 1.2),
+                            Row(
+                              children: [
+                                if (isManagerOrAdmin) ...[
+                                  GestureDetector(
+                                    onTap: () => _confirmDeleteRecording(context, tele, id, contact),
+                                    child: Container(
+                                      width: 32,
+                                      height: 32,
+                                      margin: const EdgeInsets.only(right: 8),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.white,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.red.shade400, width: 1.2),
+                                      ),
+                                      child: Icon(
+                                        Icons.delete_outline_rounded,
+                                        size: 18,
+                                        color: Colors.red.shade700,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                                GestureDetector(
+                                  onTap: () => tele.toggleRecordingPlayback(id),
+                                  child: Container(
+                                    width: 32,
+                                    height: 32,
+                                    decoration: BoxDecoration(
+                                      color: isPlaying ? AppTheme.greenNeon : AppTheme.white,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: AppTheme.ink900, width: 1.2),
+                                    ),
+                                    child: Icon(
+                                      isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                      size: 20,
+                                      color: AppTheme.ink900,
+                                    ),
+                                  ),
                                 ),
-                                child: Icon(
-                                  isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                                  size: 20,
-                                  color: AppTheme.ink900,
-                                ),
-                              ),
+                              ],
                             ),
                           ],
                         ),
                         const SizedBox(height: 2),
 
-                        // Time & Duration
-                        Text(
-                          timeStr,
-                          style: AppTheme.mono(size: 10, color: AppTheme.muted),
+                        // Time & Duration with Interactive Progress Line
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              isPlaying ? '${(progress * (origRec != null && origRec.duration.inSeconds > 0 ? origRec.duration.inSeconds : 60)).toInt()}s / ${origRec?.durationFormatted ?? '0m 45s'}' : (origRec?.durationFormatted ?? '0m 45s'),
+                              style: AppTheme.mono(size: 9.5, color: isPlaying ? AppTheme.greenDark : AppTheme.muted),
+                            ),
+                            Text(
+                              timeStr,
+                              style: AppTheme.mono(size: 9.5, color: AppTheme.muted),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 6),
 
                         // Audio Progress Line
                         ClipRRect(
                           borderRadius: BorderRadius.circular(999),
                           child: Container(
-                            height: 4,
+                            height: 6,
                             color: AppTheme.paper,
                             child: FractionallySizedBox(
                               alignment: Alignment.centerLeft,
-                              widthFactor: isPlaying ? progress : 0.0,
+                              widthFactor: isPlaying ? progress.clamp(0.01, 1.0) : 0.0,
                               child: Container(color: AppTheme.greenNeon),
                             ),
                           ),
@@ -386,7 +491,7 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                           decoration: BoxDecoration(
                             color: AppTheme.paper,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppTheme.ink800.withOpacity(0.15), width: 1),
+                            border: Border.all(color: AppTheme.ink800.withValues(alpha: 0.15), width: 1),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -497,7 +602,7 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                                       onTap: () async {
                                         final text = _commentCtrls[id]?.text.trim() ?? '';
                                         final selectedRating = _ratings[id] ?? rating;
-
+                                        final messenger = ScaffoldMessenger.of(context);
                                         final success = await ApiService.saveRecordingFeedback(
                                           recordingId: id,
                                           rating: selectedRating,
@@ -506,18 +611,16 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                                           commentedByRole: 'manager',
                                         );
 
-                                        if (mounted) {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(
-                                              backgroundColor: AppTheme.ink900,
-                                              content: Text(
-                                                success ? 'Call quality rating and comment saved!' : 'Feedback saved locally.',
-                                                style: AppTheme.bodyBold(size: 12, color: AppTheme.limeYellow),
-                                              ),
+                                        messenger.showSnackBar(
+                                          SnackBar(
+                                            backgroundColor: AppTheme.ink900,
+                                            content: Text(
+                                              success ? 'Call quality rating and comment saved!' : 'Feedback saved locally.',
+                                              style: AppTheme.bodyBold(size: 12, color: AppTheme.limeYellow),
                                             ),
-                                          );
-                                          await tele.fetchBackendData();
-                                        }
+                                          ),
+                                        );
+                                        await tele.fetchBackendData();
                                       },
                                       child: Text(
                                         'SAVE',

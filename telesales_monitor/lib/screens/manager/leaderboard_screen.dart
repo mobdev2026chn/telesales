@@ -1,9 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/neo_card.dart';
 import '../../widgets/top_header.dart';
-import '../../widgets/create_user_dialog.dart';
 import '../../providers/tele_provider.dart';
 import '../../models/employee_model.dart';
 
@@ -16,7 +17,6 @@ class LeaderboardScreen extends StatefulWidget {
 }
 
 class _LeaderboardScreenState extends State<LeaderboardScreen> {
-  int _timeFilter = 0; // 0 = TODAY, 1 = WEEK, 2 = MONTH
   final TextEditingController _searchCtrl = TextEditingController();
 
   @override
@@ -37,13 +37,27 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     int r = 1;
     for (var emp in tele.employees) {
       if (emp.role.toLowerCase() == 'caller') {
+        final calls = emp.totalCalls;
+        final conn = emp.connectedCalls;
+        final rate = calls > 0 ? ((conn / calls) * 100).toStringAsFixed(0) : '0';
+        final progress = calls > 0 ? (calls / 100).clamp(0.01, 1.0) : 0.0;
+
+        final isMe = emp.name.toLowerCase() == tele.callerName.toLowerCase() ||
+                     emp.phone == tele.verifiedTrackingNumber;
+        final photo = isMe && tele.profilePhotoBase64.isNotEmpty ? tele.profilePhotoBase64 : emp.photoBase64;
+
         callers.add({
           'rank': r,
           'name': emp.name,
-          'calls': emp.totalCalls,
-          'connected': emp.connectedCalls,
+          'calls': calls,
+          'connected': conn,
+          'connectRate': rate,
+          'targetProgress': progress,
           'talkTime': emp.talkTimeFormatted.isNotEmpty ? emp.talkTimeFormatted : '0s',
           'isCrown': r == 1,
+          'photoBase64': photo,
+          'avatarUrl': emp.avatarUrl,
+          'rawEmp': emp,
         });
         r++;
       }
@@ -66,6 +80,19 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         ? filteredCallers
         : callers.sublist(3);
 
+    String calendarHeaderLabel = '📅 TODAY';
+    if (tele.selectedDateRange != null) {
+      calendarHeaderLabel = '📅 ${DateFormat('d MMM').format(tele.selectedDateRange!.start)} - ${DateFormat('d MMM').format(tele.selectedDateRange!.end)}'.toUpperCase();
+    } else if (tele.selectedCustomDate != null) {
+      calendarHeaderLabel = '📅 ${DateFormat('d MMM yyyy').format(tele.selectedCustomDate!).toUpperCase()}';
+    } else if (tele.selectedTimeFilter == 1) {
+      calendarHeaderLabel = '📅 THIS WEEK';
+    } else if (tele.selectedTimeFilter == 2) {
+      calendarHeaderLabel = '📅 THIS MONTH';
+    }
+
+    final hasCustomCalendar = tele.selectedDateRange != null || tele.selectedCustomDate != null;
+
     return RefreshIndicator(
       color: AppTheme.greenNeon,
       backgroundColor: AppTheme.ink900,
@@ -86,74 +113,69 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
             ),
             const SizedBox(height: 12),
 
-            // Action Row: Team Filter & + CREATE USER Button
+            // Period Tabs: TODAY | WEEK | MONTH
+            Container(
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                color: AppTheme.white,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: AppTheme.ink900, width: 1.5),
+                boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+              ),
+              child: Row(
+                children: [
+                  _buildFilterTab(tele, 'TODAY', 0),
+                  _buildFilterTab(tele, 'WEEK', 1),
+                  _buildFilterTab(tele, 'MONTH', 2),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            // Interactive Calendar Picker Banner
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppTheme.ink900,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppTheme.ink800, width: 1.5),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.groups_outlined, color: AppTheme.limeYellow, size: 16),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              dropdownColor: AppTheme.ink900,
-                              isExpanded: true,
-                              value: tele.availableTeams.contains(tele.selectedTeamFilter) ? tele.selectedTeamFilter : tele.availableTeams.first,
-                              icon: const Icon(Icons.arrow_drop_down, color: AppTheme.limeYellow, size: 18),
-                              style: AppTheme.headline(size: 10.5, color: AppTheme.greenNeon),
-                              onChanged: (val) {
-                                if (val != null) {
-                                  tele.setTeamFilter(val);
-                                }
-                              },
-                              items: tele.availableTeams.map((t) {
-                                return DropdownMenuItem<String>(
-                                  value: t,
-                                  child: Text(t == 'ALL' ? '🏢 ALL TEAMS' : '🏢 ${t.toUpperCase()}', overflow: TextOverflow.ellipsis),
-                                );
-                              }).toList(),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
                 GestureDetector(
-                  onTap: () => CreateUserDialog.show(context),
+                  onTap: () => _showCalendarPicker(context, tele),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     decoration: BoxDecoration(
-                      color: AppTheme.greenNeon,
-                      borderRadius: BorderRadius.circular(12),
+                      color: hasCustomCalendar ? AppTheme.limeYellow : AppTheme.white,
+                      borderRadius: BorderRadius.circular(999),
                       border: Border.all(color: AppTheme.ink900, width: 1.5),
                       boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.person_add_alt_1_rounded, size: 16, color: AppTheme.ink900),
-                        const SizedBox(width: 4),
+                        const Icon(Icons.calendar_month_rounded, size: 16, color: AppTheme.ink900),
+                        const SizedBox(width: 6),
                         Text(
-                          '+ CREATE USER',
-                          style: AppTheme.label(size: 9.5, color: AppTheme.ink900, letterSpacing: 0.1),
+                          calendarHeaderLabel,
+                          style: AppTheme.label(size: 10, color: AppTheme.ink900, letterSpacing: 0.12),
                         ),
+                        if (hasCustomCalendar) ...[
+                          const SizedBox(width: 6),
+                          GestureDetector(
+                            onTap: () {
+                              tele.setCustomDate(null);
+                              tele.setDateRange(null);
+                            },
+                            child: const Icon(Icons.cancel_rounded, size: 16, color: AppTheme.ink900),
+                          ),
+                        ],
                       ],
                     ),
                   ),
                 ),
+                Text(
+                  '${callers.length} AGENTS RANKED',
+                  style: AppTheme.label(size: 9.5, color: AppTheme.muted, letterSpacing: 0.1),
+                ),
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
 
             // Search Bar Input
             Container(
@@ -169,7 +191,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                 onChanged: (_) => setState(() {}),
                 style: AppTheme.body(size: 13, color: AppTheme.ink900),
                 decoration: const InputDecoration(
-                  hintText: 'Search caller...',
+                  hintText: 'Search caller by name...',
                   hintStyle: TextStyle(color: AppTheme.muted, fontSize: 13),
                   border: InputBorder.none,
                   prefixIcon: Icon(Icons.search, size: 18, color: AppTheme.ink900),
@@ -177,48 +199,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                   contentPadding: EdgeInsets.symmetric(vertical: 10),
                 ),
               ),
-            ),
-            const SizedBox(height: 12),
-
-            // Filters Row (TODAY, WEEK, MONTH, TOP FIRST)
-            Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(2),
-                    decoration: BoxDecoration(
-                      color: AppTheme.white,
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(color: AppTheme.ink900, width: 1.2),
-                    ),
-                    child: Row(
-                      children: [
-                        _buildFilterTab('TODAY', 0),
-                        _buildFilterTab('WEEK', 1),
-                        _buildFilterTab('MONTH', 2),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: AppTheme.white,
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: AppTheme.ink900, width: 1.2),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.arrow_drop_down, size: 16, color: AppTheme.ink900),
-                      Text(
-                        'TOP FIRST',
-                        style: AppTheme.label(size: 8.5, color: AppTheme.ink900),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
             ),
             const SizedBox(height: 16),
 
@@ -289,16 +269,26 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                       children: [
                         // Rank Digit
                         SizedBox(
-                          width: 36,
+                          width: 34,
                           child: Text(
                             rank < 10 ? '0$rank' : '$rank',
                             style: AppTheme.headline(
-                              size: 26,
+                              size: 24,
                               color: isTop ? AppTheme.greenNeon : AppTheme.ink900,
                             ),
                           ),
                         ),
                         const SizedBox(width: 8),
+
+                        // Agent Profile Photo Avatar
+                        _buildAgentAvatar(
+                          name: name,
+                          photoBase64: empData['photoBase64'] as String?,
+                          avatarUrl: empData['avatarUrl'] as String?,
+                          size: 40,
+                          isDark: isTop,
+                        ),
+                        const SizedBox(width: 12),
 
                         // Caller Details
                         Expanded(
@@ -325,10 +315,24 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                '$calls calls - $connected connected',
+                                '$calls/100 calls (${empData['connectRate']}% conn) · $connected conn',
                                 style: AppTheme.body(
                                   size: 11,
                                   color: isTop ? AppTheme.lightMuted : AppTheme.muted,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(999),
+                                child: Container(
+                                  height: 4,
+                                  width: 120,
+                                  color: isTop ? AppTheme.ink800 : AppTheme.paper,
+                                  child: FractionallySizedBox(
+                                    alignment: Alignment.centerLeft,
+                                    widthFactor: (empData['targetProgress'] as double? ?? 0.0),
+                                    child: Container(color: isTop ? AppTheme.limeYellow : AppTheme.greenNeon),
+                                  ),
                                 ),
                               ),
                             ],
@@ -366,6 +370,54 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  // AGENT AVATAR HELPER WIDGET
+  Widget _buildAgentAvatar({
+    required String name,
+    String? photoBase64,
+    String? avatarUrl,
+    double size = 42,
+    bool isDark = false,
+    bool showBorder = true,
+  }) {
+    ImageProvider? imageProvider;
+    if (photoBase64 != null && photoBase64.isNotEmpty) {
+      try {
+        final cleanBase64 = photoBase64.contains(',') ? photoBase64.split(',').last : photoBase64;
+        final bytes = base64Decode(cleanBase64);
+        imageProvider = MemoryImage(bytes);
+      } catch (_) {}
+    } else if (avatarUrl != null && avatarUrl.isNotEmpty) {
+      imageProvider = NetworkImage(avatarUrl);
+    }
+
+    final initials = name.trim().split(' ').map((e) => e.isNotEmpty ? e[0] : '').take(2).join('').toUpperCase();
+
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.ink800 : AppTheme.paper,
+        shape: BoxShape.circle,
+        border: showBorder ? Border.all(color: isDark ? AppTheme.limeYellow : AppTheme.ink900, width: 1.5) : null,
+        boxShadow: showBorder ? AppTheme.neoShadowSm(color: AppTheme.ink900) : null,
+        image: imageProvider != null
+            ? DecorationImage(image: imageProvider, fit: BoxFit.cover)
+            : null,
+      ),
+      child: imageProvider == null
+          ? Center(
+              child: Text(
+                initials.isNotEmpty ? initials : '👤',
+                style: AppTheme.headline(
+                  size: size * 0.38,
+                  color: isDark ? AppTheme.limeYellow : AppTheme.ink900,
+                ),
+              ),
+            )
+          : null,
     );
   }
 
@@ -426,6 +478,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     final name = rankData['name'] as String;
     final talkTime = rankData['talkTime'] as String;
     final calls = rankData['calls'] as int;
+    final photoBase64 = rankData['photoBase64'] as String?;
+    final avatarUrl = rankData['avatarUrl'] as String?;
 
     final shortName = name.split(' ').first;
 
@@ -439,6 +493,16 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         ] else ...[
           const SizedBox(height: 12),
         ],
+
+        // Agent Profile Photo Avatar on Podium
+        _buildAgentAvatar(
+          name: name,
+          photoBase64: photoBase64,
+          avatarUrl: avatarUrl,
+          size: rankNum == 1 ? 52 : 44,
+          isDark: isDark,
+        ),
+        const SizedBox(height: 6),
 
         // Name Tag above step
         Text(
@@ -509,11 +573,11 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     );
   }
 
-  Widget _buildFilterTab(String label, int index) {
-    final isSelected = _timeFilter == index;
+  Widget _buildFilterTab(TeleProvider tele, String label, int index) {
+    final isSelected = tele.selectedTimeFilter == index;
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() => _timeFilter = index),
+        onTap: () => tele.setTimeFilter(index),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 6),
           decoration: BoxDecoration(
@@ -529,6 +593,106 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showCalendarPicker(BuildContext context, TeleProvider tele) async {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: BoxDecoration(
+          color: AppTheme.paper,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border.all(color: AppTheme.ink900, width: 2),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppTheme.ink900,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text('FILTER LEADERBOARD BY DATE', style: AppTheme.headline(size: 16, color: AppTheme.ink900)),
+            const SizedBox(height: 14),
+            ListTile(
+              leading: const Icon(Icons.event, color: AppTheme.ink900),
+              title: Text('Select Specific Date', style: AppTheme.bodyBold(size: 14)),
+              subtitle: Text('View standings for a single specific day', style: AppTheme.body(size: 12, color: AppTheme.muted)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: const BorderSide(color: AppTheme.ink900, width: 1.5),
+              ),
+              tileColor: AppTheme.white,
+              onTap: () async {
+                Navigator.pop(ctx);
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: tele.selectedCustomDate ?? DateTime.now(),
+                  firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                  lastDate: DateTime.now(),
+                  builder: (c, child) => Theme(
+                    data: Theme.of(c).copyWith(
+                      colorScheme: const ColorScheme.light(
+                        primary: AppTheme.ink900,
+                        onPrimary: AppTheme.limeYellow,
+                        surface: AppTheme.paper,
+                        onSurface: AppTheme.ink900,
+                      ),
+                    ),
+                    child: child!,
+                  ),
+                );
+                if (picked != null) tele.setCustomDate(picked);
+              },
+            ),
+            const SizedBox(height: 10),
+            ListTile(
+              leading: const Icon(Icons.date_range, color: AppTheme.ink900),
+              title: Text('Select Date Range', style: AppTheme.bodyBold(size: 14)),
+              subtitle: Text('View standings across a custom period', style: AppTheme.body(size: 12, color: AppTheme.muted)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: const BorderSide(color: AppTheme.ink900, width: 1.5),
+              ),
+              tileColor: AppTheme.white,
+              onTap: () async {
+                Navigator.pop(ctx);
+                final picked = await showDateRangePicker(
+                  context: context,
+                  firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                  lastDate: DateTime.now(),
+                  initialDateRange: tele.selectedDateRange ?? DateTimeRange(
+                    start: DateTime.now().subtract(const Duration(days: 7)),
+                    end: DateTime.now(),
+                  ),
+                  builder: (c, child) => Theme(
+                    data: Theme.of(c).copyWith(
+                      colorScheme: const ColorScheme.light(
+                        primary: AppTheme.ink900,
+                        onPrimary: AppTheme.limeYellow,
+                        surface: AppTheme.paper,
+                        onSurface: AppTheme.ink900,
+                      ),
+                    ),
+                    child: child!,
+                  ),
+                );
+                if (picked != null) tele.setDateRange(picked);
+              },
+            ),
+          ],
         ),
       ),
     );

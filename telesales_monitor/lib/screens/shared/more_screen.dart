@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/neo_card.dart';
@@ -33,15 +35,162 @@ class _MoreScreenState extends State<MoreScreen> {
     });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
+  void _showManagerPhotoPicker(BuildContext context, TeleProvider tele) {
+    final messenger = ScaffoldMessenger.of(context);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          decoration: BoxDecoration(
+            color: AppTheme.paper,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            border: Border.all(color: AppTheme.ink900, width: 2),
+            boxShadow: AppTheme.neoShadow(color: AppTheme.ink900),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppTheme.ink900,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'SET PROFILE PHOTO / AVATAR',
+                style: AppTheme.headline(size: 14, color: AppTheme.ink900),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () async {
+                        Navigator.pop(ctx);
+                        final ok = await tele.pickAndSaveProfilePhoto(source: ImageSource.gallery);
+                        if (ok) {
+                          messenger.showSnackBar(
+                            SnackBar(
+                              backgroundColor: AppTheme.ink900,
+                              content: Text('✓ Profile photo updated successfully!', style: AppTheme.bodyBold(size: 12, color: AppTheme.greenNeon)),
+                            ),
+                          );
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: AppTheme.limeYellow,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppTheme.ink900, width: 1.5),
+                          boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.photo_library_rounded, size: 18, color: AppTheme.ink900),
+                            const SizedBox(width: 8),
+                            Text('CHOOSE PHOTO', style: AppTheme.label(size: 9.5, color: AppTheme.ink900, letterSpacing: 0.12)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () async {
+                        Navigator.pop(ctx);
+                        final ok = await tele.pickAndSaveProfilePhoto(source: ImageSource.camera);
+                        if (ok) {
+                          messenger.showSnackBar(
+                            SnackBar(
+                              backgroundColor: AppTheme.ink900,
+                              content: Text('✓ Profile photo taken successfully!', style: AppTheme.bodyBold(size: 12, color: AppTheme.greenNeon)),
+                            ),
+                          );
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: AppTheme.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppTheme.ink900, width: 1.5),
+                          boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.camera_alt_rounded, size: 18, color: AppTheme.ink900),
+                            const SizedBox(width: 8),
+                            Text('TAKE PHOTO', style: AppTheme.label(size: 9.5, color: AppTheme.ink900, letterSpacing: 0.12)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (tele.profilePhotoBase64.isNotEmpty || tele.profilePhotoPath.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                GestureDetector(
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    await tele.clearProfilePhoto();
+                    messenger.showSnackBar(
+                      SnackBar(
+                        backgroundColor: AppTheme.ink900,
+                        content: Text('Profile photo removed', style: AppTheme.body(size: 12, color: AppTheme.white)),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppTheme.redMissed, width: 1),
+                    ),
+                    child: Text('REMOVE CURRENT PHOTO', style: AppTheme.label(size: 8.5, color: AppTheme.redMissed)),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tele = Provider.of<TeleProvider>(context);
+
+    return Stack(
+      children: [
+        RefreshIndicator(
+          color: AppTheme.greenNeon,
+          backgroundColor: AppTheme.ink900,
+          onRefresh: () async {
+            await tele.fetchBackendData();
+            await tele.fetchDeviceCallLogs();
+          },
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
               // Top Header Bar
               TopHeader(
                 title: 'MORE',
@@ -49,6 +198,97 @@ class _MoreScreenState extends State<MoreScreen> {
                 selectedSimIndex: 1,
               ),
               const SizedBox(height: 16),
+
+              // Card -1: MANAGER PROFILE CARD
+              NeoCard(
+                backgroundColor: AppTheme.white,
+                shadowColor: AppTheme.ink900,
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    GestureDetector(
+                      onTap: () => _showManagerPhotoPicker(context, tele),
+                      child: Stack(
+                        children: [
+                          Container(
+                            width: 56,
+                            height: 56,
+                            decoration: BoxDecoration(
+                              color: AppTheme.limeYellow,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: AppTheme.ink900, width: 1.5),
+                              boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+                            ),
+                            child: ClipOval(
+                              child: tele.profilePhotoBase64.isNotEmpty
+                                  ? Image.memory(
+                                      base64Decode(tele.profilePhotoBase64.contains(',') ? tele.profilePhotoBase64.split(',').last : tele.profilePhotoBase64),
+                                      width: 56,
+                                      height: 56,
+                                      fit: BoxFit.cover,
+                                    )
+                                  : Center(
+                                      child: Text(
+                                        tele.currentUserName.isNotEmpty ? tele.currentUserName[0].toUpperCase() : '👨‍💼',
+                                        style: AppTheme.headline(size: 22, color: AppTheme.ink900),
+                                      ),
+                                    ),
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: Container(
+                              padding: const EdgeInsets.all(3),
+                              decoration: const BoxDecoration(
+                                color: AppTheme.greenNeon,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.photo_camera, size: 11, color: AppTheme.ink900),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            tele.currentUserName.toUpperCase(),
+                            style: AppTheme.bodyBold(size: 15, color: AppTheme.ink900),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${tele.currentUserRole.toUpperCase()} · ${tele.currentUserTeam}',
+                            style: AppTheme.label(size: 8.5, color: AppTheme.muted, letterSpacing: 0.12),
+                          ),
+                          const SizedBox(height: 6),
+                          GestureDetector(
+                            onTap: () => _showManagerPhotoPicker(context, tele),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: AppTheme.limeYellow,
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(color: AppTheme.ink900, width: 1),
+                              ),
+                              child: Text(
+                                '📷 SET PROFILE PHOTO',
+                                style: AppTheme.label(size: 8, color: AppTheme.ink900),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
 
               // Card 0: ADMIN WEB PORTAL & USER MANAGEMENT
               NeoCard(
@@ -242,6 +482,7 @@ class _MoreScreenState extends State<MoreScreen> {
             ],
           ),
         ),
+      ),
 
         // Bottom Notification Banner matching Screenshot 3
         if (_showBanner)

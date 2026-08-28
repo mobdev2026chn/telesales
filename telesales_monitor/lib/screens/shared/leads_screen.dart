@@ -5,6 +5,7 @@ import '../../widgets/neo_card.dart';
 import '../../widgets/top_header.dart';
 import '../../widgets/lead_detail_sheet.dart';
 import '../../widgets/save_contact_dialog.dart';
+import '../../widgets/create_lead_dialog.dart';
 import '../../providers/tele_provider.dart';
 
 class LeadsScreen extends StatefulWidget {
@@ -17,6 +18,13 @@ class LeadsScreen extends StatefulWidget {
 class _LeadsScreenState extends State<LeadsScreen> {
   int _selectedFilterIndex = 0;
   String _selectedTeamMember = 'ALL TEAM MEMBERS';
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   void _showTeamMemberPicker(BuildContext context, TeleProvider tele) {
     final List<String> memberOptions = <String>{
@@ -110,11 +118,24 @@ class _LeadsScreenState extends State<LeadsScreen> {
     final tele = Provider.of<TeleProvider>(context);
 
     final callerName = tele.currentUserName.toUpperCase();
+    final searchQuery = _searchController.text.trim().toLowerCase();
+    final cleanSearchDigits = searchQuery.replaceAll(RegExp(r'[^0-9]'), '');
+
+    final filteredByStatus = tele.filteredLeads;
+
+    // Filter by Search Query (searches both contact name and phone number)
+    final matchedLeads = filteredByStatus.where((l) {
+      if (searchQuery.isEmpty) return true;
+      final nameMatches = l.name.toLowerCase().contains(searchQuery);
+      final phoneMatches = cleanSearchDigits.isNotEmpty && l.phone.replaceAll(RegExp(r'[^0-9]'), '').contains(cleanSearchDigits);
+      final rawPhoneMatches = l.phone.toLowerCase().contains(searchQuery);
+      return nameMatches || phoneMatches || rawPhoneMatches;
+    }).toList();
 
     // Dynamic Leads List from Provider
     final List<Map<String, dynamic>> dynamicLeads = [];
 
-    for (var l in tele.filteredLeads) {
+    for (var l in matchedLeads) {
       String bType = 'outline';
       String statusStr = 'NEW';
       if (l.status.name == 'won') {
@@ -129,67 +150,142 @@ class _LeadsScreenState extends State<LeadsScreen> {
       }
 
       dynamicLeads.add({
+        'id': l.id,
         'name': l.name,
         'phone': l.phone,
         'status': statusStr,
         'attempts': '${l.attempts} attempts · Today',
         'badgeType': bType,
+        'note': l.note,
       });
     }
 
-    final totalCount = dynamicLeads.length;
+    final totalCount = tele.leads.length;
 
     final filterOptions = [
       {'label': 'ALL · $totalCount', 'filter': 'ALL'},
-      {'label': 'WON', 'filter': 'WON'},
-      {'label': 'FOLLOW-UP CALL', 'filter': 'FOLLOW-UP'},
-      {'label': 'INTERESTED', 'filter': 'INTERESTED'},
+      {'label': 'WON (${tele.leads.where((l) => l.status.name == 'won').length})', 'filter': 'WON'},
+      {'label': 'FOLLOW-UP (${tele.leads.where((l) => l.status.name == 'followUp').length})', 'filter': 'FOLLOW-UP'},
+      {'label': 'INTERESTED (${tele.leads.where((l) => l.status.name == 'interested').length})', 'filter': 'INTERESTED'},
     ];
 
-    return RefreshIndicator(
-      color: AppTheme.greenNeon,
-      backgroundColor: AppTheme.ink900,
-      onRefresh: () async {
-        await tele.fetchBackendData();
-      },
-      child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Top Header Bar
-            TopHeader(
-              title: 'LEADS',
-              userName: callerName,
-              selectedSimIndex: 1,
-            ),
-            const SizedBox(height: 14),
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: AppTheme.ink900,
+        foregroundColor: AppTheme.limeYellow,
+        elevation: 4,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: const BorderSide(color: AppTheme.limeYellow, width: 1.5),
+        ),
+        onPressed: () => CreateLeadDialog.show(context),
+        icon: const Icon(Icons.person_add_alt_1_rounded, size: 20, color: AppTheme.limeYellow),
+        label: Text('+ ADD LEAD', style: AppTheme.label(size: 11, color: AppTheme.limeYellow, letterSpacing: 0.14)),
+      ),
+      body: RefreshIndicator(
+        color: AppTheme.greenNeon,
+        backgroundColor: AppTheme.ink900,
+        onRefresh: () async {
+          await tele.fetchBackendData();
+          await tele.fetchDeviceCallLogs();
+        },
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Top Header Bar
+              TopHeader(
+                title: 'LEADS',
+                userName: callerName,
+                selectedSimIndex: 1,
+              ),
+              const SizedBox(height: 14),
 
-            // Dropdown: ALL TEAM MEMBERS
-            GestureDetector(
-              onTap: () => _showTeamMemberPicker(context, tele),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              // Live Search Bar (searches by Contact Name or Phone)
+              Container(
                 decoration: BoxDecoration(
                   color: AppTheme.white,
-                  borderRadius: BorderRadius.circular(999),
+                  borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: AppTheme.ink900, width: 1.5),
                   boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      _selectedTeamMember,
-                      style: AppTheme.label(size: 10, color: AppTheme.ink900, letterSpacing: 0.14),
-                    ),
-                    const Icon(Icons.keyboard_arrow_down, size: 20, color: AppTheme.ink900),
-                  ],
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: (_) => setState(() {}),
+                  style: AppTheme.bodyBold(size: 13, color: AppTheme.ink900),
+                  decoration: InputDecoration(
+                    hintText: 'Search by client name or phone...',
+                    hintStyle: AppTheme.body(size: 12, color: AppTheme.muted),
+                    prefixIcon: const Icon(Icons.search_rounded, size: 20, color: AppTheme.ink900),
+                    suffixIcon: _searchController.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.close_rounded, size: 18, color: AppTheme.ink900),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() {});
+                            },
+                          )
+                        : null,
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 12),
+              const SizedBox(height: 12),
+
+              // Dropdown: ALL TEAM MEMBERS & + ADD LEAD Button
+              Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => _showTeamMemberPicker(context, tele),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: AppTheme.white,
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: AppTheme.ink900, width: 1.5),
+                          boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              _selectedTeamMember,
+                              style: AppTheme.label(size: 10, color: AppTheme.ink900, letterSpacing: 0.14),
+                            ),
+                            const Icon(Icons.keyboard_arrow_down, size: 20, color: AppTheme.ink900),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () => CreateLeadDialog.show(context),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: AppTheme.greenNeon,
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: AppTheme.ink900, width: 1.5),
+                        boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.person_add_alt_1_rounded, size: 15, color: AppTheme.ink900),
+                          const SizedBox(width: 4),
+                          Text('LEAD', style: AppTheme.label(size: 10, color: AppTheme.ink900)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
 
             // Filter Chips Row
             SingleChildScrollView(
@@ -440,6 +536,7 @@ class _LeadsScreenState extends State<LeadsScreen> {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

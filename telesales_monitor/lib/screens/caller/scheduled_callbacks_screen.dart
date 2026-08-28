@@ -66,11 +66,19 @@ class _ScheduledCallbacksScreenState extends State<ScheduledCallbacksScreen> {
       return true;
     }).toList();
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    return RefreshIndicator(
+      color: AppTheme.greenNeon,
+      backgroundColor: AppTheme.ink900,
+      onRefresh: () async {
+        await tele.fetchBackendData();
+        await tele.fetchDeviceCallLogs();
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
           // Top Header Bar
           TopHeader(
             title: 'FOLLOW-UP',
@@ -303,6 +311,7 @@ class _ScheduledCallbacksScreenState extends State<ScheduledCallbacksScreen> {
           ],
         ],
       ),
-    );
+    ),
+  );
   }
 }

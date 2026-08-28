@@ -13,7 +13,7 @@ enum LeadStatus {
 
 class LeadModel {
   final String id;
-  final String name;
+  String name;
   final String phone;
   LeadStatus status;
   int attempts;

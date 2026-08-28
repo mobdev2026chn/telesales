@@ -12,11 +12,16 @@ class EmployeeModel {
   final int neverAttendedCalls;
   final int rank;
 
+  final String? avatarUrl;
+  final String? photoBase64;
+
   EmployeeModel({
     required this.id,
     required this.name,
     required this.phone,
     this.role = 'caller',
+    this.avatarUrl,
+    this.photoBase64,
     required this.totalCalls,
     required this.connectedCalls,
     required this.totalTalkTime,

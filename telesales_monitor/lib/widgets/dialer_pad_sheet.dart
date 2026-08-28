@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
+import '../providers/tele_provider.dart';
 
 class DialerPadSheet extends StatefulWidget {
   const DialerPadSheet({super.key});
@@ -42,8 +44,33 @@ class _DialerPadSheetState extends State<DialerPadSheet> {
     });
   }
 
+  int _selectedSimSlot = 0;
+
+  void _makeCall() {
+    if (_dialedNumber.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppTheme.ink900,
+          content: Text(
+            'Please enter a phone number to dial',
+            style: AppTheme.body(size: 12, color: AppTheme.limeYellow),
+          ),
+        ),
+      );
+      return;
+    }
+    final phone = _dialedNumber.trim();
+    Navigator.of(context).pop();
+    final tele = Provider.of<TeleProvider>(context, listen: false);
+    tele.makeDirectCall(phone, slot: _selectedSimSlot);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final tele = Provider.of<TeleProvider>(context, listen: false);
+    final sims = tele.detectedSims;
+    final hasDualSim = sims.length > 1;
+
     final keyValues = [
       ['1', '2', '3'],
       ['4', '5', '6'],
@@ -141,7 +168,7 @@ class _DialerPadSheetState extends State<DialerPadSheet> {
           ),
           const SizedBox(height: 16),
 
-          // Bottom Action Controls (CLEAR | 📞 CALL | SIM 1)
+          // Bottom Action Controls (CLEAR | 📞 CALL | SIM 1/2 Toggle)
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
@@ -161,32 +188,49 @@ class _DialerPadSheetState extends State<DialerPadSheet> {
                 ),
               ),
               GestureDetector(
-                onTap: () => Navigator.of(context).pop(),
+                onTap: _makeCall,
                 child: Container(
-                  width: 58,
-                  height: 58,
+                  width: 60,
+                  height: 60,
                   decoration: BoxDecoration(
                     color: AppTheme.greenNeon,
                     shape: BoxShape.circle,
                     boxShadow: AppTheme.neoShadow(color: AppTheme.limeYellow, offset: 3),
                   ),
                   child: const Icon(
-                    Icons.phone,
+                    Icons.phone_in_talk_rounded,
                     color: AppTheme.ink900,
-                    size: 26,
+                    size: 28,
                   ),
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: AppTheme.white.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: AppTheme.white.withValues(alpha: 0.2), width: 1),
-                ),
-                child: Text(
-                  'SIM 1',
-                  style: AppTheme.label(size: 9, color: AppTheme.greenNeon),
+              GestureDetector(
+                onTap: () {
+                  if (hasDualSim) {
+                    setState(() {
+                      _selectedSimSlot = _selectedSimSlot == 0 ? 1 : 0;
+                    });
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.white.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: AppTheme.greenNeon, width: 1),
+                  ),
+                  child: Row(
+                    children: [
+                      Text(
+                        'SIM ${_selectedSimSlot + 1}',
+                        style: AppTheme.label(size: 9, color: AppTheme.greenNeon),
+                      ),
+                      if (hasDualSim) ...[
+                        const SizedBox(width: 4),
+                        const Icon(Icons.swap_horiz, size: 14, color: AppTheme.greenNeon),
+                      ],
+                    ],
+                  ),
                 ),
               ),
             ],

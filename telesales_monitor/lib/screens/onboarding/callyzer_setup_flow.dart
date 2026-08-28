@@ -25,6 +25,7 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
   bool _dataProcessOpen = false;
   bool _useDataOpen = false;
   bool _unnecessaryPermsOpen = false;
+  bool _termsAccepted = false;
 
   String _clean10DigitPhone(String raw) {
     final digits = raw.replaceAll(RegExp(r'[^0-9]'), '');
@@ -357,45 +358,75 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
           ),
           const SizedBox(height: 36),
 
-          // Consent Box
-          NeoCard(
-            backgroundColor: AppTheme.white,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            child: Row(
-              children: [
-                const Icon(Icons.security, size: 20, color: AppTheme.ink900),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: RichText(
-                    text: TextSpan(
-                      children: [
-                        TextSpan(
-                          text: 'By continuing you agree to our ',
-                          style: AppTheme.body(size: 12, color: AppTheme.ink900),
-                        ),
-                        TextSpan(
-                          text: 'Privacy Policy.',
-                          style: AppTheme.bodyBold(size: 12, color: AppTheme.ink900),
-                        ),
-                      ],
+          // Consent Box with Mandatory Terms & Conditions Checkbox
+          GestureDetector(
+            onTap: () => setState(() => _termsAccepted = !_termsAccepted),
+            child: NeoCard(
+              backgroundColor: _termsAccepted ? const Color(0xFFF0FDF4) : AppTheme.white,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              child: Row(
+                children: [
+                  Checkbox(
+                    value: _termsAccepted,
+                    activeColor: AppTheme.ink900,
+                    checkColor: AppTheme.limeYellow,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                    onChanged: (val) => setState(() => _termsAccepted = val ?? false),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: RichText(
+                      text: TextSpan(
+                        children: [
+                          TextSpan(
+                            text: 'I agree to the ',
+                            style: AppTheme.body(size: 12, color: AppTheme.ink900),
+                          ),
+                          TextSpan(
+                            text: 'Terms & Conditions',
+                            style: AppTheme.bodyBold(size: 12, color: AppTheme.ink900),
+                          ),
+                          TextSpan(
+                            text: ' and ',
+                            style: AppTheme.body(size: 12, color: AppTheme.ink900),
+                          ),
+                          TextSpan(
+                            text: 'Privacy Policy.',
+                            style: AppTheme.bodyBold(size: 12, color: AppTheme.ink900),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 18),
 
-          // Agree & Continue Button
-          NeoButton.accent(
-            gradient: null,
-            backgroundColor: AppTheme.greenNeon,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            onTap: _nextStep,
-            child: Center(
-              child: Text(
-                'AGREE & CONTINUE',
-                style: AppTheme.headline(size: 16, color: AppTheme.ink900),
+          // Agree & Continue Button (Requires Checkbox)
+          Opacity(
+            opacity: _termsAccepted ? 1.0 : 0.5,
+            child: NeoButton.accent(
+              gradient: null,
+              backgroundColor: AppTheme.greenNeon,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              onTap: _termsAccepted ? _nextStep : () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    backgroundColor: AppTheme.ink900,
+                    content: Text(
+                      'Please check the Terms & Conditions box to continue.',
+                      style: AppTheme.body(size: 12, color: AppTheme.limeYellow),
+                    ),
+                  ),
+                );
+              },
+              child: Center(
+                child: Text(
+                  'AGREE & CONTINUE',
+                  style: AppTheme.headline(size: 16, color: AppTheme.ink900),
+                ),
               ),
             ),
           ),

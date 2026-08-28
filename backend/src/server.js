@@ -236,6 +236,74 @@ app.post(['/api/admin/recordings/:id/comment', '/api/recordings/:id/comment', '/
   }
 });
 
+app.delete(['/api/admin/recordings/:id', '/api/recordings/:id'], async (req, res) => {
+  try {
+    const recId = req.params.id;
+    const isMongoId = /^[0-9a-fA-F]{24}$/.test(recId);
+    const deleted = await Recording.findOneAndDelete({
+      $or: [
+        { id: recId },
+        ...(isMongoId ? [{ _id: recId }] : [])
+      ]
+    });
+    if (!deleted) {
+      return res.status(404).json({ success: false, message: 'Recording not found' });
+    }
+    res.json({ success: true, message: 'Recording deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.all(['/api/admin/leads/:id/status', '/api/admin/leads/status', '/api/leads/:id/status', '/api/leads/status'], async (req, res) => {
+  try {
+    const rawId = req.params.id || req.body.id || req.body.phone || '';
+    const { status, notes, note, name, phone, callerName } = req.body;
+    const finalPhone = phone || (rawId.replace(/[^0-9]/g, '').length >= 6 ? rawId : '');
+    const cleanPhone = finalPhone.replace(/[^0-9]/g, '');
+    const last10 = cleanPhone.length >= 10 ? cleanPhone.substring(cleanPhone.length - 10) : cleanPhone;
+
+    const isMongoId = /^[0-9a-fA-F]{24}$/.test(rawId);
+    const orClauses = [];
+    if (isMongoId) orClauses.push({ _id: rawId });
+    if (rawId) orClauses.push({ id: rawId });
+    if (last10) {
+      orClauses.push(
+        { phone: finalPhone },
+        { phone: new RegExp(last10 + '$') },
+        { phone: new RegExp('^' + last10) }
+      );
+    }
+
+    const query = orClauses.length > 0 ? { $or: orClauses } : { id: Date.now().toString() };
+
+    const updateObj = {
+      updatedAt: new Date(),
+      ...(status ? { status } : {}),
+      ...(notes || note ? { notes: notes || note } : {}),
+      ...(name ? { name } : {}),
+      ...(finalPhone ? { phone: finalPhone } : {}),
+      ...(callerName ? { assignedCaller: callerName } : {})
+    };
+
+    let lead = await Lead.findOneAndUpdate(
+      query,
+      {
+        $set: updateObj,
+        $setOnInsert: {
+          id: req.body.id || Date.now().toString(),
+          createdAt: new Date()
+        }
+      },
+      { new: true, upsert: true }
+    );
+
+    res.json({ success: true, lead });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Direct top-level Notification Endpoints for maximum reliability
 app.get(['/api/user/notifications', '/api/notifications'], async (req, res) => {
   try {

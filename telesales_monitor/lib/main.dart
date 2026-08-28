@@ -3,9 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'theme/app_theme.dart';
 import 'providers/tele_provider.dart';
-import 'screens/onboarding/callyzer_setup_flow.dart';
-import 'screens/login_screen.dart';
-import 'screens/main_shell.dart';
+import 'screens/splash_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,7 +28,7 @@ class TelesalesApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => TeleProvider()),
       ],
       child: MaterialApp(
-        title: 'Telesales',
+        title: 'Ask EVA Telesales',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           scaffoldBackgroundColor: AppTheme.paper,
@@ -41,14 +39,7 @@ class TelesalesApp extends StatelessWidget {
           ),
           useMaterial3: true,
         ),
-        home: Consumer<TeleProvider>(
-          builder: (context, tele, _) {
-            if (!tele.setupCompleted) {
-              return const CallyzerSetupFlow();
-            }
-            return tele.isLoggedIn ? const MainShell() : const LoginScreen();
-          },
-        ),
+        home: const SplashScreen(),
       ),
     );
   }

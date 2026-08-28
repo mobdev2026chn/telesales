@@ -157,17 +157,17 @@ class _LoginScreenState extends State<LoginScreen> {
                                   Row(
                                     children: [
                                       Container(
-                                        width: 54,
-                                        height: 54,
+                                        width: 58,
+                                        height: 58,
                                         decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(12),
+                                          borderRadius: BorderRadius.circular(14),
                                           border: Border.all(color: AppTheme.white, width: 1.5),
                                           boxShadow: AppTheme.neoShadowSm(color: AppTheme.greenNeon),
                                         ),
                                         child: ClipRRect(
-                                          borderRadius: BorderRadius.circular(10),
+                                          borderRadius: BorderRadius.circular(12),
                                           child: Image.asset(
-                                            'assets/images/ask_eva_logo.jpg',
+                                            'assets/images/ask_eva_logo.png',
                                             fit: BoxFit.cover,
                                             errorBuilder: (ctx, err, stack) => Container(
                                               color: AppTheme.greenNeon,

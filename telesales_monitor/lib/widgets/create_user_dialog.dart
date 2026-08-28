@@ -291,6 +291,33 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                 ),
                 const SizedBox(height: 14),
 
+                // Team Selection
+                Text('ASSIGN TEAM', style: AppTheme.label(size: 10, color: AppTheme.muted, letterSpacing: 0.1)),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.paper,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppTheme.ink900, width: 1.5),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _selectedTeam,
+                      isExpanded: true,
+                      dropdownColor: AppTheme.paper,
+                      style: AppTheme.bodyBold(size: 12, color: AppTheme.ink900),
+                      items: ['Telesales Team', 'Inbound Support', 'Outbound Sales', 'VIP Accounts'].map((t) {
+                        return DropdownMenuItem(value: t, child: Text('🏢 $t'));
+                      }).toList(),
+                      onChanged: (val) {
+                        if (val != null) setState(() => _selectedTeam = val);
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+
                 // Daily Target
                 Text('DAILY CALL TARGET', style: AppTheme.label(size: 10, color: AppTheme.muted, letterSpacing: 0.1)),
                 const SizedBox(height: 6),

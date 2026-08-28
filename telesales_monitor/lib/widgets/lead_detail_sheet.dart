@@ -296,21 +296,31 @@ class _LeadDetailSheetState extends State<LeadDetailSheet> {
             NeoButton(
               backgroundColor: AppTheme.ink900,
               shadowColor: AppTheme.greenNeon,
-              onTap: () {
-                tele.updateLeadStatus(leadId, _parseStatus(_selectedStatus));
-                if (_noteCtrl.text.isNotEmpty) {
-                  tele.addLeadNote(leadId, _noteCtrl.text);
-                }
-                Navigator.of(context).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    backgroundColor: AppTheme.ink900,
-                    content: Text(
-                      'Lead status updated to $_selectedStatus',
-                      style: AppTheme.bodyBold(size: 12, color: AppTheme.limeYellow),
-                    ),
-                  ),
+              onTap: () async {
+                final newStatus = _parseStatus(_selectedStatus);
+                final noteText = _noteCtrl.text.trim();
+                await tele.updateLeadStatus(
+                  leadId,
+                  newStatus,
+                  phone: phone,
+                  name: name,
+                  note: noteText.isNotEmpty ? noteText : null,
                 );
+                if (noteText.isNotEmpty) {
+                  await tele.addLeadNote(leadId, noteText);
+                }
+                if (context.mounted) {
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      backgroundColor: AppTheme.ink900,
+                      content: Text(
+                        'Lead status updated to $_selectedStatus',
+                        style: AppTheme.bodyBold(size: 12, color: AppTheme.limeYellow),
+                      ),
+                    ),
+                  );
+                }
               },
               child: Center(
                 child: Text(

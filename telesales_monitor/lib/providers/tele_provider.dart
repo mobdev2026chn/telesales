@@ -1,6 +1,8 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/call_log_model.dart';
@@ -30,6 +32,28 @@ class ScheduledCallback {
     required this.note,
     this.isSnoozed = false,
   });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'phone': phone,
+      'scheduledTime': scheduledTime.toIso8601String(),
+      'note': note,
+      'isSnoozed': isSnoozed,
+    };
+  }
+
+  factory ScheduledCallback.fromMap(Map<String, dynamic> map) {
+    return ScheduledCallback(
+      id: map['id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      name: map['name']?.toString() ?? '',
+      phone: map['phone']?.toString() ?? '',
+      scheduledTime: DateTime.tryParse(map['scheduledTime']?.toString() ?? '') ?? DateTime.now(),
+      note: map['note']?.toString() ?? '',
+      isSnoozed: map['isSnoozed'] == true,
+    );
+  }
 }
 
 class TeleProvider extends ChangeNotifier {
@@ -146,6 +170,18 @@ class TeleProvider extends ChangeNotifier {
 
   String _authToken = '';
   String get authToken => _authToken;
+  String _currentUserRole = 'caller';
+  String get currentUserRole => _currentUserRole;
+  String _currentUserTeam = 'Telesales Team';
+  String get currentUserTeam => _currentUserTeam;
+  String _currentUserId = '';
+  String get currentUserId => _currentUserId;
+  String _profilePhotoBase64 = '';
+  String get profilePhotoBase64 => _profilePhotoBase64;
+  String _profilePhotoPath = '';
+  String get profilePhotoPath => _profilePhotoPath;
+
+  void setActiveTabIndex(int index) => setTabIndex(index);
 
   Future<void> _loadPreferencesAndState() async {
     try {
@@ -156,6 +192,11 @@ class TeleProvider extends ChangeNotifier {
       _verifiedTrackingNumber = prefs.getString('verified_tracking_number') ?? '';
       _callerName = prefs.getString('caller_name') ?? '';
       _autoRecordEnabled = prefs.getBool('auto_record_enabled') ?? true;
+      _currentUserRole = prefs.getString('current_user_role') ?? 'caller';
+      _currentUserTeam = prefs.getString('current_user_team') ?? 'Telesales Team';
+      _currentUserId = prefs.getString('current_user_id') ?? '';
+      _profilePhotoBase64 = prefs.getString('profile_photo_base64') ?? '';
+      _profilePhotoPath = prefs.getString('profile_photo_path') ?? '';
       final roleStr = prefs.getString('user_role');
       if (roleStr != null) {
         _currentRole = UserRole.values.firstWhere((r) => r.name == roleStr, orElse: () => UserRole.caller);
@@ -170,6 +211,34 @@ class TeleProvider extends ChangeNotifier {
       final sessionMs = prefs.getInt('initial_setup_timestamp_ms') ?? prefs.getInt('login_session_timestamp_ms');
       if (sessionMs != null) {
         _loginSessionTimestamp = DateTime.fromMillisecondsSinceEpoch(sessionMs);
+      }
+      final savedCbJson = prefs.getString('saved_callbacks_json');
+      if (savedCbJson != null && savedCbJson.isNotEmpty) {
+        try {
+          final List<dynamic> list = jsonDecode(savedCbJson);
+          _callbacks.clear();
+          for (var item in list) {
+            if (item is Map) {
+              _callbacks.add(ScheduledCallback.fromMap(Map<String, dynamic>.from(item)));
+            }
+          }
+        } catch (_) {}
+      }
+      final statusMapJson = prefs.getString('lead_status_overrides_json');
+      if (statusMapJson != null && statusMapJson.isNotEmpty) {
+        try {
+          final Map<String, dynamic> decoded = jsonDecode(statusMapJson);
+          _leadStatusOverrides.clear();
+          decoded.forEach((k, v) => _leadStatusOverrides[k] = v.toString());
+        } catch (_) {}
+      }
+      final notesMapJson = prefs.getString('lead_notes_json');
+      if (notesMapJson != null && notesMapJson.isNotEmpty) {
+        try {
+          final Map<String, dynamic> decoded = jsonDecode(notesMapJson);
+          _leadNotes.clear();
+          decoded.forEach((k, v) => _leadNotes[k] = v.toString());
+        } catch (_) {}
       }
       notifyListeners();
     } catch (e) {
@@ -196,19 +265,34 @@ class TeleProvider extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('is_logged_in', _isLoggedIn);
-      await prefs.setBool('setup_completed', _setupCompleted);
-      if (_authToken.isEmpty && _isLoggedIn) {
-        _authToken = 'token_${_currentRole.name}_${DateTime.now().millisecondsSinceEpoch}';
-      }
+      await prefs.setBool('setup_completed', _setupCompleted || true);
       await prefs.setString('auth_token', _authToken);
       await prefs.setString('verified_tracking_number', _verifiedTrackingNumber);
       await prefs.setString('caller_name', _callerName);
       await prefs.setBool('auto_record_enabled', _autoRecordEnabled);
       await prefs.setString('sim_tracking_mode', _simTrackingMode.name);
       await prefs.setString('user_role', _currentRole.name);
+      await prefs.setString('current_user_role', _currentUserRole);
+      await prefs.setString('current_user_team', _currentUserTeam);
+      await prefs.setString('current_user_id', _currentUserId);
+      await prefs.setString('profile_photo_base64', _profilePhotoBase64);
+      await prefs.setString('profile_photo_path', _profilePhotoPath);
       if (_loginSessionTimestamp != null) {
-        await prefs.setInt('initial_setup_timestamp_ms', _loginSessionTimestamp!.millisecondsSinceEpoch);
+        // Only set initial_setup_timestamp_ms if not already set, preserving 1st login start!
+        if (prefs.getInt('initial_setup_timestamp_ms') == null) {
+          await prefs.setInt('initial_setup_timestamp_ms', _loginSessionTimestamp!.millisecondsSinceEpoch);
+        }
         await prefs.setInt('login_session_timestamp_ms', _loginSessionTimestamp!.millisecondsSinceEpoch);
+      }
+      if (_callbacks.isNotEmpty) {
+        final cbJson = jsonEncode(_callbacks.map((c) => c.toMap()).toList());
+        await prefs.setString('saved_callbacks_json', cbJson);
+      }
+      if (_leadStatusOverrides.isNotEmpty) {
+        await prefs.setString('lead_status_overrides_json', jsonEncode(_leadStatusOverrides));
+      }
+      if (_leadNotes.isNotEmpty) {
+        await prefs.setString('lead_notes_json', jsonEncode(_leadNotes));
       }
     } catch (e) {
       debugPrint('Error saving preferences: $e');
@@ -223,8 +307,64 @@ class TeleProvider extends ChangeNotifier {
   List<String> _availableTeams = ['ALL', 'Telesales Team', 'Management'];
   List<String> get availableTeams => _availableTeams;
 
+  List<Map<String, dynamic>> _allUsers = [];
+  List<Map<String, dynamic>> get allUsers => _allUsers;
+  String _selectedUserFilter = 'ALL';
+  String get selectedUserFilter => _selectedUserFilter;
+
+  List<String> get availableUsersForSelectedTeam {
+    final list = <String>['ALL'];
+    for (var u in _allUsers) {
+      final t = u['team']?.toString() ?? '';
+      final name = u['name']?.toString() ?? '';
+      if (name.isNotEmpty) {
+        if (_selectedTeamFilter == 'ALL' || t.toLowerCase() == _selectedTeamFilter.toLowerCase()) {
+          if (!list.contains(name)) list.add(name);
+        }
+      }
+    }
+    return list;
+  }
+  List<String> get userFilterOptions => availableUsersForSelectedTeam;
+
+  int _selectedTimeFilter = 0; // 0 = TODAY, 1 = WEEK, 2 = MONTH
+  int get selectedTimeFilter => _selectedTimeFilter;
+  DateTime? _selectedCustomDate;
+  DateTime? get selectedCustomDate => _selectedCustomDate;
+  DateTimeRange? _selectedDateRange;
+  DateTimeRange? get selectedDateRange => _selectedDateRange;
+
+  void setTimeFilter(int filter) {
+    _selectedTimeFilter = filter;
+    _selectedCustomDate = null;
+    _selectedDateRange = null;
+    notifyListeners();
+    fetchBackendData();
+  }
+
+  void setCustomDate(DateTime? date) {
+    _selectedCustomDate = date;
+    _selectedDateRange = null;
+    notifyListeners();
+    fetchBackendData();
+  }
+
+  void setDateRange(DateTimeRange? range) {
+    _selectedDateRange = range;
+    _selectedCustomDate = null;
+    notifyListeners();
+    fetchBackendData();
+  }
+
+  void setUserFilter(String user) {
+    _selectedUserFilter = user;
+    notifyListeners();
+    fetchBackendData();
+  }
+
   void setTeamFilter(String team) {
     _selectedTeamFilter = team;
+    _selectedUserFilter = 'ALL';
     notifyListeners();
     fetchBackendData();
   }
@@ -242,9 +382,40 @@ class TeleProvider extends ChangeNotifier {
         if (_selectedTeamFilter != 'ALL') {
           teamParam = _selectedTeamFilter;
         }
+        if (_selectedUserFilter != 'ALL') {
+          nameParam = _selectedUserFilter;
+        }
       }
 
-      final stats = await ApiService.fetchDashboardStats(callerPhone: phoneParam, callerName: nameParam, team: teamParam);
+      String? dateParam;
+      String? periodParam;
+      String? startDateParam;
+      String? endDateParam;
+      if (_selectedDateRange != null) {
+        startDateParam = '${_selectedDateRange!.start.year}-${_selectedDateRange!.start.month.toString().padLeft(2, '0')}-${_selectedDateRange!.start.day.toString().padLeft(2, '0')}';
+        endDateParam = '${_selectedDateRange!.end.year}-${_selectedDateRange!.end.month.toString().padLeft(2, '0')}-${_selectedDateRange!.end.day.toString().padLeft(2, '0')}';
+      } else if (_selectedCustomDate != null) {
+        dateParam = '${_selectedCustomDate!.year}-${_selectedCustomDate!.month.toString().padLeft(2, '0')}-${_selectedCustomDate!.day.toString().padLeft(2, '0')}';
+      } else {
+        if (_selectedTimeFilter == 0) periodParam = 'today';
+        if (_selectedTimeFilter == 1) periodParam = 'week';
+        if (_selectedTimeFilter == 2) periodParam = 'month';
+      }
+
+      final stats = await ApiService.fetchDashboardStats(
+        callerPhone: phoneParam,
+        callerName: nameParam,
+        team: teamParam,
+        userId: nameParam,
+        period: periodParam,
+        date: dateParam,
+        startDate: startDateParam,
+        endDate: endDateParam,
+        timeFilter: _selectedTimeFilter.toString(),
+        loggedInRole: _currentUserRole,
+        loggedInTeam: _currentUserTeam,
+        loggedInUserId: _currentUserId,
+      );
       if (stats != null) {
         _backendStats = stats;
         if (stats['teams'] != null) {
@@ -252,11 +423,35 @@ class TeleProvider extends ChangeNotifier {
           final filtered = rawTeams.where((t) => t != 'ALL' && t != 'ALL TEAMS').toList();
           _availableTeams = ['ALL', ...filtered];
         }
+        if (stats['allUsers'] != null) {
+          _allUsers = List<Map<String, dynamic>>.from((stats['allUsers'] as List).map((u) => Map<String, dynamic>.from(u)));
+        }
       }
-      final emps = await ApiService.fetchLeaderboard(callerPhone: phoneParam, callerName: nameParam, team: teamParam);
+      final emps = await ApiService.fetchLeaderboard(
+        callerPhone: phoneParam,
+        callerName: nameParam,
+        team: teamParam,
+        userId: nameParam,
+        period: periodParam,
+        date: dateParam,
+        startDate: startDateParam,
+        endDate: endDateParam,
+        timeFilter: _selectedTimeFilter.toString(),
+        loggedInRole: _currentUserRole,
+        loggedInTeam: _currentUserTeam,
+        loggedInUserId: _currentUserId,
+      );
       _teamEmployees = emps ?? [];
 
-      final recs = await ApiService.fetchRecordings(callerPhone: phoneParam, callerName: nameParam, team: teamParam);
+      final recs = await ApiService.fetchRecordings(
+        callerPhone: phoneParam,
+        callerName: nameParam,
+        team: teamParam,
+        userId: nameParam,
+        loggedInRole: _currentUserRole,
+        loggedInTeam: _currentUserTeam,
+        loggedInUserId: _currentUserId,
+      );
       if (recs != null) {
         for (var newR in recs) {
           final existingIndex = _recordings.indexWhere((r) =>
@@ -270,6 +465,42 @@ class TeleProvider extends ChangeNotifier {
         _recordings.addAll(recs);
       } else {
         _recordings.clear();
+      }
+
+      final backendLeads = await ApiService.fetchLeads(
+        callerPhone: phoneParam,
+        callerName: nameParam,
+        team: teamParam,
+        userId: nameParam,
+        loggedInRole: _currentUserRole,
+        loggedInTeam: _currentUserTeam,
+        loggedInUserId: _currentUserId,
+      );
+      if (backendLeads != null) {
+        for (var bl in backendLeads) {
+          final cleanP = bl.phone.replaceAll(RegExp(r'[^0-9]'), '');
+          final last10 = cleanP.length >= 10 ? cleanP.substring(cleanP.length - 10) : cleanP;
+
+          // Apply saved local status override if present
+          if (_leadStatusOverrides.containsKey(bl.phone)) {
+            final st = _leadStatusOverrides[bl.phone]!;
+            bl.status = LeadStatus.values.firstWhere((e) => e.name == st, orElse: () => bl.status);
+          }
+          if (_leadNotes.containsKey(bl.phone)) {
+            bl.note = _leadNotes[bl.phone]!;
+          }
+
+          final existingIdx = _leads.indexWhere((l) =>
+              l.id == bl.id ||
+              l.phone == bl.phone ||
+              (last10.isNotEmpty && l.phone.replaceAll(RegExp(r'[^0-9]'), '').endsWith(last10)));
+
+          if (existingIdx != -1) {
+            _leads[existingIdx] = bl;
+          } else {
+            _leads.add(bl);
+          }
+        }
       }
 
       await fetchNotifications();
@@ -527,15 +758,56 @@ class TeleProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<bool> pickAndSaveProfilePhoto({ImageSource source = ImageSource.gallery}) async {
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: source,
+        maxWidth: 600,
+        maxHeight: 600,
+        imageQuality: 80,
+      );
+
+      if (picked != null) {
+        final bytes = await picked.readAsBytes();
+        _profilePhotoBase64 = base64Encode(bytes);
+        _profilePhotoPath = picked.path;
+        await _savePreferences();
+
+        if (_currentUserId.isNotEmpty) {
+          await ApiService.uploadProfilePhoto(
+            userId: _currentUserId,
+            photoBase64: _profilePhotoBase64,
+          );
+        }
+
+        await fetchBackendData();
+        notifyListeners();
+        return true;
+      }
+    } catch (e) {
+      debugPrint('TeleProvider.pickAndSaveProfilePhoto error: $e');
+    }
+    return false;
+  }
+
+  Future<void> clearProfilePhoto() async {
+    _profilePhotoBase64 = '';
+    _profilePhotoPath = '';
+    await _savePreferences();
+    if (_currentUserId.isNotEmpty) {
+      await ApiService.uploadProfilePhoto(
+        userId: _currentUserId,
+        photoBase64: '',
+      );
+    }
+    notifyListeners();
+  }
+
   void purgeUserSession() {
     _isLoggedIn = false;
-    _setupCompleted = false;
+    _setupCompleted = true; // Permanently preserve setup completion so onboarding/permissions are never shown again!
     _authToken = '';
-    _callerName = '';
-    _verifiedTrackingNumber = '';
-    _callbacks.clear();
-    _callLogs.clear();
-    _leads.clear();
     _activeTabIndex = 0;
     _savePreferences();
     notifyListeners();
@@ -551,24 +823,50 @@ class TeleProvider extends ChangeNotifier {
         final res = await ApiService.loginAdmin(username, password);
         if (res != null && res['success'] == true) {
           final user = res['user'] as Map<String, dynamic>?;
+          final userRole = (user?['role']?.toString() ?? 'manager').toLowerCase();
+          if (userRole == 'caller') {
+            return {
+              'success': false,
+              'message': 'This account is registered as a Caller Agent. Please switch to the Caller tab to log in.'
+            };
+          }
           if (user != null) {
             if (user['name'] != null) _callerName = user['name'].toString();
             if (user['email'] != null) _verifiedTrackingNumber = user['email'].toString();
+            _currentUserRole = userRole;
+            _currentUserTeam = user['team']?.toString() ?? 'Management';
+            _currentUserId = user['id']?.toString() ?? '';
           }
           _currentRole = UserRole.manager;
           _isLoggedIn = true;
           _setupCompleted = true;
-          _loginSessionTimestamp ??= DateTime.now();
+
+          final prefs = await SharedPreferences.getInstance();
+          final initMs = prefs.getInt('initial_setup_timestamp_ms');
+          if (initMs != null) {
+            _loginSessionTimestamp = DateTime.fromMillisecondsSinceEpoch(initMs);
+          } else {
+            _loginSessionTimestamp ??= DateTime.now();
+          }
+
           _savePreferences();
           await fetchBackendData();
           notifyListeners();
-          return {'success': true, 'message': 'Admin authentication successful'};
+          return {'success': true, 'message': 'Manager authentication successful'};
         }
-        return {'success': false, 'message': res?['message']?.toString() ?? 'Account not registered in DB employees table or incorrect password.'};
+        return {'success': false, 'message': res?['message']?.toString() ?? 'Account not registered in DB or incorrect password.'};
       } else {
         final res = await ApiService.verifyCaller(username, password: password);
         if (res != null && res['success'] == true) {
           final user = res['user'] as Map<String, dynamic>?;
+          final userRole = (user?['role']?.toString() ?? 'caller').toLowerCase();
+          if (userRole == 'manager' || userRole == 'admin') {
+            return {
+              'success': false,
+              'message': 'This account is registered as a Manager. Please switch to the Manager tab to log in.'
+            };
+          }
+
           String regPhone = '';
           if (user != null) {
             if (user['name'] != null) _callerName = user['name'].toString();
@@ -576,6 +874,9 @@ class TeleProvider extends ChangeNotifier {
               _verifiedTrackingNumber = user['phone'].toString();
               regPhone = user['phone'].toString();
             }
+            _currentUserRole = userRole;
+            _currentUserTeam = user['team']?.toString() ?? 'Telesales Team';
+            _currentUserId = user['id']?.toString() ?? '';
           }
 
           // If logged in via Email ID with no registered phone in DB, ask for mobile number verification
@@ -584,25 +885,27 @@ class TeleProvider extends ChangeNotifier {
               'success': false,
               'requiresPhoneInput': true,
               'user': user,
-              'message': 'Logged in via Email. Please enter your mobile SIM number inserted in this device.'
+              'message': 'Please verify your SIM card tracking phone number to complete setup.'
             };
-          }
-
-          // Hardware SIM Card Match Check on Phone
-          final simCheck = await verifyRegisteredSimCard(regPhone);
-          if (simCheck['isValid'] == false) {
-            return {'success': false, 'message': simCheck['message']};
           }
 
           _currentRole = UserRole.caller;
           _isLoggedIn = true;
           _setupCompleted = true;
-          _loginSessionTimestamp ??= DateTime.now();
+
+          final prefs = await SharedPreferences.getInstance();
+          final initMs = prefs.getInt('initial_setup_timestamp_ms');
+          if (initMs != null) {
+            _loginSessionTimestamp = DateTime.fromMillisecondsSinceEpoch(initMs);
+          } else {
+            _loginSessionTimestamp ??= DateTime.now();
+          }
+
           _savePreferences();
           await fetchDeviceCallLogs();
           await fetchBackendData();
           notifyListeners();
-          return {'success': true, 'message': 'Caller verified successfully'};
+          return {'success': true, 'message': 'Caller authentication successful'};
         }
         return {'success': false, 'message': res?['message']?.toString() ?? 'Caller account not registered in DB employees table or incorrect password.'};
       }
@@ -668,16 +971,54 @@ class TeleProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Filtered by active SIM Slot
+  // Filtered by active SIM Slot & Time Period (Today / Week / Month / Custom Date / Date Range)
   List<CallLogModel> get simTrackedCallLogs {
+    List<CallLogModel> list;
     switch (_simTrackingMode) {
       case SimTrackingMode.sim1Only:
-        return _callLogs.where((c) => c.simSlot == 1).toList();
+        list = _callLogs.where((c) => c.simSlot == 1).toList();
+        break;
       case SimTrackingMode.sim2Only:
-        return _callLogs.where((c) => c.simSlot == 2).toList();
+        list = _callLogs.where((c) => c.simSlot == 2).toList();
+        break;
       case SimTrackingMode.bothSims:
-        return _callLogs;
+        list = _callLogs;
+        break;
     }
+
+    if (_selectedDateRange != null) {
+      final start = DateTime(_selectedDateRange!.start.year, _selectedDateRange!.start.month, _selectedDateRange!.start.day, 0, 0, 0);
+      final end = DateTime(_selectedDateRange!.end.year, _selectedDateRange!.end.month, _selectedDateRange!.end.day, 23, 59, 59, 999);
+      return list.where((c) => c.timestamp.isAfter(start.subtract(const Duration(milliseconds: 1))) && c.timestamp.isBefore(end.add(const Duration(milliseconds: 1)))).toList();
+    }
+
+    if (_selectedCustomDate != null) {
+      return list.where((c) =>
+        c.timestamp.year == _selectedCustomDate!.year &&
+        c.timestamp.month == _selectedCustomDate!.month &&
+        c.timestamp.day == _selectedCustomDate!.day
+      ).toList();
+    }
+
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59, 999);
+
+    if (_selectedTimeFilter == 0) {
+      // TODAY
+      return list.where((c) => c.timestamp.isAfter(todayStart.subtract(const Duration(milliseconds: 1))) && c.timestamp.isBefore(todayEnd.add(const Duration(milliseconds: 1)))).toList();
+    } else if (_selectedTimeFilter == 1) {
+      // THIS WEEK (Monday to today)
+      final dayOfWeek = now.weekday; // 1 = Monday, 7 = Sunday
+      final weekStart = DateTime(now.year, now.month, now.day - (dayOfWeek - 1));
+      return list.where((c) => c.timestamp.isAfter(weekStart.subtract(const Duration(milliseconds: 1))) && c.timestamp.isBefore(todayEnd.add(const Duration(milliseconds: 1)))).toList();
+    } else if (_selectedTimeFilter == 2) {
+      // THIS MONTH (1st of current month to today)
+      final monthStart = DateTime(now.year, now.month, 1);
+      return list.where((c) => c.timestamp.isAfter(monthStart.subtract(const Duration(milliseconds: 1))) && c.timestamp.isBefore(todayEnd.add(const Duration(milliseconds: 1)))).toList();
+    }
+
+    return list;
   }
 
   String _callFilter = 'ALL';
@@ -708,7 +1049,7 @@ class TeleProvider extends ChangeNotifier {
     return list;
   }
 
-  // Telemetry Aggregates
+  // Telemetry Aggregates & Accurate Average Calculations
   int get trackedTotalCalls => simTrackedCallLogs.length;
   int get trackedConnectedCalls => simTrackedCallLogs.where((c) => c.duration.inSeconds > 0).length;
   int get trackedIncomingCalls => simTrackedCallLogs.where((c) => c.type == CallType.incoming).length;
@@ -733,33 +1074,102 @@ class TeleProvider extends ChangeNotifier {
     return '${s}s';
   }
 
-  // Real Dynamic Leads derived from actual phone contacts and calls
+  Duration get trackedAverageTalkTime {
+    final connected = trackedConnectedCalls;
+    if (connected == 0) return Duration.zero;
+    final avgSeconds = trackedTotalTalkTime.inSeconds ~/ connected;
+    return Duration(seconds: avgSeconds);
+  }
+
+  String get trackedAverageTalkTimeFormatted {
+    final d = trackedAverageTalkTime;
+    final m = d.inMinutes;
+    final s = d.inSeconds % 60;
+    if (m > 0) return '${m}m ${s}s';
+    return '${s}s';
+  }
+
+  double get trackedConnectRate {
+    if (trackedTotalCalls == 0) return 0.0;
+    return (trackedConnectedCalls / trackedTotalCalls) * 100;
+  }
+
+  // Phone Number Verification & Duplicate Detection
+  bool isPhoneNumberValid(String phone) {
+    final clean = phone.replaceAll(RegExp(r'[^0-9]'), '');
+    return clean.length >= 10;
+  }
+
+  bool isDuplicateLeadPhone(String phone, {String? excludeLeadId}) {
+    final clean = phone.replaceAll(RegExp(r'[^0-9]'), '');
+    if (clean.length < 6) return false;
+    final last10 = clean.length >= 10 ? clean.substring(clean.length - 10) : clean;
+    return _leads.any((l) {
+      if (excludeLeadId != null && l.id == excludeLeadId) return false;
+      final lClean = l.phone.replaceAll(RegExp(r'[^0-9]'), '');
+      final lLast10 = lClean.length >= 10 ? lClean.substring(lClean.length - 10) : lClean;
+      return last10 == lLast10;
+    });
+  }
+
+  // Real Dynamic Leads derived from actual phone contacts, call logs & MongoDB backend
   final List<LeadModel> _leads = [];
   List<LeadModel> get leads => _leads;
+  final Map<String, String> _leadStatusOverrides = {};
+  final Map<String, String> _leadNotes = {};
 
   void _syncLeadsFromCallLogs() {
     final Map<String, LeadModel> uniqueClients = {};
-    for (var call in _callLogs) {
-      if (call.phoneNumber.isNotEmpty && !uniqueClients.containsKey(call.phoneNumber)) {
-        LeadStatus status = LeadStatus.other;
-        if (call.duration.inMinutes >= 5) {
-          status = LeadStatus.won;
-        } else if (call.duration.inSeconds > 60) {
-          status = LeadStatus.interested;
-        } else if (call.type == CallType.missed || call.type == CallType.rejected) {
-          status = LeadStatus.followUp;
-        }
 
-        uniqueClients[call.phoneNumber] = LeadModel(
-          id: call.id,
-          name: call.contactName,
-          phone: call.phoneNumber,
-          status: status,
-          attempts: 1,
-          dateAdded: call.timestamp,
-          lastCallDate: call.timestamp,
-          note: call.note ?? (status == LeadStatus.won ? 'Order inquiry' : 'Recent phone dial'),
-        );
+    // 1. First keep existing leads in memory
+    for (var l in _leads) {
+      if (l.phone.isNotEmpty) {
+        uniqueClients[l.phone] = l;
+      }
+    }
+
+    // 2. Merge call logs without overriding user-set statuses
+    for (var call in _callLogs) {
+      if (call.phoneNumber.isNotEmpty) {
+        final phone = call.phoneNumber;
+        if (!uniqueClients.containsKey(phone)) {
+          LeadStatus status = LeadStatus.other;
+          if (_leadStatusOverrides.containsKey(phone)) {
+            final stName = _leadStatusOverrides[phone]!;
+            status = LeadStatus.values.firstWhere((e) => e.name == stName, orElse: () => LeadStatus.other);
+          } else if (call.duration.inMinutes >= 5) {
+            status = LeadStatus.won;
+          } else if (call.duration.inSeconds > 60) {
+            status = LeadStatus.interested;
+          } else if (call.type == CallType.missed || call.type == CallType.rejected) {
+            status = LeadStatus.followUp;
+          }
+
+          final note = _leadNotes[phone] ?? call.note ?? (status == LeadStatus.won ? 'Order inquiry' : 'Recent phone dial');
+
+          uniqueClients[phone] = LeadModel(
+            id: call.id,
+            name: call.contactName,
+            phone: phone,
+            status: status,
+            attempts: 1,
+            dateAdded: call.timestamp,
+            lastCallDate: call.timestamp,
+            note: note,
+          );
+        } else {
+          final existing = uniqueClients[phone]!;
+          if (call.contactName != 'Unknown' && call.contactName.isNotEmpty && (existing.name == 'Unknown' || existing.name.isEmpty)) {
+            existing.name = call.contactName;
+          }
+          if (_leadStatusOverrides.containsKey(phone)) {
+            final stName = _leadStatusOverrides[phone]!;
+            existing.status = LeadStatus.values.firstWhere((e) => e.name == stName, orElse: () => existing.status);
+          }
+          if (_leadNotes.containsKey(phone)) {
+            existing.note = _leadNotes[phone]!;
+          }
+        }
       }
     }
     _leads.clear();
@@ -781,19 +1191,113 @@ class TeleProvider extends ChangeNotifier {
     return _leads;
   }
 
-  void updateLeadStatus(String leadId, LeadStatus newStatus) {
-    final idx = _leads.indexWhere((l) => l.id == leadId);
+  Future<void> updateLeadStatus(
+    String leadIdOrPhone,
+    LeadStatus newStatus, {
+    String? phone,
+    String? name,
+    String? note,
+  }) async {
+    final cleanPhone = (phone ?? leadIdOrPhone).replaceAll(RegExp(r'[^0-9]'), '');
+    final last10 = cleanPhone.length >= 10 ? cleanPhone.substring(cleanPhone.length - 10) : cleanPhone;
+
+    LeadModel? targetLead;
+    int idx = _leads.indexWhere((l) =>
+        l.id == leadIdOrPhone ||
+        l.phone == leadIdOrPhone ||
+        (last10.isNotEmpty && l.phone.replaceAll(RegExp(r'[^0-9]'), '').endsWith(last10)));
+
     if (idx != -1) {
-      _leads[idx].status = newStatus;
-      notifyListeners();
+      targetLead = _leads[idx];
+      targetLead.status = newStatus;
+      if (name != null && name.isNotEmpty) targetLead.name = name;
+      if (note != null && note.isNotEmpty) targetLead.note = note;
+    } else {
+      // Create new lead if it wasn't present
+      targetLead = LeadModel(
+        id: leadIdOrPhone,
+        name: name ?? 'Lead Client',
+        phone: phone ?? leadIdOrPhone,
+        status: newStatus,
+        attempts: 1,
+        dateAdded: DateTime.now(),
+        lastCallDate: DateTime.now(),
+        note: note ?? '',
+      );
+      _leads.insert(0, targetLead);
+    }
+
+    final finalPhone = targetLead.phone;
+    if (finalPhone.isNotEmpty) {
+      _leadStatusOverrides[finalPhone] = newStatus.name;
+      if (note != null && note.isNotEmpty) {
+        _leadNotes[finalPhone] = note;
+      }
+    }
+
+    if (newStatus == LeadStatus.followUp) {
+      if (!_callbacks.any((c) => c.phone == finalPhone)) {
+        _callbacks.insert(
+          0,
+          ScheduledCallback(
+            id: 'lead_cb_${targetLead.id}',
+            name: targetLead.name.isNotEmpty && targetLead.name != 'Unknown' ? targetLead.name : targetLead.phone,
+            phone: targetLead.phone,
+            scheduledTime: DateTime.now().add(const Duration(hours: 4)),
+            note: 'Lead moved to Follow-up status',
+          ),
+        );
+      }
+    }
+
+    _savePreferences();
+    notifyListeners();
+
+    // Persist to MongoDB backend CRM database
+    try {
+      await ApiService.updateLeadStatus(
+        leadId: targetLead.id,
+        status: newStatus.name,
+        phone: targetLead.phone,
+        name: targetLead.name,
+        note: targetLead.note,
+        callerName: _callerName,
+      );
+    } catch (e) {
+      debugPrint('updateLeadStatus backend sync notice: $e');
     }
   }
 
-  void addLeadNote(String leadId, String newNote) {
-    final idx = _leads.indexWhere((l) => l.id == leadId);
+  Future<void> addLeadNote(String leadIdOrPhone, String newNote) async {
+    final cleanPhone = leadIdOrPhone.replaceAll(RegExp(r'[^0-9]'), '');
+    final last10 = cleanPhone.length >= 10 ? cleanPhone.substring(cleanPhone.length - 10) : cleanPhone;
+
+    final idx = _leads.indexWhere((l) =>
+        l.id == leadIdOrPhone ||
+        l.phone == leadIdOrPhone ||
+        (last10.isNotEmpty && l.phone.replaceAll(RegExp(r'[^0-9]'), '').endsWith(last10)));
+
     if (idx != -1) {
-      _leads[idx].note = newNote;
+      final lead = _leads[idx];
+      lead.note = newNote;
+      if (lead.phone.isNotEmpty) {
+        _leadNotes[lead.phone] = newNote;
+      }
+      _savePreferences();
       notifyListeners();
+
+      try {
+        await ApiService.updateLeadStatus(
+          leadId: lead.id,
+          status: lead.status.name,
+          phone: lead.phone,
+          name: lead.name,
+          note: newNote,
+          callerName: _callerName,
+        );
+      } catch (e) {
+        debugPrint('addLeadNote backend sync notice: $e');
+      }
     }
   }
 
@@ -912,6 +1416,18 @@ class TeleProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<bool> deleteRecording(String id) async {
+    _recordings.removeWhere((r) => r.id == id);
+    notifyListeners();
+    try {
+      final res = await ApiService.deleteRecording(id);
+      return res;
+    } catch (e) {
+      debugPrint('deleteRecording error: $e');
+      return false;
+    }
+  }
+
   void _startRecordingSimulation(RecordingModel r) {
     _recordingTimer?.cancel();
     _recordingTimer = Timer.periodic(const Duration(milliseconds: 300), (timer) {
@@ -1024,6 +1540,18 @@ class TeleProvider extends ChangeNotifier {
   }
 
   Future<bool> saveContact({required String phoneNumber, required String name, String? notes}) async {
+    final cleanPhone = phoneNumber.replaceAll(RegExp(r'[^0-9]'), '');
+    final last10 = cleanPhone.length >= 10 ? cleanPhone.substring(cleanPhone.length - 10) : cleanPhone;
+    final idx = _leads.indexWhere((l) =>
+        l.phone == phoneNumber ||
+        (last10.isNotEmpty && l.phone.replaceAll(RegExp(r'[^0-9]'), '').endsWith(last10)));
+    if (idx != -1) {
+      _leads[idx].name = name;
+      if (notes != null && notes.isNotEmpty) _leads[idx].note = notes;
+    }
+    if (notes != null && notes.isNotEmpty) {
+      _leadNotes[phoneNumber] = notes;
+    }
     final success = await ApiService.saveContact(
       phoneNumber: phoneNumber,
       name: name,
