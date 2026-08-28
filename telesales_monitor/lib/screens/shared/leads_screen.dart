@@ -181,7 +181,7 @@ class _LeadsScreenState extends State<LeadsScreen> {
         ),
         onPressed: () => CreateLeadDialog.show(context),
         icon: const Icon(Icons.person_add_alt_1_rounded, size: 20, color: AppTheme.limeYellow),
-        label: Text('+ ADD LEAD', style: AppTheme.label(size: 11, color: AppTheme.limeYellow, letterSpacing: 0.14)),
+        label: Text('ADD LEAD', style: AppTheme.label(size: 11, color: AppTheme.limeYellow, letterSpacing: 0.14)),
       ),
       body: RefreshIndicator(
         color: AppTheme.greenNeon,
