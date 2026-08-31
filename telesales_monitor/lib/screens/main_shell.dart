@@ -7,7 +7,6 @@ import 'manager/leaderboard_screen.dart';
 import 'manager/employee_detail_screen.dart';
 import 'caller/caller_dashboard.dart';
 import 'caller/caller_history_screen.dart';
-import 'caller/scheduled_callbacks_screen.dart';
 import 'caller/caller_profile_screen.dart';
 import 'shared/leads_screen.dart';
 import 'shared/recordings_screen.dart';
@@ -59,19 +58,16 @@ class _MainShellState extends State<MainShell> {
           bodyWidget = const CallerDashboard();
           break;
         case 1:
-          bodyWidget = const CallerHistoryScreen();
-          break;
-        case 2:
           bodyWidget = const LeadsScreen();
           break;
-        case 3:
-          bodyWidget = const ScheduledCallbacksScreen();
+        case 2:
+          bodyWidget = const CallerHistoryScreen();
           break;
-        case 4:
+        case 3:
           bodyWidget = const CallerProfileScreen();
           break;
         default:
-          bodyWidget = const CallerHistoryScreen();
+          bodyWidget = const CallerDashboard();
       }
     }
 
@@ -89,54 +85,67 @@ class _MainShellState extends State<MainShell> {
                   child: bodyWidget,
                 ),
 
-                // Dark Bottom Navigation Bar
+                // Redesigned Modern Bottom Navigation Bar Matching Screenshots
                 Container(
-                  decoration: const BoxDecoration(
-                    color: AppTheme.ink900,
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                  decoration: BoxDecoration(
+                    color: AppTheme.white,
+                    border: Border(
+                      top: BorderSide(color: AppTheme.ink900, width: 1.5),
+                    ),
                   ),
-              child: SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: isManager
-                        ? [
-                            _NavItem(icon: Icons.grid_view_outlined, label: 'DASHBOARD', index: 0, isSelected: tele.activeTabIndex == 0),
-                            _NavItem(icon: Icons.menu, label: 'BOARD', index: 1, isSelected: tele.activeTabIndex == 1),
-                            _NavItem(icon: Icons.radio_button_unchecked, label: 'LEADS', index: 2, isSelected: tele.activeTabIndex == 2),
-                            _NavItem(icon: Icons.play_arrow, label: 'RECORDINGS', index: 3, isSelected: tele.activeTabIndex == 3),
-                            _NavItem(icon: Icons.more_horiz, label: 'MORE', index: 4, isSelected: tele.activeTabIndex == 4),
-                          ]
-                        : [
-                            _NavItem(icon: Icons.grid_view_outlined, label: 'MY DAY', index: 0, isSelected: tele.activeTabIndex == 0),
-                            _NavItem(icon: Icons.phone, label: 'CALLS', index: 1, isSelected: tele.activeTabIndex == 1),
-                            _NavItem(icon: Icons.radio_button_unchecked, label: 'MY LEADS', index: 2, isSelected: tele.activeTabIndex == 2),
-                            _NavItem(icon: Icons.access_time, label: 'FOLLOW-UP', index: 3, isSelected: tele.activeTabIndex == 3),
-                            _NavItem(icon: Icons.person_pin_outlined, label: 'PROFILE', index: 4, isSelected: tele.activeTabIndex == 4),
-                          ],
+                  child: SafeArea(
+                    top: false,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          height: 52,
+                          child: Row(
+                            children: isManager
+                                ? [
+                                    _TabItem(label: 'DASHBOARD', index: 0, isSelected: tele.activeTabIndex == 0),
+                                    _TabItem(label: 'BOARD', index: 1, isSelected: tele.activeTabIndex == 1),
+                                    _TabItem(label: 'LEADS', index: 2, isSelected: tele.activeTabIndex == 2),
+                                    _TabItem(label: 'RECS', index: 3, isSelected: tele.activeTabIndex == 3),
+                                    _TabItem(label: 'MORE', index: 4, isSelected: tele.activeTabIndex == 4),
+                                  ]
+                                : [
+                                    _TabItem(label: 'HOME', index: 0, isSelected: tele.activeTabIndex == 0),
+                                    _TabItem(label: 'LEADS', index: 1, isSelected: tele.activeTabIndex == 1),
+                                    _TabItem(label: 'STATS', index: 2, isSelected: tele.activeTabIndex == 2),
+                                    _TabItem(label: 'PROFILE', index: 3, isSelected: tele.activeTabIndex == 3),
+                                  ],
+                          ),
+                        ),
+                        // Bottom Indicator Strip
+                        Container(
+                          height: 4,
+                          margin: const EdgeInsets.only(bottom: 6),
+                          width: 130,
+                          decoration: BoxDecoration(
+                            color: AppTheme.ink900,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
-    ),
-  ),
-);
+    );
   }
 }
 
-class _NavItem extends StatelessWidget {
-  final IconData icon;
+class _TabItem extends StatelessWidget {
   final String label;
   final int index;
   final bool isSelected;
 
-  const _NavItem({
-    required this.icon,
+  const _TabItem({
     required this.label,
     required this.index,
     required this.isSelected,
@@ -146,32 +155,42 @@ class _NavItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final tele = Provider.of<TeleProvider>(context, listen: false);
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () {
-        tele.selectEmployee(null);
-        tele.setTabIndex(index);
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 20,
-              color: isSelected ? AppTheme.greenNeon : AppTheme.muted,
-            ),
-            const SizedBox(height: 3),
-            Text(
-              label,
-              style: AppTheme.label(
-                size: 8,
-                color: isSelected ? AppTheme.limeYellow : AppTheme.muted,
-                letterSpacing: 0.1,
+    return Expanded(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          tele.selectEmployee(null);
+          tele.setTabIndex(index);
+        },
+        child: Container(
+          height: double.infinity,
+          decoration: BoxDecoration(
+            color: isSelected ? AppTheme.limeYellow : AppTheme.white,
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                label,
+                style: AppTheme.mono(
+                  size: 10.5,
+                  color: isSelected ? AppTheme.ink900 : AppTheme.muted,
+                  weight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                ),
               ),
-            ),
-          ],
+              if (isSelected) ...[
+                const SizedBox(height: 3),
+                Container(
+                  width: 32,
+                  height: 2.5,
+                  decoration: BoxDecoration(
+                    color: AppTheme.ink900,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );

@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/neo_card.dart';
-import '../../widgets/top_header.dart';
 import '../../widgets/lead_detail_sheet.dart';
-import '../../widgets/save_contact_dialog.dart';
 import '../../widgets/create_lead_dialog.dart';
 import '../../providers/tele_provider.dart';
+import '../../models/lead_model.dart';
+import '../caller/call_session_screen.dart';
 
 class LeadsScreen extends StatefulWidget {
   const LeadsScreen({super.key});
@@ -16,527 +16,394 @@ class LeadsScreen extends StatefulWidget {
 }
 
 class _LeadsScreenState extends State<LeadsScreen> {
-  int _selectedFilterIndex = 0;
-  String _selectedTeamMember = 'ALL TEAM MEMBERS';
-  final TextEditingController _searchController = TextEditingController();
+  int _selectedFilterIndex = 0; // 0 = ALL, 1 = FRESH, 2 = CALLED, 3 = DUE
+  final TextEditingController _searchCtrl = TextEditingController();
+
+  final List<String> _filterTabs = ['ALL', 'FRESH', 'CALLED', 'DUE'];
 
   @override
   void dispose() {
-    _searchController.dispose();
+    _searchCtrl.dispose();
     super.dispose();
-  }
-
-  void _showTeamMemberPicker(BuildContext context, TeleProvider tele) {
-    final List<String> memberOptions = <String>{
-      'ALL TEAM MEMBERS',
-      if (tele.callerName.isNotEmpty) tele.callerName.toUpperCase(),
-      ...tele.employees.map((e) => e.name.toUpperCase()),
-    }.toList();
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return Container(
-          decoration: BoxDecoration(
-            color: AppTheme.paper,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-            border: Border.all(color: AppTheme.ink900, width: 2),
-            boxShadow: AppTheme.neoShadow(color: AppTheme.ink900),
-          ),
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppTheme.ink900,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'SELECT TEAM MEMBER',
-                style: AppTheme.headline(size: 14, color: AppTheme.ink900),
-              ),
-              const SizedBox(height: 12),
-              Flexible(
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: memberOptions.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 8),
-                  itemBuilder: (_, idx) {
-                    final option = memberOptions[idx];
-                    final isSelected = _selectedTeamMember == option;
-                    return GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _selectedTeamMember = option;
-                        });
-                        Navigator.pop(ctx);
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: isSelected ? AppTheme.ink900 : AppTheme.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppTheme.ink900, width: 1.5),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              option,
-                              style: AppTheme.label(
-                                size: 11,
-                                color: isSelected ? AppTheme.limeYellow : AppTheme.ink900,
-                              ),
-                            ),
-                            if (isSelected)
-                              const Icon(Icons.check_circle_rounded, size: 18, color: AppTheme.limeYellow),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     final tele = Provider.of<TeleProvider>(context);
+    final allLeads = tele.leads.isNotEmpty ? tele.leads : _getDemoLeads();
 
-    final callerName = tele.currentUserName.toUpperCase();
-    final searchQuery = _searchController.text.trim().toLowerCase();
-    final cleanSearchDigits = searchQuery.replaceAll(RegExp(r'[^0-9]'), '');
+    final query = _searchCtrl.text.trim().toLowerCase();
+    final cleanDigits = query.replaceAll(RegExp(r'[^0-9]'), '');
 
-    final filteredByStatus = tele.filteredLeads;
+    // Search filter
+    var filtered = query.isEmpty
+        ? allLeads
+        : allLeads.where((l) {
+            final nameMatch = l.name.toLowerCase().contains(query);
+            final phoneMatch = cleanDigits.isNotEmpty && l.phone.replaceAll(RegExp(r'[^0-9]'), '').contains(cleanDigits);
+            return nameMatch || phoneMatch;
+          }).toList();
 
-    // Filter by Search Query (searches both contact name and phone number)
-    final matchedLeads = filteredByStatus.where((l) {
-      if (searchQuery.isEmpty) return true;
-      final nameMatches = l.name.toLowerCase().contains(searchQuery);
-      final phoneMatches = cleanSearchDigits.isNotEmpty && l.phone.replaceAll(RegExp(r'[^0-9]'), '').contains(cleanSearchDigits);
-      final rawPhoneMatches = l.phone.toLowerCase().contains(searchQuery);
-      return nameMatches || phoneMatches || rawPhoneMatches;
-    }).toList();
-
-    // Dynamic Leads List from Provider
-    final List<Map<String, dynamic>> dynamicLeads = [];
-
-    for (var l in matchedLeads) {
-      String bType = 'outline';
-      String statusStr = 'NEW';
-      if (l.status.name == 'won') {
-        bType = 'green';
-        statusStr = 'WON';
-      } else if (l.status.name == 'interested') {
-        bType = 'lime';
-        statusStr = 'INTERESTED';
-      } else if (l.status.name == 'followUp') {
-        bType = 'lime';
-        statusStr = 'FOLLOW-UP CALL';
-      }
-
-      dynamicLeads.add({
-        'id': l.id,
-        'name': l.name,
-        'phone': l.phone,
-        'status': statusStr,
-        'attempts': '${l.attempts} attempts · Today',
-        'badgeType': bType,
-        'note': l.note,
-      });
+    // Tab filter
+    if (_selectedFilterIndex == 1) {
+      // FRESH
+      filtered = filtered.where((l) => l.attempts == 0 || l.status == LeadStatus.newLead).toList();
+    } else if (_selectedFilterIndex == 2) {
+      // CALLED
+      filtered = filtered.where((l) => l.attempts > 0 || l.status == LeadStatus.interested || l.status == LeadStatus.won).toList();
+    } else if (_selectedFilterIndex == 3) {
+      // DUE
+      filtered = filtered.where((l) => l.status == LeadStatus.followUp || l.status == LeadStatus.renewalFollowUp).toList();
     }
 
-    final totalCount = tele.leads.length;
-
-    final filterOptions = [
-      {'label': 'ALL · $totalCount', 'filter': 'ALL'},
-      {'label': 'WON (${tele.leads.where((l) => l.status.name == 'won').length})', 'filter': 'WON'},
-      {'label': 'FOLLOW-UP (${tele.leads.where((l) => l.status.name == 'followUp').length})', 'filter': 'FOLLOW-UP'},
-      {'label': 'INTERESTED (${tele.leads.where((l) => l.status.name == 'interested').length})', 'filter': 'INTERESTED'},
-    ];
-
     return Scaffold(
-      backgroundColor: Colors.transparent,
-      floatingActionButton: FloatingActionButton.extended(
+      backgroundColor: AppTheme.paper,
+      floatingActionButton: FloatingActionButton(
         backgroundColor: AppTheme.ink900,
-        foregroundColor: AppTheme.limeYellow,
-        elevation: 4,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-          side: const BorderSide(color: AppTheme.limeYellow, width: 1.5),
-        ),
         onPressed: () => CreateLeadDialog.show(context),
-        icon: const Icon(Icons.person_add_alt_1_rounded, size: 20, color: AppTheme.limeYellow),
-        label: Text('ADD LEAD', style: AppTheme.label(size: 11, color: AppTheme.limeYellow, letterSpacing: 0.14)),
+        child: const Icon(Icons.add, color: AppTheme.limeYellow),
       ),
       body: RefreshIndicator(
         color: AppTheme.greenNeon,
         backgroundColor: AppTheme.ink900,
         onRefresh: () async {
           await tele.fetchBackendData();
-          await tele.fetchDeviceCallLogs();
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+          padding: const EdgeInsets.fromLTRB(18, 12, 18, 100),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Top Header Bar
-              TopHeader(
-                title: 'LEADS',
-                userName: callerName,
-                selectedSimIndex: 1,
+              // Header: MY LEADS · <COUNT>
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Text(
+                    'MY LEADS · ',
+                    style: AppTheme.headline(size: 32, color: AppTheme.ink900),
+                  ),
+                  Text(
+                    '${allLeads.length}',
+                    style: AppTheme.headline(size: 32, color: AppTheme.greenNeon),
+                  ),
+                ],
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
 
-              // Live Search Bar (searches by Contact Name or Phone)
+              // Search Bar: ⚲ Search lead or phone...
               Container(
                 decoration: BoxDecoration(
                   color: AppTheme.white,
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(999),
                   border: Border.all(color: AppTheme.ink900, width: 1.5),
                   boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
                 ),
                 child: TextField(
-                  controller: _searchController,
+                  controller: _searchCtrl,
                   onChanged: (_) => setState(() {}),
                   style: AppTheme.bodyBold(size: 13, color: AppTheme.ink900),
                   decoration: InputDecoration(
-                    hintText: 'Search by client name or phone...',
-                    hintStyle: AppTheme.body(size: 12, color: AppTheme.muted),
+                    hintText: 'Search lead or phone...',
+                    hintStyle: AppTheme.body(size: 12.5, color: AppTheme.muted),
                     prefixIcon: const Icon(Icons.search_rounded, size: 20, color: AppTheme.ink900),
-                    suffixIcon: _searchController.text.isNotEmpty
+                    suffixIcon: _searchCtrl.text.isNotEmpty
                         ? IconButton(
                             icon: const Icon(Icons.close_rounded, size: 18, color: AppTheme.ink900),
                             onPressed: () {
-                              _searchController.clear();
+                              _searchCtrl.clear();
                               setState(() {});
                             },
                           )
                         : null,
                     border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
 
-              // Dropdown: ALL TEAM MEMBERS & + ADD LEAD Button
+              // Filter Chips Row + START DIALING Button
               Row(
                 children: [
                   Expanded(
-                    child: GestureDetector(
-                      onTap: () => _showTeamMemberPicker(context, tele),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: AppTheme.white,
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(color: AppTheme.ink900, width: 1.5),
-                          boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              _selectedTeamMember,
-                              style: AppTheme.label(size: 10, color: AppTheme.ink900, letterSpacing: 0.14),
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: List.generate(_filterTabs.length, (idx) {
+                          final label = _filterTabs[idx];
+                          final isSelected = _selectedFilterIndex == idx;
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: GestureDetector(
+                              onTap: () => setState(() => _selectedFilterIndex = idx),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: isSelected ? AppTheme.limeYellow : AppTheme.white,
+                                  borderRadius: BorderRadius.circular(999),
+                                  border: Border.all(color: AppTheme.ink900, width: 1.5),
+                                  boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+                                ),
+                                child: Text(
+                                  label,
+                                  style: AppTheme.mono(
+                                    size: 10.5,
+                                    color: AppTheme.ink900,
+                                    weight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                                  ),
+                                ),
+                              ),
                             ),
-                            const Icon(Icons.keyboard_arrow_down, size: 20, color: AppTheme.ink900),
-                          ],
-                        ),
+                          );
+                        }),
                       ),
                     ),
                   ),
                   const SizedBox(width: 8),
+
+                  // START DIALING Button
                   GestureDetector(
-                    onTap: () => CreateLeadDialog.show(context),
+                    onTap: () {
+                      tele.startCallSession(leads: filtered);
+                      CallSessionScreen.push(context);
+                    },
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                       decoration: BoxDecoration(
-                        color: AppTheme.greenNeon,
+                        color: AppTheme.ink900,
                         borderRadius: BorderRadius.circular(999),
                         border: Border.all(color: AppTheme.ink900, width: 1.5),
                         boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
                       ),
                       child: Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.person_add_alt_1_rounded, size: 15, color: AppTheme.ink900),
+                          const Icon(Icons.play_arrow_rounded, color: AppTheme.limeYellow, size: 16),
                           const SizedBox(width: 4),
-                          Text('LEAD', style: AppTheme.label(size: 10, color: AppTheme.ink900)),
+                          Text(
+                            'START DIALING',
+                            style: AppTheme.label(size: 9.5, color: AppTheme.limeYellow, letterSpacing: 0.12),
+                          ),
                         ],
                       ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
 
-            // Filter Chips Row
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: List.generate(filterOptions.length, (index) {
-                  final isSel = _selectedFilterIndex == index;
-                  final label = filterOptions[index]['label']!;
-
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: GestureDetector(
-                      onTap: () {
-                        setState(() => _selectedFilterIndex = index);
-                        tele.setLeadFilter(filterOptions[index]['filter']!);
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                        decoration: BoxDecoration(
-                          color: isSel ? AppTheme.ink900 : AppTheme.white,
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(color: AppTheme.ink900, width: 1.2),
-                        ),
-                        child: Text(
-                          label,
-                          style: AppTheme.label(
-                            size: 9.5,
-                            color: isSel ? AppTheme.limeYellow : AppTheme.ink900,
-                            letterSpacing: 0.1,
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                }),
-              ),
-            ),
-            const SizedBox(height: 14),
-
-            // Pipeline Status Donut Card
-            NeoCard(
-              backgroundColor: AppTheme.ink900,
-              shadowColor: AppTheme.ink900,
-              padding: const EdgeInsets.all(18),
-              child: Row(
-                children: [
-                  // Donut Graphic
-                  SizedBox(
-                    width: 72,
-                    height: 72,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        SizedBox(
-                          width: 68,
-                          height: 68,
-                          child: CircularProgressIndicator(
-                            value: totalCount > 0 ? 0.70 : 0.05,
-                            strokeWidth: 10,
-                            backgroundColor: AppTheme.greenDark,
-                            valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.greenNeon),
-                          ),
-                        ),
-                        Text(
-                          '$totalCount',
-                          style: AppTheme.headline(size: 26, color: AppTheme.white),
-                        ),
-                      ],
+              // Leads List Cards
+              if (filtered.isEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(32),
+                  decoration: BoxDecoration(
+                    color: AppTheme.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppTheme.ink900, width: 1.5),
+                  ),
+                  child: Center(
+                    child: Text(
+                      'NO LEADS MATCH THIS FILTER',
+                      style: AppTheme.mono(size: 12, color: AppTheme.muted),
                     ),
                   ),
-                  const SizedBox(width: 20),
+                )
+              else
+                ...filtered.map((lead) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _buildLeadCard(context, lead, tele),
+                  );
+                }),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-                  // Pipeline Summary Legend
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'PIPELINE STATUS',
-                          style: AppTheme.label(size: 9, color: AppTheme.limeYellow, letterSpacing: 0.18),
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Container(width: 6, height: 6, color: AppTheme.greenNeon),
-                            const SizedBox(width: 6),
-                            Text('Won ${tele.leads.where((l) => l.status.name == 'won').length} · ', style: AppTheme.body(size: 11, color: AppTheme.white)),
-                            Container(width: 6, height: 6, color: AppTheme.limeYellow),
-                            const SizedBox(width: 6),
-                            Text('Interested ${tele.leads.where((l) => l.status.name == 'interested').length}', style: AppTheme.body(size: 11, color: AppTheme.white)),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '• Follow-up ${tele.leads.where((l) => l.status.name == 'followUp').length} · Total $totalCount',
-                          style: AppTheme.body(size: 11, color: AppTheme.lightMuted),
-                        ),
-                      ],
+  Widget _buildLeadCard(BuildContext context, LeadModel lead, TeleProvider tele) {
+    // Badge info
+    String badgeText = 'FRESH · NOT DIALED';
+    Color badgeBg = AppTheme.white;
+    Color badgeFg = AppTheme.ink900;
+    bool isExhausted = false;
+
+    if (lead.status == LeadStatus.followUp || lead.status == LeadStatus.renewalFollowUp) {
+      badgeText = 'FOLLOW-UP · OVERDUE';
+      badgeBg = AppTheme.limeYellow;
+      badgeFg = AppTheme.ink900;
+    } else if (lead.status == LeadStatus.interested) {
+      badgeText = 'INTERESTED';
+      badgeBg = AppTheme.greenNeon;
+      badgeFg = AppTheme.ink900;
+    } else if (lead.status == LeadStatus.lost || lead.status == LeadStatus.notInterested) {
+      badgeText = 'EXHAUSTED · 3/3 RETRIES';
+      badgeBg = const Color(0xFFFDECEB);
+      badgeFg = AppTheme.redOverdue;
+      isExhausted = true;
+    } else if (lead.attempts > 0) {
+      badgeText = '${lead.attempts}× DIALED';
+    }
+
+    final cardBg = isExhausted ? const Color(0xFFF7F4EB) : AppTheme.white;
+
+    return GestureDetector(
+      onTap: () => LeadDetailSheet.show(context, {
+        'id': lead.id,
+        'name': lead.name,
+        'phone': lead.phone,
+        'status': lead.statusLabel,
+        'note': lead.note,
+        'attempts': lead.attempts,
+      }),
+      child: NeoCard(
+        backgroundColor: cardBg,
+        shadowColor: AppTheme.ink900,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    lead.name,
+                    style: AppTheme.bodyBold(size: 15, color: isExhausted ? AppTheme.muted : AppTheme.ink900),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    lead.attempts > 0 ? '${lead.phone} · ${lead.attempts}× dialed' : lead.phone,
+                    style: AppTheme.mono(size: 11, color: AppTheme.muted),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: badgeBg,
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: isExhausted ? AppTheme.redOverdue.withValues(alpha: 0.5) : AppTheme.ink900, width: 1.2),
+                    ),
+                    child: Text(
+                      badgeText,
+                      style: AppTheme.mono(
+                        size: 9,
+                        color: badgeFg,
+                        weight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(width: 12),
 
-            // Leads Items List
-            if (dynamicLeads.isEmpty) ...[
-              Padding(
-                padding: const EdgeInsets.all(40),
+            // Circular DIAL Button
+            GestureDetector(
+              onTap: () {
+                tele.startCallSession(leads: [lead]);
+                CallSessionScreen.push(context, lead: lead);
+              },
+              child: Container(
+                width: 54,
+                height: 54,
+                decoration: BoxDecoration(
+                  color: AppTheme.greenNeon,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppTheme.ink900, width: 1.5),
+                  boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+                ),
                 child: Center(
-                  child: Column(
-                    children: [
-                      const Icon(Icons.people_outline, size: 44, color: AppTheme.muted),
-                      const SizedBox(height: 10),
-                      Text('NO LEADS YET', style: AppTheme.headline(size: 18)),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Leads generated from phone calls will appear here.',
-                        style: AppTheme.body(size: 12, color: AppTheme.muted),
-                      ),
-                    ],
+                  child: Text(
+                    'DIAL',
+                    style: AppTheme.mono(size: 10.5, color: AppTheme.ink900, weight: FontWeight.w800),
                   ),
                 ),
               ),
-            ] else ...[
-              ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: dynamicLeads.length,
-                separatorBuilder: (ctx, i) => const SizedBox(height: 10),
-                itemBuilder: (ctx, i) {
-                  final lead = dynamicLeads[i];
-                  final name = lead['name'] as String;
-                  final phone = lead['phone'] as String;
-                  final status = lead['status'] as String;
-                  final attempts = lead['attempts'] as String;
-                  final badgeType = lead['badgeType'] as String;
-
-                  Color badgeBg = AppTheme.white;
-                  Color badgeText = AppTheme.ink900;
-                  if (badgeType == 'lime') {
-                    badgeBg = AppTheme.greenGrass;
-                  } else if (badgeType == 'green') {
-                    badgeBg = AppTheme.greenNeon;
-                    badgeText = AppTheme.white;
-                  } else if (badgeType == 'dark') {
-                    badgeBg = AppTheme.ink900;
-                    badgeText = AppTheme.limeYellow;
-                  }
-
-                  final cleanName = name.replaceAll(RegExp(r'[\s+\-()]'), '');
-                  final cleanPhone = phone.replaceAll(RegExp(r'[\s+\-()]'), '');
-                  final isUnsaved = name.trim().isEmpty ||
-                      name == 'Unknown' ||
-                      name == 'Client' ||
-                      name == 'Unsaved' ||
-                      cleanName == cleanPhone ||
-                      cleanName.endsWith(cleanPhone) ||
-                      cleanPhone.endsWith(cleanName) ||
-                      RegExp(r'^\d+$').hasMatch(cleanName);
-
-                  return NeoCard(
-                    backgroundColor: AppTheme.white,
-                    shadowColor: AppTheme.ink900,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                    onTap: () => LeadDetailSheet.show(context, lead),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Row(
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      name,
-                                      style: AppTheme.bodyBold(size: 14, color: AppTheme.ink900),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  GestureDetector(
-                                    onTap: () => SaveContactDialog.show(context, phone, initialName: isUnsaved ? null : name),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                      decoration: BoxDecoration(
-                                        color: isUnsaved ? AppTheme.limeYellow : AppTheme.paper,
-                                        borderRadius: BorderRadius.circular(6),
-                                        border: Border.all(color: AppTheme.ink900, width: 1),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            isUnsaved ? Icons.person_add_alt_1_rounded : Icons.edit_note_rounded,
-                                            size: 12,
-                                            color: AppTheme.ink900,
-                                          ),
-                                          const SizedBox(width: 3),
-                                          Text(
-                                            isUnsaved ? '+ SAVE' : 'EDIT',
-                                            style: AppTheme.label(size: 8, color: AppTheme.ink900),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: badgeBg,
-                                borderRadius: BorderRadius.circular(999),
-                                border: Border.all(color: AppTheme.ink900, width: 1),
-                              ),
-                              child: Text(
-                                status,
-                                style: AppTheme.label(size: 8.5, color: badgeText),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              phone,
-                              style: AppTheme.mono(size: 11, color: AppTheme.ink700),
-                            ),
-                            Text(
-                              attempts,
-                              style: AppTheme.mono(size: 10, color: AppTheme.muted),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ],
+            ),
           ],
         ),
       ),
-    ),
-  );
-}
+    );
+  }
+
+  List<LeadModel> _getDemoLeads() {
+    return [
+      LeadModel(
+        id: 'l1',
+        name: 'Ganesh Enterprises',
+        phone: '+91 98400 11223',
+        status: LeadStatus.newLead,
+        attempts: 0,
+        dateAdded: DateTime.now(),
+        lastCallDate: DateTime.now(),
+        note: 'New inquiry',
+      ),
+      LeadModel(
+        id: 'l2',
+        name: 'Lakshmi Traders',
+        phone: '+91 90940 55667',
+        status: LeadStatus.newLead,
+        attempts: 0,
+        dateAdded: DateTime.now(),
+        lastCallDate: DateTime.now(),
+        note: 'Wholesale client',
+      ),
+      LeadModel(
+        id: 'l3',
+        name: 'Meenakshi Agencies',
+        phone: '+91 90250 11876',
+        status: LeadStatus.followUp,
+        attempts: 1,
+        dateAdded: DateTime.now(),
+        lastCallDate: DateTime.now(),
+        note: 'Follow-up on quote',
+      ),
+      LeadModel(
+        id: 'l4',
+        name: 'Bharat Electricals',
+        phone: '+91 97890 33445',
+        status: LeadStatus.interested,
+        attempts: 1,
+        dateAdded: DateTime.now(),
+        lastCallDate: DateTime.now(),
+        note: 'Interested in annual package',
+      ),
+      LeadModel(
+        id: 'l5',
+        name: 'Annai Pharma',
+        phone: '+91 99400 77889',
+        status: LeadStatus.lost,
+        attempts: 3,
+        dateAdded: DateTime.now(),
+        lastCallDate: DateTime.now(),
+        note: 'No response after 3 retries',
+      ),
+      LeadModel(
+        id: 'l6',
+        name: 'Chennai Silks Outlet',
+        phone: '+91 95510 22110',
+        status: LeadStatus.followUp,
+        attempts: 2,
+        dateAdded: DateTime.now(),
+        lastCallDate: DateTime.now(),
+        note: 'Callback scheduled for 4 PM',
+      ),
+      LeadModel(
+        id: 'l7',
+        name: 'Velan Hardware',
+        phone: '+91 98410 44556',
+        status: LeadStatus.newLead,
+        attempts: 0,
+        dateAdded: DateTime.now(),
+        lastCallDate: DateTime.now(),
+        note: 'Hardware tools inquiry',
+      ),
+    ];
+  }
 }

@@ -18,6 +18,8 @@ class AppTheme {
   static const Color greenDark = Color(0xFF2E9E2B);
   static const Color orangePill = Color(0xFFFF9500);
   static const Color redMissed = Color(0xFFE63946);
+  static const Color redOverdue = Color(0xFFD0453A);
+  static const Color darkGreenBar = Color(0xFF1E3A1A);
 
   // Linear Gradients
   static const LinearGradient greenGradient = LinearGradient(

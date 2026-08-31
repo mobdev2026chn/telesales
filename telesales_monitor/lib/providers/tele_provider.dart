@@ -1606,8 +1606,258 @@ class TeleProvider extends ChangeNotifier {
     return res;
   }
 
+  // ================= DUTY & BREAK TRACKING =================
+  bool _isOnDuty = true;
+  bool get isOnDuty => _isOnDuty;
+  DateTime _dutyStartTime = DateTime.now().subtract(const Duration(hours: 5, minutes: 6));
+  DateTime get dutyStartTime => _dutyStartTime;
+
+  bool _isOnBreak = false;
+  bool get isOnBreak => _isOnBreak;
+  String _currentBreakType = '';
+  String get currentBreakType => _currentBreakType;
+  DateTime? _breakStartTime;
+
+  final List<Map<String, dynamic>> _breakLogs = [
+    {
+      'type': 'Tea break',
+      'start': '11:15',
+      'end': '11:25',
+      'dur': '10M',
+      'mins': 10,
+    },
+    {
+      'type': 'Lunch',
+      'start': '1:05',
+      'end': '1:19',
+      'dur': '14M',
+      'mins': 14,
+    },
+  ];
+  List<Map<String, dynamic>> get breakLogs => _breakLogs;
+  int get totalBreakMinutes => _breakLogs.fold(0, (sum, b) => sum + (b['mins'] as int? ?? 0));
+
+  void toggleDuty() {
+    _isOnDuty = !_isOnDuty;
+    if (_isOnDuty) {
+      _dutyStartTime = DateTime.now();
+      _isOnBreak = false;
+    }
+    notifyListeners();
+  }
+
+  void startBreak(String type) {
+    _isOnBreak = true;
+    _currentBreakType = type;
+    _breakStartTime = DateTime.now();
+    notifyListeners();
+  }
+
+  void endBreak() {
+    if (_isOnBreak && _breakStartTime != null) {
+      final end = DateTime.now();
+      final diff = end.difference(_breakStartTime!);
+      final mins = diff.inMinutes > 0 ? diff.inMinutes : 1;
+      final startH = _breakStartTime!.hour % 12 == 0 ? 12 : _breakStartTime!.hour % 12;
+      final startStr = '$startH:${_breakStartTime!.minute.toString().padLeft(2, '0')}';
+      final endH = end.hour % 12 == 0 ? 12 : end.hour % 12;
+      final endStr = '$endH:${end.minute.toString().padLeft(2, '0')}';
+      _breakLogs.insert(0, {
+        'type': _currentBreakType.isNotEmpty ? _currentBreakType : 'Break',
+        'start': startStr,
+        'end': endStr,
+        'dur': '${mins}M',
+        'mins': mins,
+      });
+    }
+    _isOnBreak = false;
+    _currentBreakType = '';
+    _breakStartTime = null;
+    notifyListeners();
+  }
+
+  // ================= CALL SESSION ORCHESTRATION =================
+  List<LeadModel> _sessionQueue = [];
+  List<LeadModel> get sessionQueue => _sessionQueue;
+  int _sessionIndex = 0;
+  int get sessionIndex => _sessionIndex;
+  LeadModel? _activeCallLead;
+  LeadModel? get activeCallLead => _activeCallLead;
+
+  int _callTimerSeconds = 0;
+  int get callTimerSeconds => _callTimerSeconds;
+  String get callTimerFormatted {
+    final m = (_callTimerSeconds ~/ 60).toString().padLeft(2, '0');
+    final s = (_callTimerSeconds % 60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  Timer? _sessionCallTimer;
+  bool _isCallMuted = false;
+  bool get isCallMuted => _isCallMuted;
+  bool _isCallOnHold = false;
+  bool get isCallOnHold => _isCallOnHold;
+  bool _isKeypadOpen = false;
+  bool get isKeypadOpen => _isKeypadOpen;
+  String _selectedAudioOutput = 'BT Headset · boAt 331';
+  String get selectedAudioOutput => _selectedAudioOutput;
+
+  void toggleMute() {
+    _isCallMuted = !_isCallMuted;
+    notifyListeners();
+  }
+
+  void toggleHold() {
+    _isCallOnHold = !_isCallOnHold;
+    notifyListeners();
+  }
+
+  void toggleKeypad() {
+    _isKeypadOpen = !_isKeypadOpen;
+    notifyListeners();
+  }
+
+  void setAudioOutput(String output) {
+    _selectedAudioOutput = output;
+    notifyListeners();
+  }
+
+  void startCallSession({List<LeadModel>? leads, int startIndex = 0}) {
+    final available = leads ?? _leads.where((l) => l.status != LeadStatus.won && l.status != LeadStatus.lost).toList();
+    _sessionQueue = available.isNotEmpty ? available : [
+      LeadModel(
+        id: 'demo_1',
+        name: 'Ganesh Enterprises',
+        phone: '+91 98400 11223',
+        status: LeadStatus.newLead,
+        attempts: 0,
+        dateAdded: DateTime.now(),
+        lastCallDate: DateTime.now(),
+        note: 'Fresh IndiaMART inquiry',
+      ),
+      LeadModel(
+        id: 'demo_2',
+        name: 'Lakshmi Traders',
+        phone: '+91 90940 55667',
+        status: LeadStatus.newLead,
+        attempts: 0,
+        dateAdded: DateTime.now(),
+        lastCallDate: DateTime.now(),
+        note: 'Wholesale enquiry',
+      ),
+      LeadModel(
+        id: 'demo_3',
+        name: 'Meenakshi Agencies',
+        phone: '+91 90250 11876',
+        status: LeadStatus.followUp,
+        attempts: 1,
+        dateAdded: DateTime.now(),
+        lastCallDate: DateTime.now(),
+        note: 'Follow up quote',
+      ),
+    ];
+    _sessionIndex = startIndex.clamp(0, _sessionQueue.length - 1);
+    _activeCallLead = _sessionQueue[_sessionIndex];
+    _callTimerSeconds = 0;
+    _isCallMuted = false;
+    _isCallOnHold = false;
+    _isKeypadOpen = false;
+
+    _sessionCallTimer?.cancel();
+    _sessionCallTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      _callTimerSeconds++;
+      notifyListeners();
+    });
+
+    // Make native direct phone call
+    if (_activeCallLead != null) {
+      makeDirectCall(_activeCallLead!.phone);
+    }
+    notifyListeners();
+  }
+
+  void endSessionCall() {
+    _sessionCallTimer?.cancel();
+    _sessionCallTimer = null;
+    notifyListeners();
+  }
+
+  LeadModel? get nextSessionLead {
+    if (_sessionIndex + 1 < _sessionQueue.length) {
+      return _sessionQueue[_sessionIndex + 1];
+    }
+    return null;
+  }
+
+  int get remainingSessionCount => (_sessionQueue.length - _sessionIndex - 1).clamp(0, 999);
+
+  Future<void> saveCallOutcomeAndNext({
+    required LeadStatus status,
+    String? note,
+    bool sendBrochure = false,
+    DateTime? callbackTime,
+    bool takeBreak = false,
+  }) async {
+    final currentLead = _activeCallLead;
+    if (currentLead != null) {
+      await updateLeadStatus(
+        currentLead.id,
+        status,
+        phone: currentLead.phone,
+        name: currentLead.name,
+        note: note,
+      );
+
+      if (callbackTime != null) {
+        addScheduledCallback(
+          name: currentLead.name,
+          phone: currentLead.phone,
+          scheduledTime: callbackTime,
+          note: note ?? 'Follow-up callback',
+        );
+      }
+
+      if (sendBrochure) {
+        launchWhatsApp(
+          currentLead.phone,
+          text: 'Hello ${currentLead.name}, thank you for your time on call. Here is the ASKEVA product pricing & brochure deck for your review.',
+        );
+      }
+    }
+
+    if (takeBreak) {
+      startBreak('Quick Break');
+      _activeCallLead = null;
+      notifyListeners();
+      return;
+    }
+
+    // Advance to next lead if available
+    if (_sessionIndex + 1 < _sessionQueue.length) {
+      _sessionIndex++;
+      _activeCallLead = _sessionQueue[_sessionIndex];
+      _callTimerSeconds = 0;
+      _isCallMuted = false;
+      _isCallOnHold = false;
+      _isKeypadOpen = false;
+
+      _sessionCallTimer?.cancel();
+      _sessionCallTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        _callTimerSeconds++;
+        notifyListeners();
+      });
+
+      makeDirectCall(_activeCallLead!.phone);
+    } else {
+      _activeCallLead = null;
+    }
+    notifyListeners();
+  }
+
   @override
   void dispose() {
+    _sessionCallTimer?.cancel();
+    _syncPollingTimer?.cancel();
     _recordingTimer?.cancel();
     super.dispose();
   }

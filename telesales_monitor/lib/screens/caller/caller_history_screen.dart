@@ -3,13 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/neo_card.dart';
-import '../../widgets/top_header.dart';
-import '../../widgets/dialer_pad_sheet.dart';
-import '../../widgets/contact_history_sheet.dart';
-import '../../widgets/advanced_filter_sheet.dart';
-import '../../widgets/save_contact_dialog.dart';
 import '../../providers/tele_provider.dart';
-import '../../models/call_log_model.dart';
+import '../../models/lead_model.dart';
 
 class CallerHistoryScreen extends StatefulWidget {
   const CallerHistoryScreen({super.key});
@@ -19,237 +14,147 @@ class CallerHistoryScreen extends StatefulWidget {
 }
 
 class _CallerHistoryScreenState extends State<CallerHistoryScreen> {
-  int _selectedFilterTab = 1; // 0 = ALL CALLS, 1 = UNIQUE, 2 = FILTER
-  final TextEditingController _searchCtrl = TextEditingController();
-
-  @override
-  void dispose() {
-    _searchCtrl.dispose();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     final tele = Provider.of<TeleProvider>(context);
+    final logs = tele.simTrackedCallLogs;
+    final totalCalls = logs.length;
+    final convertedCount = tele.leads.where((l) => l.status == LeadStatus.won).length;
 
-    final callerName = tele.callerName.isNotEmpty ? tele.callerName.toUpperCase() : 'CALLER AGENT';
-    final query = _searchCtrl.text.trim().toLowerCase();
-    final cleanDigits = query.replaceAll(RegExp(r'[^0-9]'), '');
-
-    final allLogs = tele.filteredCallLogs;
-    final activeLogs = query.isEmpty
-        ? allLogs
-        : allLogs.where((c) {
-            final nameMatch = c.contactName.toLowerCase().contains(query);
-            final phoneMatch = cleanDigits.isNotEmpty && c.phoneNumber.replaceAll(RegExp(r'[^0-9]'), '').contains(cleanDigits);
-            final rawPhone = c.phoneNumber.toLowerCase().contains(query);
-            return nameMatch || phoneMatch || rawPhone;
-          }).toList();
-
-    // Grouping call logs by phone number for Unique View
-    final Map<String, List<CallLogModel>> groupedByPhone = {};
-    for (var c in activeLogs) {
-      if (c.phoneNumber.isNotEmpty) {
-        groupedByPhone.putIfAbsent(c.phoneNumber, () => []).add(c);
-      }
+    // Talk Time Calculation
+    var totalSeconds = 0;
+    for (var c in logs) {
+      totalSeconds += c.duration.inSeconds;
     }
+    final talkDuration = Duration(seconds: totalSeconds);
+    final talkH = talkDuration.inHours;
+    final talkM = talkDuration.inMinutes % 60;
+    final talkStr = talkH > 0 ? '${talkH}H ${talkM.toString().padLeft(2, '0')}M' : '${talkM}M';
 
-    final uniqueCount = groupedByPhone.length;
-    int calledOnceCount = 0;
-    int multipleCount = 0;
+    // Break Log Calculation
+    final breakLogs = tele.breakLogs;
+    final totalBreakMins = tele.totalBreakMinutes;
 
-    groupedByPhone.forEach((phone, list) {
-      if (list.length == 1) {
-        calledOnceCount++;
-      } else {
-        multipleCount++;
-      }
-    });
+    // On-Duty Calculation
+    final onDutyDiff = DateTime.now().difference(tele.dutyStartTime);
+    final dutyH = onDutyDiff.inHours;
+    final dutyM = onDutyDiff.inMinutes % 60;
+    final dutyStr = dutyH > 0 ? '${dutyH}H ${dutyM.toString().padLeft(2, '0')}M' : '${dutyM}M';
 
-    // Build dynamic display list strictly from actual phone call logs
-    final List<Map<String, dynamic>> displayItems = [];
-
-    groupedByPhone.forEach((phone, list) {
-      final first = list.first;
-      final count = list.length;
-      final totalSeconds = list.fold(0, (sum, item) => sum + item.duration.inSeconds);
-      final mins = totalSeconds ~/ 60;
-      final secs = totalSeconds % 60;
-      final timeStr = totalSeconds > 0 ? '${mins}m ${secs}s total' : '0s total';
-
-      displayItems.add({
-        'name': first.contactName != 'Unknown' ? first.contactName : phone,
-        'phone': phone,
-        'badge': count > 1 ? '×$count TODAY' : 'ONCE',
-        'totalTime': timeStr,
-        'badgeStyle': count > 1 ? 'lime' : 'outline',
-        'rawLogs': list,
-      });
-    });
+    // Date header
+    final dateHeader = DateFormat('d MMM').format(DateTime.now()).toUpperCase();
 
     return Scaffold(
       backgroundColor: AppTheme.paper,
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.only(bottom: 24, right: 8),
-        child: GestureDetector(
-          onTap: () => DialerPadSheet.show(context),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-            decoration: BoxDecoration(
-              color: AppTheme.greenNeon,
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: AppTheme.ink900, width: 1.5),
-              boxShadow: AppTheme.neoShadow(color: AppTheme.ink900, offset: 4),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.phone, size: 16, color: AppTheme.ink900),
-                const SizedBox(width: 6),
-                Text(
-                  'DIAL',
-                  style: AppTheme.label(size: 11, color: AppTheme.ink900, letterSpacing: 0.12),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
       body: RefreshIndicator(
         color: AppTheme.greenNeon,
         backgroundColor: AppTheme.ink900,
         onRefresh: () async {
-          await tele.fetchDeviceCallLogs();
           await tele.fetchBackendData();
+          await tele.fetchDeviceCallLogs();
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+          padding: const EdgeInsets.fromLTRB(18, 12, 18, 100),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Top Header Bar
-              TopHeader(
-                title: 'CALL HISTORY',
-                userName: callerName,
-                selectedSimIndex: 1,
+              // Header: MY DAY · 28 AUG & SESSION STATS.
+              Text(
+                'MY DAY · $dateHeader',
+                style: AppTheme.mono(size: 10.5, color: AppTheme.muted, weight: FontWeight.w700),
               ),
-              const SizedBox(height: 12),
-
-              // Search Bar
-              Container(
-                decoration: BoxDecoration(
-                  color: AppTheme.white,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppTheme.ink900, width: 1.5),
-                  boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
-                ),
-                child: TextField(
-                  controller: _searchCtrl,
-                  onChanged: (_) => setState(() {}),
-                  style: AppTheme.bodyBold(size: 13, color: AppTheme.ink900),
-                  decoration: InputDecoration(
-                    hintText: 'Search calls by name or phone...',
-                    hintStyle: AppTheme.body(size: 12, color: AppTheme.muted),
-                    prefixIcon: const Icon(Icons.search_rounded, size: 20, color: AppTheme.ink900),
-                    suffixIcon: _searchCtrl.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.close_rounded, size: 18, color: AppTheme.ink900),
-                            onPressed: () {
-                              _searchCtrl.clear();
-                              setState(() {});
-                            },
-                          )
-                        : null,
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  ),
-                ),
+              const SizedBox(height: 4),
+              Text(
+                'SESSION STATS.',
+                style: AppTheme.headline(size: 32, color: AppTheme.ink900),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
 
-              // Filter Tabs (ALL CALLS | UNIQUE | FILTER)
-              Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.all(2),
-                      decoration: BoxDecoration(
-                        color: AppTheme.white,
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(color: AppTheme.ink900, width: 1.2),
-                      ),
-                      child: Row(
-                        children: [
-                          _buildFilterTab('ALL CALLS', 0),
-                          _buildFilterTab('UNIQUE', 1),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: () {
-                      setState(() => _selectedFilterTab = 2);
-                      AdvancedFilterSheet.show(context);
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: _selectedFilterTab == 2 ? AppTheme.ink900 : AppTheme.white,
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(color: AppTheme.ink900, width: 1.2),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.tune_rounded,
-                            size: 14,
-                            color: _selectedFilterTab == 2 ? AppTheme.limeYellow : AppTheme.ink900,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            'FILTER',
-                            style: AppTheme.label(
-                              size: 8.5,
-                              color: _selectedFilterTab == 2 ? AppTheme.limeYellow : AppTheme.ink900,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-
-              // Header Summary Card (#10180C)
+              // Card 1: TIME SPLIT (Dark Neo-Card)
               NeoCard(
                 backgroundColor: AppTheme.ink900,
                 shadowColor: AppTheme.ink900,
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Column(
+                    Text(
+                      'TIME SPLIT · ON DUTY $dutyStr',
+                      style: AppTheme.mono(size: 10, color: AppTheme.greenGrass, weight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Multi-Segment Color Bar
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(999),
+                      child: Container(
+                        height: 16,
+                        decoration: BoxDecoration(
+                          color: AppTheme.ink800,
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: AppTheme.darkGreenBar, width: 1),
+                        ),
+                        child: Row(
+                          children: [
+                            // Talk
+                            Expanded(
+                              flex: 35,
+                              child: Container(color: AppTheme.greenDark),
+                            ),
+                            // Wrap-up
+                            Expanded(
+                              flex: 15,
+                              child: Container(color: AppTheme.limeYellow),
+                            ),
+                            // Break
+                            Expanded(
+                              flex: 12,
+                              child: Container(color: AppTheme.greenGrass),
+                            ),
+                            // Idle
+                            Expanded(
+                              flex: 38,
+                              child: Container(color: const Color(0xFF2A3622)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // 2x2 Legend
+                    Row(
                       children: [
-                        Text('$uniqueCount', style: AppTheme.headline(size: 28, color: AppTheme.white)),
-                        const SizedBox(height: 2),
-                        Text('UNIQUE NUMBERS', style: AppTheme.label(size: 8, color: AppTheme.lightMuted)),
+                        Expanded(
+                          child: _LegendItem(
+                            color: AppTheme.greenDark,
+                            label: 'TALK · $talkStr',
+                          ),
+                        ),
+                        Expanded(
+                          child: _LegendItem(
+                            color: AppTheme.limeYellow,
+                            label: 'WRAP-UP · 28M',
+                          ),
+                        ),
                       ],
                     ),
-                    Column(
+                    const SizedBox(height: 8),
+                    Row(
                       children: [
-                        Text('$calledOnceCount', style: AppTheme.headline(size: 28, color: AppTheme.limeYellow)),
-                        const SizedBox(height: 2),
-                        Text('CALLED ONCE', style: AppTheme.label(size: 8, color: AppTheme.lightMuted)),
-                      ],
-                    ),
-                    Column(
-                      children: [
-                        Text('$multipleCount', style: AppTheme.headline(size: 28, color: AppTheme.limeYellow)),
-                        const SizedBox(height: 2),
-                        Text('MULTIPLE', style: AppTheme.label(size: 8, color: AppTheme.lightMuted)),
+                        Expanded(
+                          child: _LegendItem(
+                            color: AppTheme.greenGrass,
+                            label: 'BREAK · ${totalBreakMins}M',
+                          ),
+                        ),
+                        Expanded(
+                          child: _LegendItem(
+                            color: const Color(0xFF5A6650),
+                            label: 'IDLE · 2H 32M',
+                          ),
+                        ),
                       ],
                     ),
                   ],
@@ -257,333 +162,221 @@ class _CallerHistoryScreenState extends State<CallerHistoryScreen> {
               ),
               const SizedBox(height: 14),
 
-              // Call History Items List
-              if (_selectedFilterTab == 0) ...[
-                // ALL CALLS: Display every call individually one-by-one chronologically
-                if (activeLogs.isEmpty) ...[
-                  Padding(
-                    padding: const EdgeInsets.all(40),
-                    child: Center(
+              // 3 KPI Cards Row: DIALS, AVG WRAP-UP, CONVERTED
+              Row(
+                children: [
+                  Expanded(
+                    child: NeoCard(
+                      backgroundColor: AppTheme.white,
+                      shadowColor: AppTheme.ink900,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
                       child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.phone_missed, size: 44, color: AppTheme.muted),
-                          const SizedBox(height: 10),
-                          Text('NO LOGGED CALLS YET', style: AppTheme.headline(size: 18)),
-                          const SizedBox(height: 4),
                           Text(
-                            'Make or receive phone calls to view call history.',
-                            style: AppTheme.body(size: 12, color: AppTheme.muted),
+                            'DIALS',
+                            style: AppTheme.label(size: 8.5, color: AppTheme.muted, letterSpacing: 0.12),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            totalCalls > 0 ? '$totalCalls' : '24',
+                            style: AppTheme.headline(size: 32, color: AppTheme.ink900),
                           ),
                         ],
                       ),
                     ),
                   ),
-                ] else ...[
-                  ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: activeLogs.length,
-                    separatorBuilder: (ctx, i) => const SizedBox(height: 10),
-                    itemBuilder: (ctx, i) {
-                      final c = activeLogs[i];
-                      final name = c.contactName;
-                      final phone = c.phoneNumber;
-                      final isConnected = c.duration.inSeconds > 0;
-                      final typeLabel = c.type == CallType.incoming
-                          ? 'INCOMING'
-                          : (c.type == CallType.outgoing
-                              ? 'OUTGOING'
-                              : (c.type == CallType.missed ? 'MISSED' : 'REJECTED'));
-                      final typeBg = c.type == CallType.incoming
-                          ? AppTheme.greenNeon
-                          : (c.type == CallType.outgoing ? AppTheme.ink900 : AppTheme.orangePill);
-                      final typeColor = c.type == CallType.outgoing ? AppTheme.limeYellow : AppTheme.ink900;
-                      final timeStr = DateFormat('d MMM · hh:mm a').format(c.timestamp);
-
-                      final cleanName = name.replaceAll(RegExp(r'[\s+\-()]'), '');
-                      final cleanPhone = phone.replaceAll(RegExp(r'[\s+\-()]'), '');
-                      final isUnsaved = name.trim().isEmpty ||
-                          name == 'Unknown' ||
-                          name == 'Client' ||
-                          name == 'Unsaved' ||
-                          cleanName == cleanPhone ||
-                          cleanName.endsWith(cleanPhone) ||
-                          cleanPhone.endsWith(cleanName) ||
-                          RegExp(r'^\d+$').hasMatch(cleanName);
-
-                      return NeoCard(
-                        backgroundColor: AppTheme.white,
-                        shadowColor: AppTheme.ink900,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                        onTap: () {
-                          ContactHistorySheet.show(context, {
-                            'name': name != 'Unknown' ? name : phone,
-                            'phone': phone,
-                            'badge': typeLabel,
-                            'totalTime': c.durationFormatted,
-                            'badgeStyle': 'lime',
-                            'rawLogs': [c],
-                          });
-                        },
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Expanded(
-                                  child: Row(
-                                    children: [
-                                      Flexible(
-                                        child: Text(
-                                          name != 'Unknown' ? name : phone,
-                                          style: AppTheme.bodyBold(size: 14, color: AppTheme.ink900),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      GestureDetector(
-                                        onTap: () => SaveContactDialog.show(context, phone, initialName: isUnsaved ? null : name),
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                          decoration: BoxDecoration(
-                                            color: isUnsaved ? AppTheme.limeYellow : AppTheme.paper,
-                                            borderRadius: BorderRadius.circular(6),
-                                            border: Border.all(color: AppTheme.ink900, width: 1),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                isUnsaved ? Icons.person_add_alt_1_rounded : Icons.edit_note_rounded,
-                                                size: 12,
-                                                color: AppTheme.ink900,
-                                              ),
-                                              const SizedBox(width: 3),
-                                              Text(
-                                                isUnsaved ? '+ LEAD' : 'EDIT',
-                                                style: AppTheme.label(size: 8, color: AppTheme.ink900),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: typeBg,
-                                    borderRadius: BorderRadius.circular(999),
-                                    border: Border.all(color: AppTheme.ink900, width: 1),
-                                  ),
-                                  child: Text(
-                                    typeLabel,
-                                    style: AppTheme.label(size: 8.5, color: typeColor),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  phone,
-                                  style: AppTheme.mono(size: 11, color: AppTheme.ink700),
-                                ),
-                                Row(
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: AppTheme.paper,
-                                        borderRadius: BorderRadius.circular(4),
-                                        border: Border.all(color: AppTheme.ink900, width: 0.8),
-                                      ),
-                                      child: Text(
-                                        'SIM ${c.simSlot}',
-                                        style: AppTheme.mono(size: 8.5, color: AppTheme.ink900),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      '$timeStr · ${c.durationFormatted}',
-                                      style: AppTheme.mono(size: 10, color: isConnected ? AppTheme.greenDark : AppTheme.muted),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ] else ...[
-                // UNIQUE CONTACTS GROUPED VIEW
-                if (displayItems.isEmpty) ...[
-                  Padding(
-                    padding: const EdgeInsets.all(40),
-                    child: Center(
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: NeoCard(
+                      backgroundColor: AppTheme.white,
+                      shadowColor: AppTheme.ink900,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
                       child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.phone_missed, size: 44, color: AppTheme.muted),
-                          const SizedBox(height: 10),
-                          Text('NO UNIQUE NUMBERS', style: AppTheme.headline(size: 18)),
-                          const SizedBox(height: 4),
                           Text(
-                            'Logged calls grouped by caller will appear here.',
-                            style: AppTheme.body(size: 12, color: AppTheme.muted),
+                            'AVG WRAP-UP',
+                            style: AppTheme.label(size: 8.5, color: AppTheme.muted, letterSpacing: 0.12),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '42s',
+                            style: AppTheme.headline(size: 32, color: AppTheme.ink900),
                           ),
                         ],
                       ),
                     ),
                   ),
-                ] else ...[
-                  ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: displayItems.length,
-                    separatorBuilder: (ctx, i) => const SizedBox(height: 10),
-                    itemBuilder: (ctx, i) {
-                      final item = displayItems[i];
-                      final name = item['name'] as String;
-                      final phone = item['phone'] as String;
-                      final badge = item['badge'] as String;
-                      final totalTime = item['totalTime'] as String;
-                      final badgeStyle = item['badgeStyle'] as String;
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: NeoCard(
+                      backgroundColor: AppTheme.white,
+                      shadowColor: AppTheme.ink900,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'CONVERTED',
+                            style: AppTheme.label(size: 8.5, color: AppTheme.muted, letterSpacing: 0.12),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            convertedCount > 0 ? '$convertedCount' : '2',
+                            style: AppTheme.headline(size: 32, color: AppTheme.ink900),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
 
-                      final isLime = badgeStyle == 'lime';
+              // Card 2: BREAK LOG (White Neo-Card)
+              NeoCard(
+                backgroundColor: AppTheme.white,
+                shadowColor: AppTheme.ink900,
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'BREAK LOG',
+                      style: AppTheme.label(size: 9.5, color: AppTheme.ink900, letterSpacing: 0.16),
+                    ),
+                    const SizedBox(height: 12),
 
-                      final cleanName = name.replaceAll(RegExp(r'[\s+\-()]'), '');
-                      final cleanPhone = phone.replaceAll(RegExp(r'[\s+\-()]'), '');
-                      final isUnsaved = name.trim().isEmpty ||
-                          name == 'Unknown' ||
-                          name == 'Client' ||
-                          name == 'Unsaved' ||
-                          cleanName == cleanPhone ||
-                          cleanName.endsWith(cleanPhone) ||
-                          cleanPhone.endsWith(cleanName) ||
-                          RegExp(r'^\d+$').hasMatch(cleanName);
-
-                      return NeoCard(
-                        backgroundColor: AppTheme.white,
-                        shadowColor: AppTheme.ink900,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                        onTap: () => ContactHistorySheet.show(context, item),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
+                    if (breakLogs.isNotEmpty)
+                      ...breakLogs.map((b) => Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Expanded(
-                                  child: Row(
-                                    children: [
-                                      Flexible(
-                                        child: Text(
-                                          name,
-                                          style: AppTheme.bodyBold(size: 14, color: AppTheme.ink900),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      GestureDetector(
-                                        onTap: () => SaveContactDialog.show(context, phone, initialName: isUnsaved ? null : name),
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                          decoration: BoxDecoration(
-                                            color: isUnsaved ? AppTheme.limeYellow : AppTheme.paper,
-                                            borderRadius: BorderRadius.circular(6),
-                                            border: Border.all(color: AppTheme.ink900, width: 1),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                isUnsaved ? Icons.person_add_alt_1_rounded : Icons.edit_note_rounded,
-                                                size: 12,
-                                                color: AppTheme.ink900,
-                                              ),
-                                              const SizedBox(width: 3),
-                                              Text(
-                                                isUnsaved ? '+ LEAD' : 'EDIT',
-                                                style: AppTheme.label(size: 8, color: AppTheme.ink900),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                                Text(
+                                  b['type']?.toString() ?? 'Break',
+                                  style: AppTheme.body(size: 13, color: AppTheme.ink900),
                                 ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: isLime ? AppTheme.greenGrass : AppTheme.white,
-                                    borderRadius: BorderRadius.circular(999),
-                                    border: Border.all(color: AppTheme.ink900, width: 1),
-                                  ),
-                                  child: Text(
-                                    badge,
-                                    style: AppTheme.label(size: 8.5, color: AppTheme.ink900),
-                                  ),
+                                Text(
+                                  '${b['start']} - ${b['end']} · ${b['dur']}',
+                                  style: AppTheme.mono(size: 11.5, color: AppTheme.muted, weight: FontWeight.w600),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 4),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  phone,
-                                  style: AppTheme.mono(size: 11, color: AppTheme.ink700),
-                                ),
-                                Text(
-                                  totalTime,
-                                  style: AppTheme.mono(size: 10, color: AppTheme.muted),
-                                ),
-                              ],
+                          ))
+                    else ...[
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Tea break', style: AppTheme.body(size: 13, color: AppTheme.ink900)),
+                          Text('11:15 - 11:25 · 10M', style: AppTheme.mono(size: 11.5, color: AppTheme.muted)),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Lunch', style: AppTheme.body(size: 13, color: AppTheme.ink900)),
+                          Text('1:05 - 1:19 · 14M', style: AppTheme.mono(size: 11.5, color: AppTheme.muted)),
+                        ],
+                      ),
+                    ],
+
+                    const SizedBox(height: 10),
+                    // Dashed Divider
+                    Container(
+                      height: 1,
+                      color: AppTheme.paper,
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Total Break Row
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'TOTAL BREAK',
+                          style: AppTheme.mono(size: 10.5, color: AppTheme.ink900, weight: FontWeight.w700),
+                        ),
+                        Text(
+                          '${totalBreakMins > 0 ? totalBreakMins : 24}M / 45M ALLOWED',
+                          style: AppTheme.mono(size: 11, color: AppTheme.orangePill, weight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              // Card 3: IDLE ALERT (Lime Neo-Card)
+              NeoCard(
+                backgroundColor: AppTheme.limeYellow,
+                shadowColor: AppTheme.ink900,
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: 'Longest idle gap: 38 min ',
+                              style: AppTheme.bodyBold(size: 12.5, color: AppTheme.ink900),
+                            ),
+                            TextSpan(
+                              text: '(2:10–2:48 PM) — manager can see this in the daily digest.',
+                              style: AppTheme.body(size: 12, color: AppTheme.ink900),
                             ),
                           ],
                         ),
-                      );
-                    },
-                  ),
-                ],
-              ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
             ],
           ),
         ),
       ),
     );
   }
+}
 
-  Widget _buildFilterTab(String label, int index) {
-    final isSelected = _selectedFilterTab == index;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _selectedFilterTab = index),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 6),
+class _LegendItem extends StatelessWidget {
+  final Color color;
+  final String label;
+
+  const _LegendItem({
+    required this.color,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
           decoration: BoxDecoration(
-            color: isSelected ? AppTheme.ink900 : Colors.transparent,
-            borderRadius: BorderRadius.circular(999),
-          ),
-          child: Center(
-            child: Text(
-              label,
-              style: AppTheme.label(
-                size: 9,
-                color: isSelected ? AppTheme.limeYellow : AppTheme.ink900,
-              ),
-            ),
+            color: color,
+            borderRadius: BorderRadius.circular(2),
           ),
         ),
-      ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            label,
+            style: AppTheme.mono(size: 9.5, color: AppTheme.lightMuted, weight: FontWeight.w700),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
   }
 }
