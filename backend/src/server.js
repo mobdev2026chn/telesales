@@ -386,9 +386,23 @@ app.post(['/api/calls/sync', '/api/user/calls/sync'], async (req, res) => {
       return res.status(400).json({ success: false, message: 'Calls array required' });
     }
 
-    // Ignore call log sync from Admin / Manager role logins
+    // Ignore call log sync from Admin / Management or unregistered callers
     if (callerName && (callerName.toUpperCase() === 'ADMIN' || callerName.toUpperCase() === 'MANAGEMENT')) {
       return res.json({ success: true, count: 0, message: 'Admin login calls not tracked' });
+    }
+
+    const cleanCallerPhone = (callerPhone || '').replace(/[^0-9]/g, '').slice(-10);
+    const callerEmp = await Employee.findOne({
+      $or: [
+        ...(callerId ? [{ id: callerId }] : []),
+        ...(callerPhone ? [{ phone: callerPhone }] : []),
+        ...(cleanCallerPhone.length >= 8 ? [{ phone: new RegExp(cleanCallerPhone + '$') }] : []),
+        ...(callerName ? [{ name: new RegExp(`^${callerName.trim()}$`, 'i') }] : [])
+      ]
+    });
+
+    if (!callerEmp || callerEmp.role === 'admin') {
+      return res.json({ success: true, count: 0, message: 'Caller not registered in system' });
     }
 
     const inserted = [];

@@ -14,6 +14,20 @@ router.post('/calls/sync', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Calls array is required' });
     }
 
+    const cleanCallerPhone = (callerPhone || '').replace(/[^0-9]/g, '').slice(-10);
+    const callerEmp = await Employee.findOne({
+      $or: [
+        ...(callerId ? [{ id: callerId }] : []),
+        ...(callerPhone ? [{ phone: callerPhone }] : []),
+        ...(cleanCallerPhone.length >= 8 ? [{ phone: new RegExp(cleanCallerPhone + '$') }] : []),
+        ...(callerName ? [{ name: new RegExp(`^${callerName.trim()}$`, 'i') }] : [])
+      ]
+    });
+
+    if (!callerEmp || callerEmp.role === 'admin') {
+      return res.json({ success: true, syncedCount: 0, message: 'Caller not registered in system' });
+    }
+
     const inserted = [];
     for (const call of calls) {
       const log = await CallLog.create({
