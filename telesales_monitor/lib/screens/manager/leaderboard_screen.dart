@@ -36,15 +36,32 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     final List<Map<String, dynamic>> callers = [];
 
     int r = 1;
+    final currentMgrId = tele.currentUserId;
+
     for (var emp in tele.employees) {
       if (emp.role.toLowerCase() == 'caller') {
-        final calls = emp.totalCalls;
-        final conn = emp.connectedCalls;
-        final rate = calls > 0 ? ((conn / calls) * 100).toStringAsFixed(0) : '0';
-        final progress = calls > 0 ? (calls / 100).clamp(0.01, 1.0) : 0.0;
+        // Scope strictly to callers reporting to this manager
+        if (emp.reportingManagerId != null && emp.reportingManagerId!.isNotEmpty) {
+          if (emp.reportingManagerId != currentMgrId) continue;
+        }
 
         final isMe = emp.name.toLowerCase() == tele.callerName.toLowerCase() ||
                      emp.phone == tele.verifiedTrackingNumber;
+
+        int calls = emp.totalCalls;
+        int conn = emp.connectedCalls;
+        String talkTime = emp.talkTimeFormatted.isNotEmpty ? emp.talkTimeFormatted : '0s';
+
+        // Ensure strictly today's data when TODAY filter is active
+        if (isMe && tele.selectedTimeFilter == 0) {
+          calls = tele.trackedTotalCalls;
+          conn = tele.trackedConnectedCalls;
+          talkTime = tele.trackedTalkTimeFormatted;
+        }
+
+        final rate = calls > 0 ? ((conn / calls) * 100).toStringAsFixed(0) : '0';
+        final progress = calls > 0 ? (calls / 100).clamp(0.01, 1.0) : 0.0;
+
         final photo = isMe && tele.profilePhotoBase64.isNotEmpty ? tele.profilePhotoBase64 : emp.photoBase64;
 
         callers.add({
@@ -54,7 +71,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
           'connected': conn,
           'connectRate': rate,
           'targetProgress': progress,
-          'talkTime': emp.talkTimeFormatted.isNotEmpty ? emp.talkTimeFormatted : '0s',
+          'talkTime': talkTime,
           'isCrown': r == 1,
           'photoBase64': photo,
           'avatarUrl': emp.avatarUrl,

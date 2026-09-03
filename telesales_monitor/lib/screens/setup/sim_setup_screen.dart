@@ -160,7 +160,7 @@ class _SimSetupScreenState extends State<SimSetupScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 child: Center(
                   child: Text(
-                    'CONFIRM & START TRACKING →',
+                    'CONFIRM & START MONITORING →',
                     style: AppTheme.label(size: 12, color: AppTheme.ink900, letterSpacing: 0.14),
                   ),
                 ),

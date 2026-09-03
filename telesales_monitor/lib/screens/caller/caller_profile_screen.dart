@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/neo_card.dart';
 import '../../widgets/neo_button.dart';
+import '../../widgets/top_header.dart';
+import '../../widgets/notifications_sheet.dart';
 import '../../providers/tele_provider.dart';
 import '../login_screen.dart';
 
@@ -319,6 +321,13 @@ class _CallerProfileScreenState extends State<CallerProfileScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            TopHeader(
+              title: 'PROFILE',
+              userName: callerName,
+              selectedSimIndex: tele.activeSimSlot,
+            ),
+            const SizedBox(height: 14),
+
             // Profile Header Card with Avatar
             NeoCard(
               backgroundColor: AppTheme.ink900,
@@ -467,6 +476,56 @@ class _CallerProfileScreenState extends State<CallerProfileScreen> {
                   activeThumbColor: AppTheme.greenNeon,
                   activeTrackColor: AppTheme.ink900,
                   onChanged: (_) => tele.toggleAutoRecord(),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // Notifications Quick Redirection Card
+          NeoCard(
+            backgroundColor: AppTheme.white,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.orangePill.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: AppTheme.orangePill, width: 1.2),
+                      ),
+                      child: const Icon(Icons.notifications_outlined, size: 18, color: AppTheme.orangePill),
+                    ),
+                    const SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('NOTIFICATIONS', style: AppTheme.label(size: 10, color: AppTheme.ink900)),
+                        const SizedBox(height: 2),
+                        Text(
+                          tele.unreadNotificationCount > 0
+                              ? '${tele.unreadNotificationCount} unread update(s)'
+                              : 'All caught up · 0 new',
+                          style: AppTheme.body(size: 11, color: AppTheme.muted),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                GestureDetector(
+                  onTap: () => NotificationsSheet.show(context),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppTheme.ink900,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text('VIEW →', style: AppTheme.label(size: 9.5, color: AppTheme.limeYellow)),
+                  ),
                 ),
               ],
             ),

@@ -4,7 +4,6 @@ import 'package:intl/intl.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/neo_card.dart';
 import '../../widgets/top_header.dart';
-import '../../widgets/create_user_dialog.dart';
 import '../../providers/tele_provider.dart';
 
 class ManagerDashboard extends StatelessWidget {
@@ -123,16 +122,62 @@ class ManagerDashboard extends StatelessWidget {
             TopHeader(
               title: 'DASHBOARD',
               userName: tele.currentUserName,
-              selectedSimIndex: 1,
+              selectedSimIndex: tele.activeSimSlot,
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
+
+            // Mode Switcher Banner (Allow Manager to enter as Caller)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: tele.isManagerCallerMode ? AppTheme.limeYellow : AppTheme.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.ink900, width: 1.5),
+                boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        tele.isManagerCallerMode ? Icons.headset_mic_rounded : Icons.admin_panel_settings_rounded,
+                        size: 18,
+                        color: AppTheme.ink900,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        tele.isManagerCallerMode ? 'MODE: CALLER ACTIVE' : 'MODE: MANAGER SUPERVISION',
+                        style: AppTheme.label(size: 9.5, color: AppTheme.ink900, letterSpacing: 0.12),
+                      ),
+                    ],
+                  ),
+                  GestureDetector(
+                    onTap: () => tele.toggleManagerCallerMode(),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: AppTheme.ink900,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        tele.isManagerCallerMode ? 'RETURN TO MANAGER' : 'SWITCH TO CALLER →',
+                        style: AppTheme.label(size: 8.5, color: AppTheme.limeYellow),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
 
             Row(
               children: [
+                // Manager's Team Chip (Only my team)
                 Expanded(
                   flex: 6,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     decoration: BoxDecoration(
                       color: AppTheme.ink900,
                       borderRadius: BorderRadius.circular(12),
@@ -143,23 +188,11 @@ class ManagerDashboard extends StatelessWidget {
                         const Icon(Icons.groups_rounded, size: 14, color: AppTheme.limeYellow),
                         const SizedBox(width: 6),
                         Expanded(
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              value: tele.selectedTeamFilter,
-                              isExpanded: true,
-                              dropdownColor: AppTheme.ink900,
-                              icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: AppTheme.limeYellow),
-                              style: AppTheme.mono(size: 10, color: AppTheme.white),
-                              onChanged: (val) {
-                                if (val != null) tele.setTeamFilter(val);
-                              },
-                              items: tele.availableTeams.map((t) {
-                                return DropdownMenuItem<String>(
-                                  value: t,
-                                  child: Text(t == 'ALL' ? '🏢 ALL TEAMS' : '🏢 $t', overflow: TextOverflow.ellipsis),
-                                );
-                              }).toList(),
-                            ),
+                          child: Text(
+                            'MY TEAM: ${tele.currentUserTeam.toUpperCase()}',
+                            style: AppTheme.mono(size: 9.5, color: AppTheme.white, weight: FontWeight.w700),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
@@ -167,6 +200,8 @@ class ManagerDashboard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
+
+                // Team Members Dropdown (Only this manager's callers)
                 Expanded(
                   flex: 6,
                   child: Container(
@@ -194,7 +229,7 @@ class ManagerDashboard extends StatelessWidget {
                               items: tele.userFilterOptions.map((u) {
                                 return DropdownMenuItem<String>(
                                   value: u,
-                                  child: Text(u == 'ALL' ? '👤 ALL USERS' : '👤 $u', overflow: TextOverflow.ellipsis),
+                                  child: Text(u == 'ALL' ? '👤 ALL CALLERS' : '👤 $u', overflow: TextOverflow.ellipsis),
                                 );
                               }).toList(),
                             ),
@@ -202,18 +237,6 @@ class ManagerDashboard extends StatelessWidget {
                         ),
                       ],
                     ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: () => CreateUserDialog.show(context),
-                  child: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppTheme.greenNeon,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.person_add_alt_1_rounded, size: 16, color: AppTheme.ink900),
                   ),
                 ),
               ],

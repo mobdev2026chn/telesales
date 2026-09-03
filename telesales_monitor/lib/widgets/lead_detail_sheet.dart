@@ -32,13 +32,13 @@ class _LeadDetailSheetState extends State<LeadDetailSheet> {
 
   final List<String> _statuses = [
     'NEW',
-    'FOLLOW-UP CALL',
-    'NOT PICKUP',
-    'BUSY ON CALL',
-    'RENEWAL FOLLOW-UP',
     'INTERESTED',
-    'WON',
-    'LOST',
+    'FOLLOW-UP',
+    'CONVERTED',
+    'NOT INTERESTED',
+    'BOOK DEMO',
+    'DEMO RESCHEDULE',
+    'DEMO DONE',
   ];
 
   @override
@@ -56,22 +56,32 @@ class _LeadDetailSheetState extends State<LeadDetailSheet> {
   }
 
   LeadStatus _parseStatus(String str) {
-    switch (str.toUpperCase()) {
-      case 'WON':
-        return LeadStatus.won;
+    final norm = str.toUpperCase().replaceAll(RegExp(r'[\s_-]'), '');
+    switch (norm) {
+      case 'NEW':
+        return LeadStatus.newLead;
       case 'INTERESTED':
         return LeadStatus.interested;
-      case 'FOLLOW-UP CALL':
       case 'FOLLOWUP':
         return LeadStatus.followUp;
-      case 'NOT PICKUP':
-        return LeadStatus.notPickup;
-      case 'BUSY ON CALL':
-        return LeadStatus.busyOnCall;
-      case 'RENEWAL FOLLOW-UP':
-        return LeadStatus.renewalFollowUp;
+      case 'CONVERTED':
+      case 'WON':
+        return LeadStatus.won;
+      case 'NOTINTERESTED':
       case 'LOST':
-        return LeadStatus.lost;
+        return LeadStatus.notInterested;
+      case 'BOOKDEMO':
+        return LeadStatus.bookDemo;
+      case 'DEMORESCHEDULE':
+        return LeadStatus.demoReschedule;
+      case 'DEMODONE':
+        return LeadStatus.demoDone;
+      case 'NOTPICKUP':
+        return LeadStatus.notPickup;
+      case 'BUSYONCALL':
+        return LeadStatus.busyOnCall;
+      case 'RENEWALFOLLOWUP':
+        return LeadStatus.renewalFollowUp;
       default:
         return LeadStatus.newLead;
     }

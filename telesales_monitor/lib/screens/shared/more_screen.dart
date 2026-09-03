@@ -2,10 +2,10 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/neo_card.dart';
 import '../../widgets/top_header.dart';
-import '../../widgets/create_user_dialog.dart';
 import '../../providers/tele_provider.dart';
 import '../login_screen.dart';
 
@@ -20,6 +20,36 @@ class MoreScreen extends StatefulWidget {
 class _MoreScreenState extends State<MoreScreen> {
   bool _isReportSent = false;
   bool _showBanner = false;
+  DateTimeRange? _reportDateRange;
+
+  Future<void> _selectReportDateRange(BuildContext context) async {
+    final now = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: now.subtract(const Duration(days: 365)),
+      lastDate: now.add(const Duration(days: 1)),
+      initialDateRange: _reportDateRange ?? DateTimeRange(
+        start: now.subtract(const Duration(days: 7)),
+        end: now,
+      ),
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppTheme.ink900,
+              onPrimary: AppTheme.limeYellow,
+              surface: AppTheme.white,
+              onSurface: AppTheme.ink900,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() => _reportDateRange = picked);
+    }
+  }
 
   void _triggerExport() {
     setState(() {
@@ -31,6 +61,7 @@ class _MoreScreenState extends State<MoreScreen> {
       if (mounted) {
         setState(() {
           _showBanner = false;
+          _isReportSent = false;
         });
       }
     });
@@ -194,9 +225,9 @@ class _MoreScreenState extends State<MoreScreen> {
               children: [
               // Top Header Bar
               TopHeader(
-                title: 'MORE',
-                userName: Provider.of<TeleProvider>(context).currentUserName,
-                selectedSimIndex: 1,
+                title: 'PROFILE',
+                userName: tele.currentUserName,
+                selectedSimIndex: tele.activeSimSlot,
               ),
               const SizedBox(height: 16),
 
@@ -316,34 +347,35 @@ class _MoreScreenState extends State<MoreScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text('Manage telesales team, add users/callers & view cloud telemetry.', style: AppTheme.body(size: 11, color: AppTheme.lightMuted)),
-                    const SizedBox(height: 14),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () => CreateUserDialog.show(context),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              decoration: BoxDecoration(
-                                color: AppTheme.greenNeon,
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: AppTheme.ink900, width: 1.2),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Icon(Icons.person_add_alt_1_rounded, size: 16, color: AppTheme.ink900),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    '+ CREATE NEW USER',
-                                    style: AppTheme.label(size: 10, color: AppTheme.ink900, letterSpacing: 0.1),
-                                  ),
-                                ],
-                              ),
-                            ),
+                    GestureDetector(
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            backgroundColor: AppTheme.ink900,
+                            content: Text('ℹ Admin Web Portal (http://localhost:8080) handles role provisioning.', style: AppTheme.body(size: 12, color: AppTheme.limeYellow)),
                           ),
+                        );
+                      },
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          color: AppTheme.greenNeon,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppTheme.ink900, width: 1.2),
                         ),
-                      ],
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.language_rounded, size: 16, color: AppTheme.ink900),
+                            const SizedBox(width: 6),
+                            Text(
+                              'OPEN WEB ADMIN PORTAL',
+                              style: AppTheme.label(size: 10, color: AppTheme.ink900, letterSpacing: 0.1),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -375,36 +407,70 @@ class _MoreScreenState extends State<MoreScreen> {
               ),
               const SizedBox(height: 12),
 
-              // Card 2: Daily report · 24 Aug (Dark Card)
+              // Card 2: Performance Report with Date Range Filter
               NeoCard(
                 backgroundColor: AppTheme.ink900,
                 shadowColor: AppTheme.ink900,
                 padding: const EdgeInsets.all(16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Daily report · 24 Aug', style: AppTheme.headline(size: 18, color: AppTheme.white)),
-                        const SizedBox(height: 3),
-                        Text('Call log + lead status, XLSX & PDF', style: AppTheme.body(size: 11, color: AppTheme.lightMuted)),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _reportDateRange != null
+                                  ? 'Report · ${DateFormat('d MMM').format(_reportDateRange!.start)} - ${DateFormat('d MMM').format(_reportDateRange!.end)}'
+                                  : 'Activity Report · ${DateFormat('d MMM yyyy').format(DateTime.now())}',
+                              style: AppTheme.headline(size: 16, color: AppTheme.white),
+                            ),
+                            const SizedBox(height: 3),
+                            Text('Call logs, outcomes & team performance', style: AppTheme.body(size: 11, color: AppTheme.lightMuted)),
+                          ],
+                        ),
+                        GestureDetector(
+                          onTap: () => _selectReportDateRange(context),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: AppTheme.paper,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.date_range_rounded, size: 14, color: AppTheme.ink900),
+                                const SizedBox(width: 4),
+                                Text('DATE RANGE', style: AppTheme.label(size: 8.5, color: AppTheme.ink900)),
+                              ],
+                            ),
+                          ),
+                        ),
                       ],
                     ),
+                    const SizedBox(height: 14),
                     GestureDetector(
                       onTap: _triggerExport,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        alignment: Alignment.center,
                         decoration: BoxDecoration(
                           color: AppTheme.limeYellow,
                           borderRadius: BorderRadius.circular(999),
                           border: Border.all(color: AppTheme.ink900, width: 1.2),
+                          boxShadow: AppTheme.neoShadowSm(color: AppTheme.limeYellow),
                         ),
                         child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
+                            const Icon(Icons.download_rounded, size: 16, color: AppTheme.ink900),
+                            const SizedBox(width: 6),
                             Text(
-                              _isReportSent ? '✓ SENT' : '↓ EXPORT',
-                              style: AppTheme.label(size: 9.5, color: AppTheme.ink900, letterSpacing: 0.1),
+                              _isReportSent ? '✓ EXPORTED & DOWNLOADED' : 'DOWNLOAD REPORT (XLSX / CSV)',
+                              style: AppTheme.label(size: 10.5, color: AppTheme.ink900, letterSpacing: 0.12),
                             ),
                           ],
                         ),
@@ -416,41 +482,64 @@ class _MoreScreenState extends State<MoreScreen> {
               const SizedBox(height: 12),
 
               // Card 3: RECORDING STORAGE
-              NeoCard(
-                backgroundColor: AppTheme.white,
-                shadowColor: AppTheme.ink900,
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'RECORDING STORAGE',
-                      style: AppTheme.label(size: 9, color: AppTheme.ink900, letterSpacing: 0.18),
-                    ),
-                    const SizedBox(height: 10),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(999),
-                      child: Container(
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: AppTheme.paper,
+              Builder(
+                builder: (ctx) {
+                  final count = tele.recordings.length;
+                  final usedMb = count * 1.8;
+                  final usedGb = (usedMb / 1024).clamp(0.02, 5.0);
+                  final freeGb = (5.0 - usedGb).clamp(0.0, 5.0);
+
+                  return NeoCard(
+                    backgroundColor: AppTheme.white,
+                    shadowColor: AppTheme.ink900,
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'RECORDING STORAGE',
+                              style: AppTheme.label(size: 9, color: AppTheme.ink900, letterSpacing: 0.18),
+                            ),
+                            Text(
+                              '$count SAVED AUDIOS',
+                              style: AppTheme.mono(size: 9, color: AppTheme.greenDark, weight: FontWeight.w700),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        ClipRRect(
                           borderRadius: BorderRadius.circular(999),
-                          border: Border.all(color: AppTheme.ink900, width: 0.8),
+                          child: Container(
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: AppTheme.paper,
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(color: AppTheme.ink900, width: 0.8),
+                            ),
+                            child: FractionallySizedBox(
+                              alignment: Alignment.centerLeft,
+                              widthFactor: (usedGb / 5.0).clamp(0.05, 1.0),
+                              child: Container(color: AppTheme.greenNeon),
+                            ),
+                          ),
                         ),
-                        child: FractionallySizedBox(
-                          alignment: Alignment.centerLeft,
-                          widthFactor: (1.87 / 5.0).clamp(0.0, 1.0),
-                          child: Container(color: AppTheme.greenNeon),
+                        const SizedBox(height: 8),
+                        Text(
+                          '${usedGb.toStringAsFixed(2)} GB used · ${freeGb.toStringAsFixed(2)} GB free of 5 GB storage',
+                          style: AppTheme.mono(size: 10, color: AppTheme.muted),
                         ),
-                      ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Hardware recording audio saved locally and backed up to cloud vault.',
+                          style: AppTheme.body(size: 9.5, color: AppTheme.muted),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '1.87 GB used · 3.12 GB free of 5 GB',
-                      style: AppTheme.mono(size: 10, color: AppTheme.muted),
-                    ),
-                  ],
-                ),
+                  );
+                },
               ),
               const SizedBox(height: 12),
 
@@ -467,7 +556,10 @@ class _MoreScreenState extends State<MoreScreen> {
                       children: [
                         Text('Sync device call log', style: AppTheme.bodyBold(size: 15, color: AppTheme.ink900)),
                         const SizedBox(height: 2),
-                        Text('Last synced 7:09 PM', style: AppTheme.body(size: 12, color: AppTheme.muted)),
+                        Text(
+                          'Last synced ${DateFormat("h:mm a").format(DateTime.now())}',
+                          style: AppTheme.body(size: 12, color: AppTheme.muted),
+                        ),
                       ],
                     ),
                     Row(
@@ -480,27 +572,31 @@ class _MoreScreenState extends State<MoreScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 20),
 
-              // Card 5: Logout Action Card
-              GestureDetector(
-                onTap: () => _showMoreLogoutConfirmDialog(context, tele),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  decoration: BoxDecoration(
-                    color: AppTheme.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppTheme.redMissed, width: 1.5),
-                    boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.logout_rounded, color: AppTheme.redMissed, size: 18),
-                      const SizedBox(width: 8),
-                      Text('LOGOUT OF ASK EVA', style: AppTheme.headline(size: 13, color: AppTheme.redMissed)),
-                    ],
+              // Card 5: Centered Compact Logout Button
+              Center(
+                child: SizedBox(
+                  width: 200,
+                  child: GestureDetector(
+                    onTap: () => _showMoreLogoutConfirmDialog(context, tele),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: AppTheme.white,
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: AppTheme.redMissed, width: 1.5),
+                        boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.logout_rounded, color: AppTheme.redMissed, size: 16),
+                          const SizedBox(width: 6),
+                          Text('LOGOUT', style: AppTheme.label(size: 11, color: AppTheme.redMissed, letterSpacing: 0.12)),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),

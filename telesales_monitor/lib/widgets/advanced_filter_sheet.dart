@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import 'neo_button.dart';
+import '../providers/tele_provider.dart';
 
 class AdvancedFilterSheet extends StatefulWidget {
   const AdvancedFilterSheet({super.key});
@@ -19,24 +21,54 @@ class AdvancedFilterSheet extends StatefulWidget {
 }
 
 class _AdvancedFilterSheetState extends State<AdvancedFilterSheet> {
-  int _durationIndex = 0; // 0 = ANY, 1 = UNDER 2M, 2 = OVER 5M, 3 = NOT CONNECTED
+  int _qualityIndex = 0; // 0 = ANY, 1 = SHORT (<2M), 2 = MEDIUM (2-5M), 3 = LONG (>5M), 4 = UNANSWERED
   int _frequencyIndex = 0; // 0 = ALL, 1 = ONCE, 2 = REPEATED
   int _timeOfDayIndex = 0; // 0 = ANY, 1 = MORNING, 2 = AFTERNOON, 3 = EVENING
 
-  final List<String> _durationOpts = ['ANY', 'UNDER 2M', 'OVER 5M', 'NOT CONNECTED'];
+  final List<String> _qualityOpts = [
+    'ANY QUALITY',
+    'SHORT (< 2 MINS)',
+    'MEDIUM (2 - 5 MINS)',
+    'LONG (> 5 MINS)',
+    'UNANSWERED / MISSED'
+  ];
   final List<String> _frequencyOpts = ['ALL', 'ONCE', 'REPEATED'];
   final List<String> _timeOfDayOpts = ['ANY', 'MORNING', 'AFTERNOON', 'EVENING'];
 
+  @override
+  void initState() {
+    super.initState();
+    final tele = Provider.of<TeleProvider>(context, listen: false);
+    _qualityIndex = tele.callQualityFilter;
+  }
+
   void _reset() {
     setState(() {
-      _durationIndex = 0;
+      _qualityIndex = 0;
       _frequencyIndex = 0;
       _timeOfDayIndex = 0;
     });
+    final tele = Provider.of<TeleProvider>(context, listen: false);
+    tele.setCallQualityFilter(0);
   }
 
   @override
   Widget build(BuildContext context) {
+    final tele = Provider.of<TeleProvider>(context);
+    final allLogs = tele.simTrackedCallLogs;
+    
+    // Compute matching count
+    int matchingCount = allLogs.length;
+    if (_qualityIndex == 1) {
+      matchingCount = allLogs.where((c) => c.duration.inSeconds > 0 && c.duration.inSeconds < 120).length;
+    } else if (_qualityIndex == 2) {
+      matchingCount = allLogs.where((c) => c.duration.inSeconds >= 120 && c.duration.inSeconds <= 300).length;
+    } else if (_qualityIndex == 3) {
+      matchingCount = allLogs.where((c) => c.duration.inSeconds > 300).length;
+    } else if (_qualityIndex == 4) {
+      matchingCount = allLogs.where((c) => c.duration.inSeconds == 0 || c.type.name == 'missed').length;
+    }
+
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
       decoration: const BoxDecoration(
@@ -66,8 +98,8 @@ class _AdvancedFilterSheetState extends State<AdvancedFilterSheet> {
             children: [
               Row(
                 children: [
-                  Text('ADVANCED FILTER', style: AppTheme.headline(size: 24, color: AppTheme.ink900)),
-                  Text('.', style: AppTheme.headline(size: 24, color: AppTheme.greenNeon)),
+                  Text('CALL QUALITY FILTER', style: AppTheme.headline(size: 22, color: AppTheme.ink900)),
+                  Text('.', style: AppTheme.headline(size: 22, color: AppTheme.greenNeon)),
                 ],
               ),
               GestureDetector(
@@ -87,16 +119,16 @@ class _AdvancedFilterSheetState extends State<AdvancedFilterSheet> {
           ),
           const SizedBox(height: 18),
 
-          // DURATION Section
-          Text('DURATION', style: AppTheme.label(size: 9, color: AppTheme.ink900, letterSpacing: 0.18)),
+          // QUALITY OF CALLS Section
+          Text('QUALITY OF CALLS (DURATION TRACKING)', style: AppTheme.label(size: 9, color: AppTheme.ink900, letterSpacing: 0.18)),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: List.generate(_durationOpts.length, (index) {
-              final isSel = _durationIndex == index;
+            children: List.generate(_qualityOpts.length, (index) {
+              final isSel = _qualityIndex == index;
               return GestureDetector(
-                onTap: () => setState(() => _durationIndex = index),
+                onTap: () => setState(() => _qualityIndex = index),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
@@ -105,7 +137,7 @@ class _AdvancedFilterSheetState extends State<AdvancedFilterSheet> {
                     border: Border.all(color: AppTheme.ink900, width: 1.2),
                   ),
                   child: Text(
-                    _durationOpts[index],
+                    _qualityOpts[index],
                     style: AppTheme.label(
                       size: 9,
                       color: isSel ? AppTheme.limeYellow : AppTheme.ink900,
@@ -118,7 +150,7 @@ class _AdvancedFilterSheetState extends State<AdvancedFilterSheet> {
           const SizedBox(height: 16),
 
           // FREQUENCY Section
-          Text('FREQUENCY', style: AppTheme.label(size: 9, color: AppTheme.ink900, letterSpacing: 0.18)),
+          Text('CALL FREQUENCY', style: AppTheme.label(size: 9, color: AppTheme.ink900, letterSpacing: 0.18)),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -177,7 +209,7 @@ class _AdvancedFilterSheetState extends State<AdvancedFilterSheet> {
           ),
           const SizedBox(height: 24),
 
-          // Action Buttons (RESET | SHOW 4 CALLS ->)
+          // Action Buttons (RESET | APPLY FILTERS)
           Row(
             children: [
               Expanded(
@@ -205,11 +237,14 @@ class _AdvancedFilterSheetState extends State<AdvancedFilterSheet> {
                 child: NeoButton(
                   backgroundColor: AppTheme.ink900,
                   shadowColor: AppTheme.greenNeon,
-                  onTap: () => Navigator.of(context).pop(),
+                  onTap: () {
+                    tele.setCallQualityFilter(_qualityIndex);
+                    Navigator.of(context).pop();
+                  },
                   child: Center(
                     child: Text(
-                      'SHOW 4 CALLS →',
-                      style: AppTheme.label(size: 11, color: AppTheme.limeYellow, letterSpacing: 0.12),
+                      'APPLY · SHOW $matchingCount CALLS →',
+                      style: AppTheme.label(size: 10.5, color: AppTheme.limeYellow, letterSpacing: 0.12),
                     ),
                   ),
                 ),
@@ -221,3 +256,4 @@ class _AdvancedFilterSheetState extends State<AdvancedFilterSheet> {
     );
   }
 }
+

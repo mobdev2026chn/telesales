@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -22,14 +23,62 @@ class _LogOutcomeScreenState extends State<LogOutcomeScreen> {
   String _selectedCallbackStr = 'TOMORROW · 10 AM';
   DateTime? _selectedCallbackTime;
 
+  int _countdownSeconds = 15;
+  Timer? _countdownTimer;
+  bool _isCountdownPaused = false;
+
   @override
   void initState() {
     super.initState();
     _selectedCallbackTime = DateTime.now().add(const Duration(days: 1)).copyWith(hour: 10, minute: 0);
+    _startCountdown();
+  }
+
+  void _startCountdown() {
+    _countdownTimer?.cancel();
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      if (!_isCountdownPaused) {
+        if (_countdownSeconds > 0) {
+          setState(() => _countdownSeconds--);
+        } else {
+          timer.cancel();
+          _triggerNextCallAutomatically();
+        }
+      }
+    });
+  }
+
+  void _togglePauseCountdown() {
+    setState(() => _isCountdownPaused = !_isCountdownPaused);
+  }
+
+  Future<void> _triggerNextCallAutomatically() async {
+    final tele = Provider.of<TeleProvider>(context, listen: false);
+    final navigator = Navigator.of(context);
+    await tele.saveCallOutcomeAndNext(
+      status: _selectedStatus,
+      note: _notesCtrl.text,
+      sendBrochure: _sendWhatsAppBrochure,
+      callbackTime: _selectedCallbackTime,
+    );
+
+    if (mounted) {
+      if (tele.activeCallLead != null) {
+        navigator.pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => CallSessionScreen(lead: tele.activeCallLead),
+          ),
+        );
+      } else {
+        navigator.pop();
+      }
+    }
   }
 
   @override
   void dispose() {
+    _countdownTimer?.cancel();
     _notesCtrl.dispose();
     super.dispose();
   }
@@ -151,21 +200,21 @@ class _LogOutcomeScreenState extends State<LogOutcomeScreen> {
                 children: [
                   Expanded(
                     child: _OutcomeButton(
-                      label: 'INTERESTED',
-                      isSelected: _selectedStatus == LeadStatus.interested,
-                      activeBg: AppTheme.greenNeon,
+                      label: 'FOLLOW UP',
+                      isSelected: _selectedStatus == LeadStatus.followUp,
+                      activeBg: AppTheme.limeYellow,
                       activeFg: AppTheme.ink900,
-                      onTap: () => setState(() => _selectedStatus = LeadStatus.interested),
+                      onTap: () => setState(() => _selectedStatus = LeadStatus.followUp),
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: _OutcomeButton(
-                      label: 'FOLLOW-UP',
-                      isSelected: _selectedStatus == LeadStatus.followUp,
-                      activeBg: AppTheme.limeYellow,
+                      label: 'BOOK DEMO',
+                      isSelected: _selectedStatus == LeadStatus.bookDemo,
+                      activeBg: AppTheme.greenNeon,
                       activeFg: AppTheme.ink900,
-                      onTap: () => setState(() => _selectedStatus = LeadStatus.followUp),
+                      onTap: () => setState(() => _selectedStatus = LeadStatus.bookDemo),
                     ),
                   ),
                 ],
@@ -175,11 +224,35 @@ class _LogOutcomeScreenState extends State<LogOutcomeScreen> {
                 children: [
                   Expanded(
                     child: _OutcomeButton(
-                      label: 'CONVERTED',
-                      isSelected: _selectedStatus == LeadStatus.won,
+                      label: 'DEMO RESCHEDULE',
+                      isSelected: _selectedStatus == LeadStatus.demoReschedule,
+                      activeBg: AppTheme.paper,
+                      activeFg: AppTheme.ink900,
+                      onTap: () => setState(() => _selectedStatus = LeadStatus.demoReschedule),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _OutcomeButton(
+                      label: 'DEMO DONE',
+                      isSelected: _selectedStatus == LeadStatus.demoDone,
                       activeBg: AppTheme.ink900,
                       activeFg: AppTheme.limeYellow,
-                      onTap: () => setState(() => _selectedStatus = LeadStatus.won),
+                      onTap: () => setState(() => _selectedStatus = LeadStatus.demoDone),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: _OutcomeButton(
+                      label: 'INTERESTED',
+                      isSelected: _selectedStatus == LeadStatus.interested,
+                      activeBg: AppTheme.greenNeon,
+                      activeFg: AppTheme.ink900,
+                      onTap: () => setState(() => _selectedStatus = LeadStatus.interested),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -288,7 +361,7 @@ class _LogOutcomeScreenState extends State<LogOutcomeScreen> {
               ),
               const SizedBox(height: 18),
 
-              // Next Up Strip
+              // Next Up Strip with Countdown Ticker & Controls
               if (nextLead != null)
                 Container(
                   width: double.infinity,
@@ -298,49 +371,83 @@ class _LogOutcomeScreenState extends State<LogOutcomeScreen> {
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(color: AppTheme.ink900, width: 1.5),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'NEXT UP · AUTO-DIALS 3S AFTER SAVE',
-                              style: AppTheme.mono(size: 8.5, color: AppTheme.greenNeon, weight: FontWeight.w700),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '${nextLead.name} · ${nextLead.phone}',
-                              style: AppTheme.bodyBold(size: 12, color: AppTheme.white),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: _isCountdownPaused ? AppTheme.orangePill : AppTheme.greenNeon,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  _isCountdownPaused ? 'PAUSED' : 'AUTO-DIAL IN ${_countdownSeconds}S',
+                                  style: AppTheme.label(size: 8, color: AppTheme.ink900),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'NEXT IN QUEUE',
+                                style: AppTheme.mono(size: 8.5, color: AppTheme.lightMuted),
+                              ),
+                            ],
+                          ),
+                          Row(
+                            children: [
+                              GestureDetector(
+                                onTap: _togglePauseCountdown,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.ink800,
+                                    borderRadius: BorderRadius.circular(999),
+                                    border: Border.all(color: AppTheme.lightMuted, width: 0.8),
+                                  ),
+                                  child: Text(
+                                    _isCountdownPaused ? '▶ RESUME' : '⏸ STOP',
+                                    style: AppTheme.mono(size: 8.5, color: AppTheme.limeYellow, weight: FontWeight.w700),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              GestureDetector(
+                                onTap: () {
+                                  _countdownTimer?.cancel();
+                                  tele.saveCallOutcomeAndNext(
+                                    status: _selectedStatus,
+                                    note: _notesCtrl.text,
+                                    sendBrochure: _sendWhatsAppBrochure,
+                                    callbackTime: _selectedCallbackTime,
+                                  );
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.ink800,
+                                    borderRadius: BorderRadius.circular(999),
+                                    border: Border.all(color: AppTheme.greenGrass, width: 0.8),
+                                  ),
+                                  child: Text(
+                                    'SKIP →',
+                                    style: AppTheme.mono(size: 8.5, color: AppTheme.greenGrass, weight: FontWeight.w700),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
-                      GestureDetector(
-                        onTap: () {
-                          // Skip logic
-                          tele.saveCallOutcomeAndNext(
-                            status: _selectedStatus,
-                            note: _notesCtrl.text,
-                            sendBrochure: _sendWhatsAppBrochure,
-                            callbackTime: _selectedCallbackTime,
-                          );
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: AppTheme.ink800,
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(color: AppTheme.greenGrass, width: 1),
-                          ),
-                          child: Text(
-                            'SKIP →',
-                            style: AppTheme.mono(size: 9.5, color: AppTheme.limeYellow, weight: FontWeight.w700),
-                          ),
-                        ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '${nextLead.name} · ${nextLead.phone}',
+                        style: AppTheme.bodyBold(size: 12.5, color: AppTheme.white),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),

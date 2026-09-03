@@ -264,6 +264,141 @@ class _CallerDashboardState extends State<CallerDashboard> {
               ),
               const SizedBox(height: 14),
 
+              // 7 METRICS PERFORMANCE SUMMARY CARD
+              NeoCard(
+                backgroundColor: AppTheme.white,
+                shadowColor: AppTheme.ink900,
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Container(width: 8, height: 8, color: AppTheme.greenNeon),
+                            const SizedBox(width: 8),
+                            Text(
+                              'CALL PERFORMANCE METRICS',
+                              style: AppTheme.label(size: 10, color: AppTheme.ink900, letterSpacing: 0.16),
+                            ),
+                          ],
+                        ),
+                        Text(
+                          'TODAY',
+                          style: AppTheme.mono(size: 9.5, color: AppTheme.muted, weight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _metricBadge('TOTAL CALLS', '${tele.trackedTotalCalls}', AppTheme.ink900, AppTheme.white),
+                        _metricBadge('INCOMING', '${tele.trackedIncomingCalls}', AppTheme.paper, AppTheme.ink900),
+                        _metricBadge('OUTGOING', '${tele.trackedOutgoingCalls}', AppTheme.paper, AppTheme.ink900),
+                        _metricBadge('MISSED', '${tele.trackedMissedCalls}', AppTheme.redMissed.withValues(alpha: 0.12), AppTheme.redMissed),
+                        _metricBadge('REJECTED', '${tele.trackedRejectedCalls}', AppTheme.limeYellow, AppTheme.ink900),
+                        _metricBadge('NEVER ATTENDED', '${tele.trackedNeverAttendedCalls}', AppTheme.paper, AppTheme.ink900),
+                        _metricBadge('UNIQUE CALLS', '${tele.trackedUniqueCalls}', AppTheme.greenNeon, AppTheme.ink900),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              // 2x1 Grid: LONGEST CALL & MOST REPEATED CALLS OF THE DAY
+              Builder(
+                builder: (ctx) {
+                  final repeated = tele.mostRepeatedCallToday;
+                  final longest = tele.longestCallToday;
+
+                  final longestName = longest != null ? (longest.contactName != 'Unknown' ? longest.contactName : longest.phoneNumber) : 'No calls yet';
+                  final longestDur = longest?.durationFormatted ?? '0s';
+
+                  final repeatedName = repeated != null ? (repeated['name']?.toString() ?? 'No repeated calls') : 'No repeated calls';
+                  final repeatedCount = repeated != null ? '${repeated['count']}x calls' : '0x calls';
+                  final repeatedDur = repeated != null ? (repeated['durationStr']?.toString() ?? '') : '';
+
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: NeoCard(
+                          backgroundColor: AppTheme.white,
+                          shadowColor: AppTheme.ink900,
+                          padding: const EdgeInsets.all(14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'LONGEST CALL',
+                                style: AppTheme.label(size: 8.5, color: AppTheme.muted, letterSpacing: 0.12),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                longestDur,
+                                style: AppTheme.headline(size: 24, color: AppTheme.ink900),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                longestName,
+                                style: AppTheme.body(size: 11, color: AppTheme.muted),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: NeoCard(
+                          backgroundColor: AppTheme.white,
+                          shadowColor: AppTheme.ink900,
+                          padding: const EdgeInsets.all(14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'MOST REPEATED',
+                                style: AppTheme.label(size: 8.5, color: AppTheme.muted, letterSpacing: 0.12),
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
+                                children: [
+                                  Text(
+                                    repeatedCount,
+                                    style: AppTheme.headline(size: 24, color: AppTheme.greenDark),
+                                  ),
+                                  if (repeatedDur.isNotEmpty) ...[
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '($repeatedDur)',
+                                      style: AppTheme.mono(size: 9, color: AppTheme.muted),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                repeatedName,
+                                style: AppTheme.body(size: 11, color: AppTheme.muted),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 14),
+
               // Card 3: CALLBACKS DUE · X
               NeoCard(
                 backgroundColor: AppTheme.white,
@@ -485,6 +620,36 @@ class _CallerDashboardState extends State<CallerDashboard> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _metricBadge(String label, String value, Color bg, Color textCol) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppTheme.ink900, width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: AppTheme.label(
+              size: 8,
+              color: textCol == AppTheme.white ? AppTheme.limeYellow : AppTheme.muted,
+              letterSpacing: 0.1,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: AppTheme.headline(size: 18, color: textCol),
+          ),
+        ],
       ),
     );
   }

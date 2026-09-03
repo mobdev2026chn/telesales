@@ -83,7 +83,7 @@ class _ScheduledCallbacksScreenState extends State<ScheduledCallbacksScreen> {
           TopHeader(
             title: 'FOLLOW-UP',
             userName: callerName,
-            selectedSimIndex: 1,
+            selectedSimIndex: tele.activeSimSlot,
           ),
           const SizedBox(height: 14),
 

@@ -1,0 +1,21 @@
+{
+  "name": "AskEVA Telesales Monitor",
+  "short_name": "AskEVA",
+  "description": "AskEVA Telesales Monitor & Admin Web Portal",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#EFECE3",
+  "theme_color": "#10180C",
+  "icons": [
+    {
+      "src": "favicon.ico",
+      "sizes": "256x256 64x64 32x32 16x16",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "ask_eva_logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

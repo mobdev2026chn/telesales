@@ -23,7 +23,7 @@ class _MainShellState extends State<MainShell> {
   @override
   Widget build(BuildContext context) {
     final tele = Provider.of<TeleProvider>(context);
-    final isManager = tele.currentRole == UserRole.manager;
+    final isManager = tele.currentRole == UserRole.manager && !tele.isManagerCallerMode;
     final isEmpDetailOpen = tele.selectedEmployee != null;
 
     Widget bodyWidget;
@@ -80,6 +80,42 @@ class _MainShellState extends State<MainShell> {
             constraints: const BoxConstraints(maxWidth: 540),
             child: Column(
               children: [
+                if (tele.isManagerCallerMode)
+                  Container(
+                    width: double.infinity,
+                    color: AppTheme.limeYellow,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.headset_mic_rounded, size: 16, color: AppTheme.ink900),
+                            const SizedBox(width: 8),
+                            Text(
+                              'CALLER MODE ACTIVE (MANAGER)',
+                              style: AppTheme.mono(size: 10, color: AppTheme.ink900, weight: FontWeight.w700),
+                            ),
+                          ],
+                        ),
+                        GestureDetector(
+                          onTap: () => tele.toggleManagerCallerMode(),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppTheme.ink900,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              'EXIT TO MANAGER →',
+                              style: AppTheme.mono(size: 9, color: AppTheme.limeYellow, weight: FontWeight.w700),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
                 // Main View Area
                 Expanded(
                   child: bodyWidget,

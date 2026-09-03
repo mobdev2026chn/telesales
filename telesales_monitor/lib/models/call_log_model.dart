@@ -17,6 +17,7 @@ class CallLogModel {
   final String? recordingPath;
   final String agentName;
   final int simSlot; // 1 for SIM 1, 2 for SIM 2
+  final bool isCrmContact;
 
   CallLogModel({
     required this.id,
@@ -29,6 +30,7 @@ class CallLogModel {
     this.recordingPath,
     this.agentName = 'Caller Agent',
     this.simSlot = 1,
+    this.isCrmContact = false,
   });
 
   String get simBadge => 'SIM $simSlot';

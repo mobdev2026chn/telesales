@@ -14,6 +14,8 @@ class EmployeeModel {
 
   final String? avatarUrl;
   final String? photoBase64;
+  final String? reportingManagerId;
+  final int workSimSlot;
 
   EmployeeModel({
     required this.id,
@@ -22,6 +24,8 @@ class EmployeeModel {
     this.role = 'caller',
     this.avatarUrl,
     this.photoBase64,
+    this.reportingManagerId,
+    this.workSimSlot = 1,
     required this.totalCalls,
     required this.connectedCalls,
     required this.totalTalkTime,

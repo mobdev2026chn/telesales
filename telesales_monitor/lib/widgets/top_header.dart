@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
-import 'sim_permission_dialog.dart';
 import 'notifications_sheet.dart';
 import '../providers/tele_provider.dart';
 import '../screens/login_screen.dart';
@@ -132,8 +131,8 @@ class TopHeader extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _buildPillItem(context, 'SIM 1', 1),
-                  _buildPillItem(context, 'SIM 2', 2),
+                  _buildPillItem(context, tele, 'SIM 1', 1),
+                  _buildPillItem(context, tele, 'SIM 2', 2),
                 ],
               ),
             ),
@@ -261,13 +260,11 @@ class TopHeader extends StatelessWidget {
     );
   }
 
-  Widget _buildPillItem(BuildContext context, String label, int index) {
-    final isSelected = selectedSimIndex == index;
+  Widget _buildPillItem(BuildContext context, TeleProvider tele, String label, int index) {
+    final isSelected = tele.activeSimSlot == index;
     return GestureDetector(
       onTap: () {
-        if (index == 2) {
-          SimPermissionDialog.show(context, simNumber: 2, carrierName: 'Jio');
-        }
+        tele.setActiveSimSlot(index);
         onSimSelected?.call(index);
       },
       child: AnimatedContainer(

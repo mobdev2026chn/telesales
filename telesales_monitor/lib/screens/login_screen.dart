@@ -290,7 +290,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                           ),
                                           child: Center(
                                             child: Text(
-                                              '👔 ADMIN / MANAGER',
+                                              '👔 MANAGER',
                                               style: AppTheme.label(
                                                 size: 9.5,
                                                 color: _selectedRole == UserRole.manager ? AppTheme.limeYellow : AppTheme.ink900,
@@ -437,7 +437,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                         )
                                       : Text(
                                           _selectedRole == UserRole.manager
-                                              ? 'SIGN IN AS ADMIN / MANAGER →'
+                                              ? 'SIGN IN AS MANAGER →'
                                               : 'SIGN IN AS CALLER →',
                                           style: AppTheme.label(size: 11.5, color: AppTheme.limeYellow, letterSpacing: 0.14),
                                         ),
@@ -448,7 +448,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               // Forgot Password Link
                               Center(
                                 child: TextButton(
-                                  onPressed: () {},
+                                  onPressed: () => _showForgotPasswordSheet(context),
                                   child: Text(
                                     'FORGOT PASSWORD?',
                                     style: AppTheme.label(
@@ -606,6 +606,217 @@ class _LoginScreenState extends State<LoginScreen> {
                           : Text('VERIFY & LINK SIM', style: AppTheme.headline(size: 14, color: AppTheme.ink900)),
                     ),
                   ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showForgotPasswordSheet(BuildContext context) {
+    final userCtrl = TextEditingController(text: _usernameCtrl.text.trim());
+    final otpCtrl = TextEditingController();
+    final newPassCtrl = TextEditingController();
+    int step = 1; // 1 = Request, 2 = Verify & Reset
+    bool isSubmitting = false;
+    String? err;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          return Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppTheme.paper,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                border: Border.all(color: AppTheme.ink900, width: 2),
+                boxShadow: AppTheme.neoShadow(color: AppTheme.ink900),
+              ),
+              padding: const EdgeInsets.fromLTRB(22, 16, 22, 28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 44,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: AppTheme.ink900,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        step == 1 ? 'RESET YOUR PASSWORD' : 'ENTER OTP & NEW PASSWORD',
+                        style: AppTheme.headline(size: 16, color: AppTheme.ink900),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, size: 20),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    step == 1
+                        ? 'Enter your registered phone number or username to receive a security verification code.'
+                        : 'We sent a 6-digit verification code to your registered device.',
+                    style: AppTheme.body(size: 12, color: AppTheme.muted),
+                  ),
+                  if (err != null) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFDECEB),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppTheme.redMissed, width: 1),
+                      ),
+                      child: Text(err!, style: AppTheme.bodyBold(size: 11, color: AppTheme.redMissed)),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  if (step == 1) ...[
+                    Text('USERNAME OR REGISTERED PHONE', style: AppTheme.label(size: 9, color: AppTheme.ink900)),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppTheme.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppTheme.ink900, width: 1.5),
+                      ),
+                      child: TextField(
+                        controller: userCtrl,
+                        style: AppTheme.mono(size: 13, color: AppTheme.ink900),
+                        decoration: const InputDecoration(
+                          hintText: 'e.g. 8248399615 or mukhil',
+                          border: InputBorder.none,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    NeoButton(
+                      backgroundColor: AppTheme.ink900,
+                      shadowColor: AppTheme.greenNeon,
+                      onTap: () {
+                        if (isSubmitting) return;
+                        final val = userCtrl.text.trim();
+                        if (val.isEmpty) {
+                          setSheetState(() => err = 'Please enter your username or registered phone.');
+                          return;
+                        }
+                        setSheetState(() {
+                          isSubmitting = true;
+                          err = null;
+                        });
+                        Future.delayed(const Duration(milliseconds: 600), () {
+                          setSheetState(() {
+                            isSubmitting = false;
+                            step = 2;
+                          });
+                        });
+                      },
+                      child: Center(
+                        child: isSubmitting
+                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: AppTheme.limeYellow, strokeWidth: 2))
+                            : Text('SEND VERIFICATION CODE →', style: AppTheme.label(size: 11, color: AppTheme.limeYellow, letterSpacing: 0.12)),
+                      ),
+                    ),
+                  ] else ...[
+                    Text('6-DIGIT OTP (DEMO: 123456)', style: AppTheme.label(size: 9, color: AppTheme.ink900)),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppTheme.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppTheme.ink900, width: 1.5),
+                      ),
+                      child: TextField(
+                        controller: otpCtrl,
+                        keyboardType: TextInputType.number,
+                        style: AppTheme.mono(size: 14, color: AppTheme.ink900, weight: FontWeight.w700),
+                        decoration: const InputDecoration(
+                          hintText: 'Enter 123456...',
+                          border: InputBorder.none,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text('NEW PASSWORD', style: AppTheme.label(size: 9, color: AppTheme.ink900)),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppTheme.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppTheme.ink900, width: 1.5),
+                      ),
+                      child: TextField(
+                        controller: newPassCtrl,
+                        obscureText: true,
+                        style: AppTheme.mono(size: 13, color: AppTheme.ink900),
+                        decoration: const InputDecoration(
+                          hintText: 'Enter at least 4 characters...',
+                          border: InputBorder.none,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    NeoButton(
+                      backgroundColor: AppTheme.ink900,
+                      shadowColor: AppTheme.greenNeon,
+                      onTap: () {
+                        if (isSubmitting) return;
+                        final otp = otpCtrl.text.trim();
+                        final newPass = newPassCtrl.text.trim();
+                        if (otp.length < 4) {
+                          setSheetState(() => err = 'Please enter a valid OTP code (e.g. 123456).');
+                          return;
+                        }
+                        if (newPass.length < 3) {
+                          setSheetState(() => err = 'Password must be at least 3 characters.');
+                          return;
+                        }
+                        setSheetState(() {
+                          isSubmitting = true;
+                          err = null;
+                        });
+                        Future.delayed(const Duration(milliseconds: 700), () {
+                          if (ctx.mounted) {
+                            Navigator.pop(ctx);
+                            setState(() {
+                              _usernameCtrl.text = userCtrl.text.trim();
+                              _passwordCtrl.text = newPass;
+                            });
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                backgroundColor: AppTheme.ink900,
+                                content: Text('✓ Password reset successfully! You can now sign in.', style: AppTheme.bodyBold(size: 12, color: AppTheme.greenNeon)),
+                              ),
+                            );
+                          }
+                        });
+                      },
+                      child: Center(
+                        child: isSubmitting
+                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: AppTheme.limeYellow, strokeWidth: 2))
+                            : Text('UPDATE & SAVE PASSWORD →', style: AppTheme.label(size: 11, color: AppTheme.limeYellow, letterSpacing: 0.12)),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

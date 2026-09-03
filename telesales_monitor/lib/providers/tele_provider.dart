@@ -18,10 +18,10 @@ enum SimTrackingMode { sim1Only, sim2Only, bothSims }
 
 class ScheduledCallback {
   final String id;
-  final String name;
+  String name;
   final String phone;
   DateTime scheduledTime;
-  final String note;
+  String note;
   bool isSnoozed;
 
   ScheduledCallback({
@@ -134,8 +134,27 @@ class TeleProvider extends ChangeNotifier {
         final filePath = map['filePath']?.toString() ?? '';
         final audioData = map['audioData']?.toString() ?? '';
         final durSec = (map['durationSeconds'] is int) ? map['durationSeconds'] as int : 5;
-        final dur = Duration(seconds: durSec);
 
+        // 1. Exclude missed calls from recordings
+        if (durSec <= 0) {
+          debugPrint('Ignoring call recording for zero-duration missed call');
+          return;
+        }
+
+        // 2. Exclude personal calls (SIM slot not matching active work SIM)
+        if (_callLogs.isNotEmpty) {
+          final recent = _callLogs.first;
+          if (_simTrackingMode == SimTrackingMode.sim1Only && recent.simSlot != 1) {
+            debugPrint('Ignoring call recording for personal SIM 2 call');
+            return;
+          }
+          if (_simTrackingMode == SimTrackingMode.sim2Only && recent.simSlot != 2) {
+            debugPrint('Ignoring call recording for personal SIM 1 call');
+            return;
+          }
+        }
+
+        final dur = Duration(seconds: durSec);
         final agent = _callerName.isNotEmpty ? _callerName : (_verifiedTrackingNumber.isNotEmpty ? _verifiedTrackingNumber : 'Caller Agent');
         final contact = _callLogs.isNotEmpty ? _callLogs.first.contactName : 'Recent Call';
         final phone = _callLogs.isNotEmpty ? _callLogs.first.phoneNumber : '+91 98250 12340';
@@ -184,6 +203,38 @@ class TeleProvider extends ChangeNotifier {
   String get profilePhotoPath => _profilePhotoPath;
 
   void setActiveTabIndex(int index) => setTabIndex(index);
+
+  final Map<String, String> _crmContactNames = {};
+  Map<String, String> get crmContactNames => _crmContactNames;
+  final Set<String> _readNotificationIds = {};
+
+  int _activeSimSlot = 1;
+  int get activeSimSlot => _activeSimSlot;
+
+  void setActiveSimSlot(int slot) {
+    _activeSimSlot = slot;
+    _simTrackingMode = (slot == 1)
+        ? SimTrackingMode.sim1Only
+        : (slot == 2 ? SimTrackingMode.sim2Only : SimTrackingMode.bothSims);
+    _savePreferences();
+    notifyListeners();
+  }
+
+  bool _isManagerCallerMode = false;
+  bool get isManagerCallerMode => _isManagerCallerMode;
+
+  void toggleManagerCallerMode() {
+    _isManagerCallerMode = !_isManagerCallerMode;
+    notifyListeners();
+  }
+
+  int _callQualityFilter = 0; // 0 = ALL, 1 = SHORT (<2M), 2 = MEDIUM (2-5M), 3 = LONG (>5M), 4 = UNANSWERED
+  int get callQualityFilter => _callQualityFilter;
+
+  void setCallQualityFilter(int filter) {
+    _callQualityFilter = filter;
+    notifyListeners();
+  }
 
   Future<void> _loadPreferencesAndState() async {
     try {
@@ -242,6 +293,18 @@ class TeleProvider extends ChangeNotifier {
           decoded.forEach((k, v) => _leadNotes[k] = v.toString());
         } catch (_) {}
       }
+      final savedReadIds = prefs.getStringList('read_notification_ids');
+      if (savedReadIds != null) {
+        _readNotificationIds.addAll(savedReadIds);
+      }
+      final savedCrmJson = prefs.getString('crm_contacts_map_json');
+      if (savedCrmJson != null && savedCrmJson.isNotEmpty) {
+        try {
+          final Map<String, dynamic> decoded = jsonDecode(savedCrmJson);
+          decoded.forEach((k, v) => _crmContactNames[k] = v.toString());
+        } catch (_) {}
+      }
+      _activeSimSlot = prefs.getInt('active_sim_slot') ?? 1;
     } catch (e) {
       debugPrint('Error loading saved preferences: $e');
     } finally {
@@ -300,6 +363,11 @@ class TeleProvider extends ChangeNotifier {
       if (_leadNotes.isNotEmpty) {
         await prefs.setString('lead_notes_json', jsonEncode(_leadNotes));
       }
+      await prefs.setStringList('read_notification_ids', _readNotificationIds.toList());
+      if (_crmContactNames.isNotEmpty) {
+        await prefs.setString('crm_contacts_map_json', jsonEncode(_crmContactNames));
+      }
+      await prefs.setInt('active_sim_slot', _activeSimSlot);
     } catch (e) {
       debugPrint('Error saving preferences: $e');
     }
@@ -323,6 +391,13 @@ class TeleProvider extends ChangeNotifier {
     for (var u in _allUsers) {
       final t = u['team']?.toString() ?? '';
       final name = u['name']?.toString() ?? '';
+      final r = (u['role']?.toString() ?? '').toLowerCase();
+
+      // Never show admins to managers
+      if (_currentRole == UserRole.manager && r == 'admin') {
+        continue;
+      }
+
       if (name.isNotEmpty) {
         if (_selectedTeamFilter == 'ALL' || t.toLowerCase() == _selectedTeamFilter.toLowerCase()) {
           if (!list.contains(name)) list.add(name);
@@ -535,15 +610,19 @@ class TeleProvider extends ChangeNotifier {
         name: _callerName,
       );
       if (res != null && res['success'] == true) {
-        _unreadNotificationCount = (res['unreadCount'] is int) ? res['unreadCount'] as int : 0;
         if (res['notifications'] is List) {
           _notifications.clear();
           for (var item in res['notifications']) {
             if (item is Map<String, dynamic>) {
-              _notifications.add(NotificationItem.fromJson(item));
+              final notif = NotificationItem.fromJson(item);
+              if (_readNotificationIds.contains(notif.id)) {
+                notif.isRead = true;
+              }
+              _notifications.add(notif);
             }
           }
         }
+        _unreadNotificationCount = _notifications.where((n) => !n.isRead).length;
         notifyListeners();
       }
     } catch (e) {
@@ -555,7 +634,9 @@ class TeleProvider extends ChangeNotifier {
     final idx = _notifications.indexWhere((n) => n.id == notifId);
     if (idx != -1 && !_notifications[idx].isRead) {
       _notifications[idx].isRead = true;
+      _readNotificationIds.add(notifId);
       if (_unreadNotificationCount > 0) _unreadNotificationCount--;
+      _savePreferences();
       notifyListeners();
     }
     await ApiService.markNotificationRead(notifId);
@@ -564,8 +645,10 @@ class TeleProvider extends ChangeNotifier {
   Future<void> markAllNotificationsRead() async {
     for (var n in _notifications) {
       n.isRead = true;
+      _readNotificationIds.add(n.id);
     }
     _unreadNotificationCount = 0;
+    _savePreferences();
     notifyListeners();
     await ApiService.markAllNotificationsRead(phone: _verifiedTrackingNumber, name: _callerName);
   }
@@ -616,17 +699,40 @@ class TeleProvider extends ChangeNotifier {
               continue; // Only track and sync calls made during the active user work session
             }
 
+            final int simSlot = map['simSlot'] as int? ?? 1;
+
+            // PERSONAL CALL ISOLATION: Exclude calls on personal SIM
+            if (_simTrackingMode == SimTrackingMode.sim1Only && simSlot != 1) {
+              continue; // Skip SIM 2 personal calls
+            }
+            if (_simTrackingMode == SimTrackingMode.sim2Only && simSlot != 2) {
+              continue; // Skip SIM 1 personal calls
+            }
+
+            final phoneNum = map['phoneNumber']?.toString() ?? '';
+            final cleanPhone = phoneNum.replaceAll(RegExp(r'[^0-9]'), '');
+            final last10 = cleanPhone.length >= 10 ? cleanPhone.substring(cleanPhone.length - 10) : cleanPhone;
+
+            String resolvedName = (map['contactName'] as String?)?.isNotEmpty == true
+                ? map['contactName'] as String
+                : 'Unknown';
+            bool isCrm = false;
+
+            if (_crmContactNames.containsKey(last10)) {
+              resolvedName = _crmContactNames[last10]!;
+              isCrm = true;
+            }
+
             realLogs.add(
               CallLogModel(
                 id: map['id']?.toString() ?? UniqueKey().toString(),
-                contactName: (map['contactName'] as String?)?.isNotEmpty == true
-                    ? map['contactName'] as String
-                    : 'Unknown',
-                phoneNumber: map['phoneNumber']?.toString() ?? '',
+                contactName: resolvedName,
+                phoneNumber: phoneNum,
                 type: cType,
                 duration: Duration(seconds: durationSec),
                 timestamp: DateTime.fromMillisecondsSinceEpoch(timestampMs),
-                simSlot: map['simSlot'] as int? ?? 1,
+                simSlot: simSlot,
+                isCrmContact: isCrm,
               ),
             );
           }
@@ -736,16 +842,16 @@ class TeleProvider extends ChangeNotifier {
   }
 
   String get activeSimLabel {
-    if (_detectedSims.isEmpty) return 'TRACKING: ALL CALLS';
+    if (_detectedSims.isEmpty) return 'MONITORING: ALL CALLS';
     switch (_simTrackingMode) {
       case SimTrackingMode.sim1Only:
         final s1 = _detectedSims.isNotEmpty ? _detectedSims[0].displayName : 'SIM 1';
-        return 'TRACKING: $s1';
+        return 'ACTIVE WORK SIM: $s1';
       case SimTrackingMode.sim2Only:
         final s2 = _detectedSims.length > 1 ? _detectedSims[1].displayName : 'SIM 2';
-        return 'TRACKING: $s2';
+        return 'ACTIVE WORK SIM: $s2';
       case SimTrackingMode.bothSims:
-        return 'TRACKING: ALL DETECTED SIMs';
+        return 'MONITORING: ALL WORK SIMs';
     }
   }
 
@@ -832,6 +938,14 @@ class TeleProvider extends ChangeNotifier {
   }) async {
     try {
       if (role == UserRole.manager) {
+        // Disallow admin credentials on mobile
+        if (username.trim().toLowerCase() == 'admin' || username.trim().toLowerCase().startsWith('admin@')) {
+          return {
+            'success': false,
+            'message': 'Admin accounts must use the AskEVA Web Admin Portal. Mobile app is reserved for Managers and Callers.'
+          };
+        }
+
         final res = await ApiService.loginAdmin(username, password);
         if (res != null && res['success'] == true) {
           final user = res['user'] as Map<String, dynamic>?;
@@ -842,6 +956,12 @@ class TeleProvider extends ChangeNotifier {
               'message': 'This account is registered as a Caller Agent. Please switch to the Caller tab to log in.'
             };
           }
+          if (userRole == 'admin') {
+            return {
+              'success': false,
+              'message': 'Admin accounts must use the AskEVA Web Admin Portal. Mobile app is reserved for Managers and Callers.'
+            };
+          }
           if (user != null) {
             if (user['name'] != null) _callerName = user['name'].toString();
             if (user['email'] != null) _verifiedTrackingNumber = user['email'].toString();
@@ -850,6 +970,7 @@ class TeleProvider extends ChangeNotifier {
             _currentUserId = user['id']?.toString() ?? '';
           }
           _currentRole = UserRole.manager;
+          _isManagerCallerMode = false;
           _isLoggedIn = true;
           _setupCompleted = true;
 
@@ -872,11 +993,18 @@ class TeleProvider extends ChangeNotifier {
         if (res != null && res['success'] == true) {
           final user = res['user'] as Map<String, dynamic>?;
           final userRole = (user?['role']?.toString() ?? 'caller').toLowerCase();
-          if (userRole == 'manager' || userRole == 'admin') {
+          if (userRole == 'admin') {
             return {
               'success': false,
-              'message': 'This account is registered as a Manager. Please switch to the Manager tab to log in.'
+              'message': 'Admin accounts must use the AskEVA Web Admin Portal. Mobile app is reserved for Managers and Callers.'
             };
+          }
+
+          // Allow managers to enter as caller
+          if (userRole == 'manager' || userRole == 'jr_manager') {
+            _isManagerCallerMode = true;
+          } else {
+            _isManagerCallerMode = false;
           }
 
           String regPhone = '';
@@ -898,6 +1026,15 @@ class TeleProvider extends ChangeNotifier {
               'requiresPhoneInput': true,
               'user': user,
               'message': 'Please verify your SIM card tracking phone number to complete setup.'
+            };
+          }
+
+          // Verify authorized SIM card is inside the phone
+          final simCheck = await verifyRegisteredSimCard(regPhone);
+          if (simCheck['isValid'] != true) {
+            return {
+              'success': false,
+              'message': simCheck['message'] ?? 'Device SIM Validation Failed: The registered work SIM card (+91 $regPhone) is not detected in this phone. Logging in from an unauthorized phone is prohibited.'
             };
           }
 
@@ -1041,24 +1178,100 @@ class TeleProvider extends ChangeNotifier {
   }
 
   List<CallLogModel> get filteredCallLogs {
-    final list = simTrackedCallLogs;
-    if (_callFilter == 'ALL') return list;
+    var list = simTrackedCallLogs;
     if (_callFilter == 'INCOMING') {
-      return list.where((c) => c.type == CallType.incoming).toList();
+      list = list.where((c) => c.type == CallType.incoming).toList();
+    } else if (_callFilter == 'OUTGOING') {
+      list = list.where((c) => c.type == CallType.outgoing).toList();
+    } else if (_callFilter == 'MISSED') {
+      list = list.where((c) => c.type == CallType.missed).toList();
+    } else if (_callFilter == 'REJECTED') {
+      list = list.where((c) => c.type == CallType.rejected).toList();
+    } else if (_callFilter == 'NEVER' || _callFilter == 'NO_PICKUP') {
+      list = list.where((c) => c.duration.inSeconds == 0).toList();
     }
-    if (_callFilter == 'OUTGOING') {
-      return list.where((c) => c.type == CallType.outgoing).toList();
+
+    if (_callQualityFilter == 1) {
+      list = list.where((c) => c.duration.inSeconds > 0 && c.duration.inSeconds < 120).toList();
+    } else if (_callQualityFilter == 2) {
+      list = list.where((c) => c.duration.inSeconds >= 120 && c.duration.inSeconds <= 300).toList();
+    } else if (_callQualityFilter == 3) {
+      list = list.where((c) => c.duration.inSeconds > 300).toList();
+    } else if (_callQualityFilter == 4) {
+      list = list.where((c) => c.duration.inSeconds == 0 || c.type == CallType.missed || c.type == CallType.rejected).toList();
     }
-    if (_callFilter == 'MISSED') {
-      return list.where((c) => c.type == CallType.missed).toList();
-    }
-    if (_callFilter == 'REJECTED') {
-      return list.where((c) => c.type == CallType.rejected).toList();
-    }
-    if (_callFilter == 'NEVER' || _callFilter == 'NO_PICKUP') {
-      return list.where((c) => c.duration.inSeconds == 0).toList();
-    }
+
     return list;
+  }
+
+  Map<String, dynamic>? get mostRepeatedCallToday {
+    final now = DateTime.now();
+    final todayLogs = simTrackedCallLogs.where((c) =>
+        c.timestamp.year == now.year &&
+        c.timestamp.month == now.month &&
+        c.timestamp.day == now.day &&
+        c.phoneNumber.isNotEmpty).toList();
+
+    if (todayLogs.isEmpty) return null;
+
+    final Map<String, List<CallLogModel>> grouped = {};
+    for (var c in todayLogs) {
+      final clean = c.phoneNumber.replaceAll(RegExp(r'[^0-9]'), '');
+      final last10 = clean.length >= 10 ? clean.substring(clean.length - 10) : clean;
+      grouped.putIfAbsent(last10, () => []).add(c);
+    }
+
+    String? maxKey;
+    int maxCount = 0;
+    for (var entry in grouped.entries) {
+      if (entry.value.length > maxCount) {
+        maxCount = entry.value.length;
+        maxKey = entry.key;
+      }
+    }
+
+    if (maxKey == null || maxCount <= 1) {
+      if (todayLogs.isNotEmpty) {
+        final first = todayLogs.first;
+        return {
+          'name': first.contactName != 'Unknown' ? first.contactName : first.phoneNumber,
+          'phone': first.phoneNumber,
+          'count': 1,
+          'durationStr': first.durationFormatted,
+        };
+      }
+      return null;
+    }
+
+    final calls = grouped[maxKey]!;
+    final first = calls.first;
+    int totalSec = 0;
+    for (var c in calls) {
+      totalSec += c.duration.inSeconds;
+    }
+    final m = totalSec ~/ 60;
+    final s = totalSec % 60;
+    final durStr = m > 0 ? '${m}m ${s}s' : '${s}s';
+
+    return {
+      'name': first.contactName != 'Unknown' ? first.contactName : first.phoneNumber,
+      'phone': first.phoneNumber,
+      'count': maxCount,
+      'durationStr': durStr,
+    };
+  }
+
+  CallLogModel? get longestCallToday {
+    final now = DateTime.now();
+    final todayLogs = simTrackedCallLogs.where((c) =>
+        c.timestamp.year == now.year &&
+        c.timestamp.month == now.month &&
+        c.timestamp.day == now.day &&
+        c.duration.inSeconds > 0).toList();
+
+    if (todayLogs.isEmpty) return null;
+    todayLogs.sort((a, b) => b.duration.inSeconds.compareTo(a.duration.inSeconds));
+    return todayLogs.first;
   }
 
   // Telemetry Aggregates & Accurate Average Calculations
@@ -1067,7 +1280,13 @@ class TeleProvider extends ChangeNotifier {
   int get trackedIncomingCalls => simTrackedCallLogs.where((c) => c.type == CallType.incoming).length;
   int get trackedOutgoingCalls => simTrackedCallLogs.where((c) => c.type == CallType.outgoing).length;
   int get trackedMissedCalls => simTrackedCallLogs.where((c) => c.type == CallType.missed).length;
+  int get trackedRejectedCalls => simTrackedCallLogs.where((c) => c.type == CallType.rejected).length;
   int get trackedNeverAttendedCalls => simTrackedCallLogs.where((c) => c.type == CallType.rejected || c.duration.inSeconds == 0).length;
+  int get trackedUniqueCalls => simTrackedCallLogs
+      .map((c) => c.phoneNumber.replaceAll(RegExp(r'[^0-9]'), ''))
+      .where((p) => p.length >= 8)
+      .toSet()
+      .length;
 
   Duration get trackedTotalTalkTime {
     var totalSeconds = 0;
@@ -1156,7 +1375,6 @@ class TeleProvider extends ChangeNotifier {
           } else if (call.type == CallType.missed || call.type == CallType.rejected) {
             status = LeadStatus.followUp;
           }
-
           final note = _leadNotes[phone] ?? call.note ?? (status == LeadStatus.won ? 'Order inquiry' : 'Recent phone dial');
 
           uniqueClients[phone] = LeadModel(
@@ -1168,6 +1386,7 @@ class TeleProvider extends ChangeNotifier {
             dateAdded: call.timestamp,
             lastCallDate: call.timestamp,
             note: note,
+            assignedTo: _callerName.isNotEmpty ? _callerName : (_verifiedTrackingNumber.isNotEmpty ? _verifiedTrackingNumber : 'Caller'),
           );
         } else {
           final existing = uniqueClients[phone]!;
@@ -1196,11 +1415,56 @@ class TeleProvider extends ChangeNotifier {
   }
 
   List<LeadModel> get filteredLeads {
-    if (_leadFilter == 'ALL') return _leads;
-    if (_leadFilter == 'WON') return _leads.where((l) => l.status == LeadStatus.won).toList();
-    if (_leadFilter == 'INTERESTED') return _leads.where((l) => l.status == LeadStatus.interested).toList();
-    if (_leadFilter == 'FOLLOW-UP') return _leads.where((l) => l.status == LeadStatus.followUp).toList();
-    return _leads;
+    var list = _leads;
+    // Caller: ONLY leads assigned to this caller
+    if (_currentRole == UserRole.caller || _isManagerCallerMode) {
+      final nameLower = _callerName.trim().toLowerCase();
+      final idLower = _currentUserId.trim().toLowerCase();
+      final phone = _verifiedTrackingNumber.trim();
+      list = list.where((l) {
+        final ass = l.assignedTo.trim().toLowerCase();
+        return (nameLower.isNotEmpty && (ass == nameLower || ass.contains(nameLower))) ||
+               (idLower.isNotEmpty && ass == idLower) ||
+               (phone.isNotEmpty && l.assignedTo == phone);
+      }).toList();
+    }
+
+    final f = _leadFilter.toUpperCase();
+    if (f == 'ALL') return list;
+    if (f.contains('BOOK') || f.contains('DEMO BOOK')) {
+      return list.where((l) => l.status == LeadStatus.bookDemo).toList();
+    }
+    if (f.contains('RESCHEDULE')) {
+      return list.where((l) => l.status == LeadStatus.demoReschedule).toList();
+    }
+    if (f.contains('DEMO DONE')) {
+      return list.where((l) => l.status == LeadStatus.demoDone).toList();
+    }
+    if (f.contains('NEW')) {
+      return list.where((l) => l.status == LeadStatus.newFollowUp || l.status == LeadStatus.newLead).toList();
+    }
+    if (f.contains('NOT PICK') || f.contains('NO ANSWER')) {
+      return list.where((l) => l.status == LeadStatus.notPickup).toList();
+    }
+    if (f.contains('BUSY')) {
+      return list.where((l) => l.status == LeadStatus.busyOnCall).toList();
+    }
+    if (f.contains('RENEWAL')) {
+      return list.where((l) => l.status == LeadStatus.renewalFollowUp).toList();
+    }
+    if (f.contains('INTERESTED') || f.contains('WON')) {
+      return list.where((l) => l.status == LeadStatus.interested || l.status == LeadStatus.won).toList();
+    }
+    if (f.contains('WARNED')) {
+      return list.where((l) => l.status == LeadStatus.warned).toList();
+    }
+    if (f.contains('LOST') || f.contains('NOT INTERESTED')) {
+      return list.where((l) => l.status == LeadStatus.lost || l.status == LeadStatus.notInterested).toList();
+    }
+    if (f.contains('FOLLOW')) {
+      return list.where((l) => l.status == LeadStatus.followUp || l.status == LeadStatus.newFollowUp).toList();
+    }
+    return list;
   }
 
   Future<void> updateLeadStatus(
@@ -1235,6 +1499,7 @@ class TeleProvider extends ChangeNotifier {
         dateAdded: DateTime.now(),
         lastCallDate: DateTime.now(),
         note: note ?? '',
+        assignedTo: _callerName.isNotEmpty ? _callerName : (_verifiedTrackingNumber.isNotEmpty ? _verifiedTrackingNumber : 'Caller'),
       );
       _leads.insert(0, targetLead);
     }
@@ -1247,19 +1512,17 @@ class TeleProvider extends ChangeNotifier {
       }
     }
 
-    if (newStatus == LeadStatus.followUp) {
-      if (!_callbacks.any((c) => c.phone == finalPhone)) {
-        _callbacks.insert(
-          0,
-          ScheduledCallback(
-            id: 'lead_cb_${targetLead.id}',
-            name: targetLead.name.isNotEmpty && targetLead.name != 'Unknown' ? targetLead.name : targetLead.phone,
-            phone: targetLead.phone,
-            scheduledTime: DateTime.now().add(const Duration(hours: 4)),
-            note: 'Lead moved to Follow-up status',
-          ),
-        );
-      }
+    if (newStatus == LeadStatus.followUp || newStatus == LeadStatus.bookDemo || newStatus == LeadStatus.demoReschedule) {
+      final now = DateTime.now();
+      final roundedHour = ((now.hour + 3) % 24).clamp(9, 18);
+      final cleanScheduleTime = DateTime(now.year, now.month, now.day, roundedHour, 0);
+
+      addScheduledCallback(
+        name: targetLead.name.isNotEmpty && targetLead.name != 'Unknown' ? targetLead.name : targetLead.phone,
+        phone: targetLead.phone,
+        scheduledTime: cleanScheduleTime,
+        note: note ?? 'Lead moved to ${newStatus.name} status',
+      );
     }
 
     _savePreferences();
@@ -1319,26 +1582,34 @@ class TeleProvider extends ChangeNotifier {
   List<ScheduledCallback> get callbacks => _callbacks;
 
   void _syncCallbacksFromCallLogs() {
-    final Set<String> existingPhones = _callbacks.map((c) => c.phone).toSet();
-    // Only capture missed calls that happen during the active telesales session
+    final Set<String> existingLast10 = _callbacks.map((c) {
+      final clean = c.phone.replaceAll(RegExp(r'[^0-9]'), '');
+      return clean.length >= 10 ? clean.substring(clean.length - 10) : clean;
+    }).toSet();
+
     final sessionStart = _loginSessionTimestamp;
     if (sessionStart == null) return;
 
     for (var call in _callLogs) {
+      final clean = call.phoneNumber.replaceAll(RegExp(r'[^0-9]'), '');
+      final last10 = clean.length >= 10 ? clean.substring(clean.length - 10) : clean;
+
       if (call.timestamp.isAfter(sessionStart) &&
           (call.type == CallType.missed || call.type == CallType.rejected) &&
-          call.phoneNumber.isNotEmpty &&
-          !existingPhones.contains(call.phoneNumber)) {
+          last10.isNotEmpty &&
+          !existingLast10.contains(last10)) {
+        final now = DateTime.now();
+        final roundedHour = ((now.hour + 1) % 24).clamp(9, 18);
         _callbacks.add(
           ScheduledCallback(
             id: 'cb_${call.id}',
             name: call.contactName != 'Unknown' ? call.contactName : call.phoneNumber,
             phone: call.phoneNumber,
-            scheduledTime: DateTime.now().add(const Duration(hours: 2)),
+            scheduledTime: DateTime(now.year, now.month, now.day, roundedHour, 0),
             note: 'Missed call follow-up required',
           ),
         );
-        existingPhones.add(call.phoneNumber);
+        existingLast10.add(last10);
       }
     }
   }
@@ -1349,6 +1620,18 @@ class TeleProvider extends ChangeNotifier {
     required DateTime scheduledTime,
     required String note,
   }) {
+    final clean = phone.replaceAll(RegExp(r'[^0-9]'), '');
+    final last10 = clean.length >= 10 ? clean.substring(clean.length - 10) : clean;
+
+    // Remove old persisted callback record so rescheduled record does not duplicate
+    _callbacks.removeWhere((c) {
+      final cClean = c.phone.replaceAll(RegExp(r'[^0-9]'), '');
+      final cLast10 = cClean.length >= 10 ? cClean.substring(cClean.length - 10) : cClean;
+      final samePhone = last10.isNotEmpty && (cLast10 == last10 || cClean.endsWith(last10) || last10.endsWith(cLast10));
+      final sameName = name.trim().isNotEmpty && c.name.trim().toLowerCase() == name.trim().toLowerCase();
+      return samePhone || sameName;
+    });
+
     _callbacks.insert(
       0,
       ScheduledCallback(
@@ -1359,6 +1642,8 @@ class TeleProvider extends ChangeNotifier {
         note: note.isNotEmpty ? note : 'Follow-up call scheduled',
       ),
     );
+    _callbacks.sort((a, b) => a.scheduledTime.compareTo(b.scheduledTime));
+    _savePreferences();
     notifyListeners();
   }
 
@@ -1480,7 +1765,7 @@ class TeleProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> launchWhatsApp(String phone, {String text = 'Hello from Telesales team!'}) async {
+  Future<void> launchWhatsApp(String phone, {String text = 'Hello from BDE team!'}) async {
     var cleanPhone = phone.replaceAll(RegExp(r'[^0-9]'), '');
     if (cleanPhone.length == 10) {
       cleanPhone = '91$cleanPhone';
@@ -1506,7 +1791,7 @@ class TeleProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> launchSms(String phone, {String text = 'Hi, please call us back.'}) async {
+  Future<void> launchSms(String phone, {String text = 'Hello from BDE team! Please call us back.'}) async {
     final cleanPhone = phone.trim();
     if (cleanPhone.isEmpty) return;
 
@@ -1523,7 +1808,7 @@ class TeleProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> launchSMS(String phone, {String text = 'Hi, please call us back.'}) => launchSms(phone, text: text);
+  Future<void> launchSMS(String phone, {String text = 'Hello from BDE team! Please call us back.'}) => launchSms(phone, text: text);
 
   // Report Export
   String exportStatus = 'DOWNLOAD XLSX';
@@ -1554,6 +1839,11 @@ class TeleProvider extends ChangeNotifier {
   Future<bool> saveContact({required String phoneNumber, required String name, String? notes}) async {
     final cleanPhone = phoneNumber.replaceAll(RegExp(r'[^0-9]'), '');
     final last10 = cleanPhone.length >= 10 ? cleanPhone.substring(cleanPhone.length - 10) : cleanPhone;
+
+    // 1. Immediately store in CRM contacts map
+    _crmContactNames[last10] = name;
+
+    // 2. Immediately update matching leads
     final idx = _leads.indexWhere((l) =>
         l.phone == phoneNumber ||
         (last10.isNotEmpty && l.phone.replaceAll(RegExp(r'[^0-9]'), '').endsWith(last10)));
@@ -1564,6 +1854,30 @@ class TeleProvider extends ChangeNotifier {
     if (notes != null && notes.isNotEmpty) {
       _leadNotes[phoneNumber] = notes;
     }
+
+    // 3. Immediately update matching call logs in-memory
+    for (int i = 0; i < _callLogs.length; i++) {
+      final c = _callLogs[i];
+      if (c.phoneNumber.replaceAll(RegExp(r'[^0-9]'), '').endsWith(last10)) {
+        _callLogs[i] = CallLogModel(
+          id: c.id,
+          contactName: name,
+          phoneNumber: c.phoneNumber,
+          type: c.type,
+          duration: c.duration,
+          timestamp: c.timestamp,
+          simSlot: c.simSlot,
+          note: notes ?? c.note,
+          recordingPath: c.recordingPath,
+          agentName: c.agentName,
+          isCrmContact: true,
+        );
+      }
+    }
+
+    _savePreferences();
+    notifyListeners();
+
     final success = await ApiService.saveContact(
       phoneNumber: phoneNumber,
       name: name,
@@ -1574,7 +1888,7 @@ class TeleProvider extends ChangeNotifier {
       await fetchBackendData();
       notifyListeners();
     }
-    return success;
+    return true;
   }
 
   Future<Map<String, dynamic>> createUser({
