@@ -29,6 +29,7 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
   String _selectedRole = 'caller';
   String _selectedTeam = 'Telesales Team';
   bool _isLoading = false;
+  bool _obscurePassword = true;
 
   @override
   void dispose() {
@@ -223,6 +224,7 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                 const SizedBox(height: 6),
                 TextFormField(
                   controller: _passwordCtrl,
+                  obscureText: _obscurePassword,
                   style: AppTheme.bodyBold(size: 13, color: AppTheme.ink900),
                   decoration: InputDecoration(
                     hintText: 'Password (e.g. 123456)',
@@ -230,6 +232,14 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                     filled: true,
                     fillColor: AppTheme.paper,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                        size: 18,
+                        color: AppTheme.ink900,
+                      ),
+                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                       borderSide: const BorderSide(color: AppTheme.ink900, width: 1.5),
