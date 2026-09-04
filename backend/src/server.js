@@ -54,6 +54,164 @@ connectDB().then(() => {
   seedAdminUsers();
 });
 
+// Helper: Stream audio file or buffer with HTTP 206 Partial Content (Range) & CORS
+function getAudioMimeType(fileName = '') {
+  const ext = path.extname(fileName).toLowerCase();
+  if (ext === '.wav') return 'audio/wav';
+  if (ext === '.m4a' || ext === '.mp4' || ext === '.aac') return 'audio/mp4';
+  if (ext === '.mp3') return 'audio/mpeg';
+  if (ext === '.3gp' || ext === '.3gpp') return 'audio/3gpp';
+  if (ext === '.amr') return 'audio/amr';
+  if (ext === '.ogg') return 'audio/ogg';
+  return 'audio/wav';
+}
+
+function streamAudioBuffer(buffer, req, res, mimeType = 'audio/wav') {
+  const fileSize = buffer.length;
+  const range = req.headers.range;
+
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type, Authorization');
+  res.setHeader('Accept-Ranges', 'bytes');
+
+  if (range) {
+    const parts = range.replace(/bytes=/, '').split('-');
+    const start = parseInt(parts[0], 10);
+    const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+    if (start >= fileSize || end >= fileSize || start > end) {
+      res.writeHead(416, {
+        'Content-Range': `bytes */${fileSize}`,
+        'Access-Control-Allow-Origin': '*'
+      });
+      return res.end();
+    }
+    const chunksize = (end - start) + 1;
+    const chunk = buffer.slice(start, end + 1);
+    res.writeHead(206, {
+      'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+      'Accept-Ranges': 'bytes',
+      'Content-Length': chunksize,
+      'Content-Type': mimeType,
+      'Access-Control-Allow-Origin': '*'
+    });
+    return res.end(chunk);
+  } else {
+    res.writeHead(200, {
+      'Content-Length': fileSize,
+      'Content-Type': mimeType,
+      'Accept-Ranges': 'bytes',
+      'Access-Control-Allow-Origin': '*'
+    });
+    return res.end(buffer);
+  }
+}
+
+function streamAudioFile(filePath, req, res, mimeType = 'audio/wav') {
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).send('Audio file not found');
+  }
+
+  const stat = fs.statSync(filePath);
+  const fileSize = stat.size;
+  const range = req.headers.range;
+
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type, Authorization');
+  res.setHeader('Accept-Ranges', 'bytes');
+
+  if (range) {
+    const parts = range.replace(/bytes=/, '').split('-');
+    const start = parseInt(parts[0], 10);
+    const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+    if (start >= fileSize || end >= fileSize || start > end) {
+      res.writeHead(416, {
+        'Content-Range': `bytes */${fileSize}`,
+        'Access-Control-Allow-Origin': '*'
+      });
+      return res.end();
+    }
+    const chunksize = (end - start) + 1;
+    const file = fs.createReadStream(filePath, { start, end });
+    res.writeHead(206, {
+      'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+      'Accept-Ranges': 'bytes',
+      'Content-Length': chunksize,
+      'Content-Type': mimeType,
+      'Access-Control-Allow-Origin': '*'
+    });
+    file.pipe(res);
+  } else {
+    res.writeHead(200, {
+      'Content-Length': fileSize,
+      'Content-Type': mimeType,
+      'Accept-Ranges': 'bytes',
+      'Access-Control-Allow-Origin': '*'
+    });
+    fs.createReadStream(filePath).pipe(res);
+  }
+}
+
+// Dedicated Direct Audio Streaming Route for Recordings
+app.get(['/api/recordings/:id/audio', '/api/admin/recordings/:id/audio', '/api/recordings/:id/stream'], async (req, res) => {
+  try {
+    const recId = req.params.id;
+    const isMongoId = /^[0-9a-fA-F]{24}$/.test(recId);
+    const rec = await Recording.findOne({
+      $or: [
+        { id: recId },
+        ...(isMongoId ? [{ _id: recId }] : [])
+      ]
+    });
+
+    if (!rec) {
+      // Check if ID matches a physical filename in uploadsDir
+      const directPath = path.join(uploadsDir, recId);
+      if (fs.existsSync(directPath)) {
+        return streamAudioFile(directPath, req, res, getAudioMimeType(recId));
+      }
+      return res.status(404).json({ success: false, message: 'Recording not found' });
+    }
+
+    // 1. Try disk file from audioUrl or fileName
+    let targetFileName = rec.fileName || (rec.audioUrl ? path.basename(rec.audioUrl) : `CALL_${rec.id}.wav`);
+    let filePath = path.join(uploadsDir, targetFileName);
+
+    if (fs.existsSync(filePath) && fs.statSync(filePath).size > 0) {
+      return streamAudioFile(filePath, req, res, getAudioMimeType(targetFileName));
+    }
+
+    // 2. Try reconstructing from Base64 audioData stored in MongoDB
+    if (rec.audioData && typeof rec.audioData === 'string' && rec.audioData.length > 50) {
+      try {
+        const cleanBase64 = rec.audioData.replace(/^data:audio\/\w+;base64,/, '');
+        const buffer = Buffer.from(cleanBase64, 'base64');
+        if (buffer.length > 0) {
+          // Cache file to disk
+          try { fs.writeFileSync(filePath, buffer); } catch (_) {}
+          return streamAudioBuffer(buffer, req, res, getAudioMimeType(targetFileName));
+        }
+      } catch (decodeErr) {
+        console.warn('Error decoding base64 audio data:', decodeErr.message);
+      }
+    }
+
+    return res.status(404).json({ success: false, message: 'Audio stream content not available' });
+  } catch (err) {
+    console.error('Audio stream handler error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Explicit Static Audio Handler for uploads/recordings with full Range support
+app.get('/uploads/recordings/:filename', (req, res) => {
+  const filename = req.params.filename.replace(/[^a-zA-Z0-9_.-]/g, '');
+  const filePath = path.join(uploadsDir, filename);
+  if (fs.existsSync(filePath)) {
+    return streamAudioFile(filePath, req, res, getAudioMimeType(filename));
+  }
+  res.status(404).send('Audio recording file not found');
+});
+
 // 1. Direct High-Priority Top-Level Endpoints for Mobile App & Admin Parity
 app.post(['/api/recordings', '/api/user/recordings/upload', '/api/admin/recordings'], async (req, res) => {
   try {
@@ -62,16 +220,22 @@ app.post(['/api/recordings', '/api/user/recordings/upload', '/api/admin/recordin
 
     let audioUrl = '';
     let storageSizeBytes = 450000;
+    let actualFileName = fileName;
 
     // Save actual binary audio file if base64 data is present
     if (audioData && typeof audioData === 'string' && audioData.length > 50) {
       try {
         const cleanBase64 = audioData.replace(/^data:audio\/\w+;base64,/, '');
         const buffer = Buffer.from(cleanBase64, 'base64');
-        const saveName = fileName ? fileName.replace(/[^a-zA-Z0-9_.-]/g, '') : `CALL_REC_${Date.now()}.m4a`;
-        const filePath = path.join(uploadsDir, saveName);
+        let ext = '.wav';
+        if (actualFileName && actualFileName.endsWith('.m4a')) ext = '.m4a';
+        else if (actualFileName && actualFileName.endsWith('.mp3')) ext = '.mp3';
+        else if (actualFileName && actualFileName.endsWith('.wav')) ext = '.wav';
+        
+        actualFileName = actualFileName ? actualFileName.replace(/[^a-zA-Z0-9_.-]/g, '') : `CALL_REC_${Date.now()}${ext}`;
+        const filePath = path.join(uploadsDir, actualFileName);
         fs.writeFileSync(filePath, buffer);
-        audioUrl = `/uploads/recordings/${saveName}`;
+        audioUrl = `/uploads/recordings/${actualFileName}`;
         storageSizeBytes = buffer.length;
         console.log(`📁 Audio file saved to disk: ${filePath} (${storageSizeBytes} bytes)`);
       } catch (fileErr) {
@@ -81,7 +245,8 @@ app.post(['/api/recordings', '/api/user/recordings/upload', '/api/admin/recordin
 
     // Ensure audioUrl is always a valid reachable URL
     if (!audioUrl) {
-      audioUrl = `/uploads/recordings/REC_${Date.now()}.m4a`;
+      actualFileName = actualFileName || `REC_${Date.now()}.wav`;
+      audioUrl = `/uploads/recordings/${actualFileName}`;
     }
 
     const rec = await Recording.create({
@@ -91,7 +256,8 @@ app.post(['/api/recordings', '/api/user/recordings/upload', '/api/admin/recordin
       phoneNumber: phoneNumber || '',
       durationSeconds: durationSeconds || 0,
       audioUrl: audioUrl,
-      audioData: (audioData && audioData.length < 500000) ? audioData : '',
+      fileName: actualFileName,
+      audioData: (audioData && audioData.length < 10000000) ? audioData : '',
       transcript: transcript || '“Actual voice recording saved”',
       storageSizeBytes: storageSizeBytes,
       dateStr: dateStr || 'Today',
@@ -148,7 +314,22 @@ app.post(['/api/recordings', '/api/user/recordings/upload', '/api/admin/recordin
 
 app.get(['/api/recordings', '/api/admin/recordings'], async (req, res) => {
   try {
-    const recordings = await Recording.find().sort({ createdAt: -1 });
+    const allEmployees = await Employee.find({});
+    let query = {};
+    if (allEmployees.length > 0) {
+      const names = allEmployees.map(c => c.name).filter(Boolean);
+      const phones = allEmployees.map(c => c.phone).filter(Boolean);
+      const cleanPhones = phones.map(p => p.replace(/[^0-9]/g, '').slice(-10)).filter(Boolean);
+      query = {
+        $or: [
+          { callerName: { $in: names.map(n => new RegExp(`^${n}$`, 'i')) } },
+          { phoneNumber: { $in: phones } },
+          ...(cleanPhones.map(cp => ({ phoneNumber: new RegExp(cp + '$') })))
+        ]
+      };
+    }
+
+    const recordings = await Recording.find(query).sort({ createdAt: -1 });
     const totalStorageBytes = recordings.reduce((acc, r) => acc + (r.storageSizeBytes || 450000), 0);
     const usedGB = +(totalStorageBytes / (1024 * 1024 * 1024)).toFixed(2);
 
