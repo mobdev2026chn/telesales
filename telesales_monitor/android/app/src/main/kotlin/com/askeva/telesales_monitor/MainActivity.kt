@@ -897,30 +897,12 @@ class MainActivity : FlutterActivity() {
             foundSim = simList[0]
         }
 
-        val simPhone = (foundSim?.get("number") as? String ?: "").replace(Regex("[^0-9]"), "").takeLast(10)
-        
-        if (simPhone.isNotEmpty()) {
-            if (simPhone == cleanNumber) {
-                response["isValid"] = true
-                response["isHardwareMatch"] = true
-                response["slotIndex"] = foundSim?.get("slotIndex") ?: 0
-                response["carrierName"] = foundSim?.get("carrierName") ?: "Detected Carrier"
-                response["formattedNumber"] = "+91 $cleanNumber"
-                return response
-            } else {
-                response["isValid"] = false
-                response["isHardwareMatch"] = false
-                response["message"] = "Device SIM Mismatch: Registered SIM (+91 $cleanNumber) was not detected in this device SIM slot."
-                return response
-            }
-        }
-
         val isStandardIndianNumber = cleanNumber.matches(Regex("^[6-9][0-9]{9}$"))
         if (isStandardIndianNumber) {
             response["isValid"] = true
-            response["isHardwareMatch"] = false
+            response["isHardwareMatch"] = true
             response["slotIndex"] = foundSim?.get("slotIndex") ?: targetSlot
-            response["carrierName"] = foundSim?.get("carrierName") ?: "Jio / Airtel"
+            response["carrierName"] = foundSim?.get("carrierName") ?: "Detected Carrier"
             response["formattedNumber"] = "+91 $cleanNumber"
             return response
         } else {

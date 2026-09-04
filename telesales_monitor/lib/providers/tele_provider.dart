@@ -787,27 +787,17 @@ class TeleProvider extends ChangeNotifier {
     }
 
     if (_detectedSims.isNotEmpty) {
-      bool simMatched = false;
-      bool hasReadableSimPhone = false;
-
-      for (var sim in _detectedSims) {
+      int matchedSlot = 0;
+      for (int i = 0; i < _detectedSims.length; i++) {
+        final sim = _detectedSims[i];
         final cleanSim = sim.phoneNumber.replaceAll(RegExp(r'[^0-9]'), '');
         final last10Sim = cleanSim.length >= 10 ? cleanSim.substring(cleanSim.length - 10) : cleanSim;
-        if (last10Sim.length >= 10) {
-          hasReadableSimPhone = true;
-          if (last10Sim == last10Reg) {
-            simMatched = true;
-            break;
-          }
+        if (last10Sim == last10Reg) {
+          matchedSlot = sim.slotIndex;
+          break;
         }
       }
-
-      if (hasReadableSimPhone && !simMatched) {
-        return {
-          'isValid': false,
-          'message': 'Device SIM Validation Failed: The registered SIM card (+91 $last10Reg) is not inserted in this mobile phone. Please insert your registered SIM card to proceed.'
-        };
-      }
+      _simTrackingMode = matchedSlot == 1 ? SimTrackingMode.sim2Only : SimTrackingMode.sim1Only;
     }
     return {'isValid': true};
   }
