@@ -576,14 +576,27 @@ router.get('/calls', async (req, res) => {
       }
     });
 
-    const formattedCalls = rawCalls.map(c => {
+    // Deduplicate calls on read: prevent duplicate logs within 90-second window
+    const dedupedCalls = [];
+    const seen = new Set();
+
+    for (const c of rawCalls) {
       const isConnected = c.durationSeconds > 0;
       const isOutbound = c.type === 'outgoing' || c.type === 'outbound';
       const durationStr = `${Math.floor(c.durationSeconds / 60)}m ${c.durationSeconds % 60}s`;
       const cleanPhone = (c.callerPhone || '').replace(/[^0-9]/g, '').slice(-10);
       const registeredName = phoneMap[cleanPhone] || phoneMap[c.callerPhone] || c.callerName || 'Caller';
+      const cleanTarget = (c.phoneNumber || '').replace(/[^0-9]/g, '').slice(-10);
+      const callTs = new Date(c.timestamp || c.createdAt || Date.now()).getTime();
+      const timeBucket = Math.floor(callTs / 90000); // 90-second window
 
-      return {
+      const dedupKey = `${cleanPhone}_${cleanTarget}_${isOutbound ? 'OUT' : 'IN'}_${c.durationSeconds || 0}_${timeBucket}`;
+      if (seen.has(dedupKey)) {
+        continue;
+      }
+      seen.add(dedupKey);
+
+      dedupedCalls.push({
         id: c._id,
         callerName: registeredName,
         callerPhone: c.callerPhone || '',
@@ -595,10 +608,11 @@ router.get('/calls', async (req, res) => {
         timestamp: c.timestamp || c.createdAt,
         simSlot: c.simSlot || 1,
         note: c.note || '',
-      };
-    });
+        recordingUrl: c.recordingUrl || '',
+      });
+    }
 
-    res.json({ success: true, count: formattedCalls.length, calls: formattedCalls });
+    res.json({ success: true, count: dedupedCalls.length, calls: dedupedCalls });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

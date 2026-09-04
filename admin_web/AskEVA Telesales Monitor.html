@@ -1778,13 +1778,29 @@
           try {
             const res = await fetch(`${API_BASE}/admin/calls`);
             const json = await res.json();
-            if (json.success && json.calls && json.calls.length > 0) {
-              Store.calls = json.calls.map(c => {
+            if (json.success && Array.isArray(json.calls)) {
+              if (json.calls.length === 0) {
+                Store.calls = [];
+                renderAll();
+                return;
+              }
+              const seenCallKeys = new Set();
+              const uniqueCalls = [];
+              
+              for (const c of json.calls) {
                 const dur = c.durationSeconds ?? c.dur ?? c.duration ?? 0;
                 const dir = (c.type === 'INBOUND' || c.type === 'incoming' || c.dir === 'IN') ? 'IN' : 'OUT';
                 const isConn = dur > 0 || c.out === 'CONNECTED' || c.status === 'CONNECTED';
                 const isMissed = !isConn && (c.type === 'MISSED' || (dir === 'IN' && dur === 0));
-                return {
+                const tsDate = new Date(c.timestamp || c.ts || Date.now());
+                const cleanPhone = (c.phoneNumber || c.phone || '').replace(/[^0-9]/g, '').slice(-10);
+                const timeBucket = Math.floor(tsDate.getTime() / 90000);
+                const dedupKey = `${cleanPhone}_${dir}_${dur}_${timeBucket}`;
+
+                if (seenCallKeys.has(dedupKey)) continue;
+                seenCallKeys.add(dedupKey);
+
+                uniqueCalls.push({
                   id: c.id || c._id,
                   agent: c.callerName || c.registeredName || c.agent || 'Caller',
                   callerPhone: c.callerPhone || c.phone || '',
@@ -1793,13 +1809,14 @@
                   dir: dir,
                   out: isConn ? 'CONNECTED' : (isMissed ? 'MISSED' : 'NO ANSWER'),
                   dur: dur,
-                  ts: new Date(c.timestamp || c.ts || Date.now()),
+                  ts: tsDate,
                   sim: c.simSlot || c.sim || 1,
                   rec: !!(c.rec || c.hasRecording || c.recordingUrl || c.audioPath),
                   recordingUrl: c.recordingUrl || c.audioPath || '',
                   audioData: c.audioData || ''
-                };
-              });
+                });
+              }
+              Store.calls = uniqueCalls;
               renderAll();
             }
           } catch (e) {
