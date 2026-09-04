@@ -314,7 +314,9 @@ class TeleProvider extends ChangeNotifier {
       notifyListeners();
     }
     await fetchDeviceSims();
-    await fetchDeviceCallLogs();
+    if (_isLoggedIn) {
+      await fetchDeviceCallLogs();
+    }
     await fetchBackendData();
     _startPeriodicSyncTimer();
   }
@@ -672,10 +674,18 @@ class TeleProvider extends ChangeNotifier {
   List<CallLogModel> get allCallLogs => _callLogs;
 
   Future<void> fetchDeviceCallLogs() async {
+    if (!_isLoggedIn || _verifiedTrackingNumber.isEmpty) {
+      _callLogs.clear();
+      notifyListeners();
+      return;
+    }
     try {
       final List<dynamic>? rawLogs = await _telephonyChannel.invokeMethod('getCallLogs');
       if (rawLogs != null) {
         final List<CallLogModel> realLogs = [];
+        final sessionMs = _loginSessionTimestamp?.millisecondsSinceEpoch;
+        if (sessionMs == null) return;
+
         for (var map in rawLogs) {
           if (map is Map<dynamic, dynamic>) {
             final typeStr = map['type'] as String? ?? 'incoming';
@@ -694,9 +704,8 @@ class TeleProvider extends ChangeNotifier {
                 ? map['timestamp'] as int
                 : DateTime.now().millisecondsSinceEpoch;
 
-            final sessionMs = _loginSessionTimestamp?.millisecondsSinceEpoch ?? DateTime.now().millisecondsSinceEpoch;
             if (timestampMs < sessionMs - 5000) {
-              continue; // Only track and sync calls made during the active user work session
+              continue; // Strictly skip all personal calls prior to the login work session
             }
 
             final int simSlot = map['simSlot'] as int? ?? 1;
@@ -741,7 +750,7 @@ class TeleProvider extends ChangeNotifier {
         _callLogs.addAll(realLogs);
         _syncLeadsFromCallLogs();
         _syncCallbacksFromCallLogs();
-        if (_currentRole == UserRole.caller) {
+        if (_currentRole == UserRole.caller && _callLogs.isNotEmpty) {
           ApiService.syncCallLogs(_callLogs, callerName: _callerName, callerPhone: _verifiedTrackingNumber);
         }
         notifyListeners();
@@ -927,6 +936,12 @@ class TeleProvider extends ChangeNotifier {
     _setupCompleted = true; // Permanently preserve setup completion so onboarding/permissions are never shown again!
     _authToken = '';
     _activeTabIndex = 0;
+    _loginSessionTimestamp = null;
+    _callLogs.clear();
+    _leads.clear();
+    _callbacks.clear();
+    _recordings.clear();
+    _breakLogs.clear();
     _savePreferences();
     notifyListeners();
   }
@@ -1932,22 +1947,7 @@ class TeleProvider extends ChangeNotifier {
   String get currentBreakType => _currentBreakType;
   DateTime? _breakStartTime;
 
-  final List<Map<String, dynamic>> _breakLogs = [
-    {
-      'type': 'Tea break',
-      'start': '11:15',
-      'end': '11:25',
-      'dur': '10M',
-      'mins': 10,
-    },
-    {
-      'type': 'Lunch',
-      'start': '1:05',
-      'end': '1:19',
-      'dur': '14M',
-      'mins': 14,
-    },
-  ];
+  final List<Map<String, dynamic>> _breakLogs = [];
   List<Map<String, dynamic>> get breakLogs => _breakLogs;
   int get totalBreakMinutes => _breakLogs.fold(0, (sum, b) => sum + (b['mins'] as int? ?? 0));
 
@@ -2038,38 +2038,13 @@ class TeleProvider extends ChangeNotifier {
 
   void startCallSession({List<LeadModel>? leads, int startIndex = 0}) {
     final available = leads ?? _leads.where((l) => l.status != LeadStatus.won && l.status != LeadStatus.lost).toList();
-    _sessionQueue = available.isNotEmpty ? available : [
-      LeadModel(
-        id: 'demo_1',
-        name: 'Ganesh Enterprises',
-        phone: '+91 98400 11223',
-        status: LeadStatus.newLead,
-        attempts: 0,
-        dateAdded: DateTime.now(),
-        lastCallDate: DateTime.now(),
-        note: 'Fresh IndiaMART inquiry',
-      ),
-      LeadModel(
-        id: 'demo_2',
-        name: 'Lakshmi Traders',
-        phone: '+91 90940 55667',
-        status: LeadStatus.newLead,
-        attempts: 0,
-        dateAdded: DateTime.now(),
-        lastCallDate: DateTime.now(),
-        note: 'Wholesale enquiry',
-      ),
-      LeadModel(
-        id: 'demo_3',
-        name: 'Meenakshi Agencies',
-        phone: '+91 90250 11876',
-        status: LeadStatus.followUp,
-        attempts: 1,
-        dateAdded: DateTime.now(),
-        lastCallDate: DateTime.now(),
-        note: 'Follow up quote',
-      ),
-    ];
+    if (available.isEmpty) {
+      _sessionQueue = [];
+      _activeCallLead = null;
+      notifyListeners();
+      return;
+    }
+    _sessionQueue = available;
     _sessionIndex = startIndex.clamp(0, _sessionQueue.length - 1);
     _activeCallLead = _sessionQueue[_sessionIndex];
     _callTimerSeconds = 0;

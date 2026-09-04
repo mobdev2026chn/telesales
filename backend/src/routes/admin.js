@@ -305,9 +305,10 @@ router.get('/dashboard', async (req, res) => {
 
     const totalCalls = await CallLog.countDocuments(callLogQuery);
     const connectedCalls = await CallLog.countDocuments({ ...callLogQuery, durationSeconds: { $gt: 0 } });
-    const incoming = await CallLog.countDocuments({ ...callLogQuery, type: 'incoming' });
-    const outgoing = await CallLog.countDocuments({ ...callLogQuery, type: 'outgoing' });
+    const incoming = await CallLog.countDocuments({ ...callLogQuery, type: { $in: ['incoming', 'inbound'] } });
+    const outgoing = await CallLog.countDocuments({ ...callLogQuery, type: { $in: ['outgoing', 'outbound'] } });
     const missed = await CallLog.countDocuments({ ...callLogQuery, type: 'missed' });
+    const rejected = await CallLog.countDocuments({ ...callLogQuery, type: { $in: ['rejected', 'neverAttended'] } });
     const neverAttended = await CallLog.countDocuments({ 
       ...callLogQuery,
       $or: [{ type: 'rejected' }, { type: 'neverAttended' }, { durationSeconds: 0 }] 
@@ -485,6 +486,7 @@ router.get('/dashboard', async (req, res) => {
         incoming,
         outgoing,
         missed,
+        rejected,
         neverAttended,
         connectRatioPercent,
         conversionRatioPercent,
