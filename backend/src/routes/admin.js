@@ -323,26 +323,38 @@ router.get('/dashboard', async (req, res) => {
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const talkTimeFormatted = `${hours}h ${minutes.toString().padStart(2, '0')}m`;
 
+    const avgDurationSec = connectedCalls > 0 ? Math.round(totalSeconds / connectedCalls) : 0;
+    const avgH = Math.floor(avgDurationSec / 3600);
+    const avgM = Math.floor((avgDurationSec % 3600) / 60);
+    const avgS = avgDurationSec % 60;
+    const avgDurationFormatted = avgH > 0 
+      ? `${avgH}h ${avgM.toString().padStart(2, '0')}m` 
+      : `${avgM}m ${avgS.toString().padStart(2, '0')}s`;
+
     const distinctClients = await CallLog.distinct('phoneNumber', callLogQuery);
     const distinctCallers = await CallLog.distinct('callerPhone', callLogQuery);
 
-    // Aggregate Hourly Distribution from real call timestamps
-    const hourlyDistribution = await CallLog.aggregate([
-      { $match: callLogQuery },
-      {
-        $project: {
-          hour: { $hour: { date: '$timestamp', timezone: '+05:30' } }
-        }
-      },
-      {
-        $group: {
-          _id: '$hour',
-          count: { $sum: 1 }
+    // Aggregate Hourly Distribution from real call timestamps in IST (UTC+05:30)
+    const hourlyCallsMap = {};
+    for (let h = 8; h <= 21; h++) {
+      hourlyCallsMap[h] = 0;
+    }
+
+    const callsForHistogram = await CallLog.find(callLogQuery).select('timestamp durationSeconds');
+    callsForHistogram.forEach(c => {
+      if (c.timestamp) {
+        const d = new Date(c.timestamp);
+        const utcMs = d.getTime() + (d.getTimezoneOffset() * 60000);
+        const istDate = new Date(utcMs + (330 * 60000));
+        const hour = istDate.getHours();
+        if (hourlyCallsMap[hour] !== undefined) {
+          hourlyCallsMap[hour]++;
         }
       }
-    ]);
+    });
 
     const hourLabels = [
+      { h: 8, label: '8A' },
       { h: 9, label: '9A' },
       { h: 10, label: '10A' },
       { h: 11, label: '11A' },
@@ -354,12 +366,13 @@ router.get('/dashboard', async (req, res) => {
       { h: 17, label: '5P' },
       { h: 18, label: '6P' },
       { h: 19, label: '7P' },
+      { h: 20, label: '8P' },
+      { h: 21, label: '9P' },
     ];
 
     let maxHourlyCalls = 0;
     const hourlyCalls = hourLabels.map(hl => {
-      const found = hourlyDistribution.find(d => d._id === hl.h);
-      const c = found ? found.count : 0;
+      const c = hourlyCallsMap[hl.h] || 0;
       if (c > maxHourlyCalls) maxHourlyCalls = c;
       return { hour: hl.label, calls: c, isPeak: false };
     });
@@ -480,6 +493,7 @@ router.get('/dashboard', async (req, res) => {
         totalCalls,
         connectedCalls,
         talkTimeFormatted,
+        avgDurationFormatted,
         uniqueClients: distinctClients.length,
         teamCount: registeredEmployees.length,
         teamDailyTarget,
@@ -514,6 +528,21 @@ router.get('/calls', async (req, res) => {
     
     let conditions = [];
 
+    const employees = await Employee.find().select('id name phone');
+    const validCallerNames = employees.map(e => e.name).filter(Boolean);
+    const validCallerPhones = employees.map(e => e.phone).filter(Boolean);
+    const validCleanPhones = validCallerPhones.map(p => p.replace(/[^0-9]/g, '').slice(-10)).filter(Boolean);
+
+    if (validCallerNames.length > 0 || validCallerPhones.length > 0) {
+      conditions.push({
+        $or: [
+          { callerName: { $in: validCallerNames.map(n => new RegExp(`^${n}$`, 'i')) } },
+          { callerPhone: { $in: validCallerPhones } },
+          ...(validCleanPhones.map(cp => ({ callerPhone: new RegExp(cp + '$') })))
+        ]
+      });
+    }
+
     if (callLogQuery && Object.keys(callLogQuery).length > 0) {
       conditions.push(callLogQuery);
     }
@@ -538,7 +567,6 @@ router.get('/calls', async (req, res) => {
     const query = conditions.length > 0 ? (conditions.length === 1 ? conditions[0] : { $and: conditions }) : {};
     const rawCalls = await CallLog.find(query).sort({ timestamp: -1 }).limit(200);
 
-    const employees = await Employee.find().select('id name phone');
     const phoneMap = {};
     employees.forEach(e => {
       if (e.phone) {
@@ -814,18 +842,26 @@ router.get('/recordings', async (req, res) => {
     const { employeeQuery } = await buildTelemetryQuery(req.query);
     let conditions = [];
 
-    if (employeeQuery && Object.keys(employeeQuery).length > 0) {
-      const teamCallers = await Employee.find({ ...employeeQuery });
-      const names = teamCallers.map(c => c.name).filter(Boolean);
-      const phones = teamCallers.map(c => c.phone).filter(Boolean);
-      if (names.length > 0 || phones.length > 0) {
-        conditions.push({
-          $or: [
-            { callerName: { $in: names.map(n => new RegExp(`^${n}$`, 'i')) } },
-            { phoneNumber: { $in: phones } }
-          ]
-        });
-      }
+    const allRegisteredEmployees = await Employee.find({ ...employeeQuery });
+    const names = allRegisteredEmployees.map(c => c.name).filter(Boolean);
+    const phones = allRegisteredEmployees.map(c => c.phone).filter(Boolean);
+    const cleanPhones = phones.map(p => p.replace(/[^0-9]/g, '').slice(-10)).filter(Boolean);
+
+    if (names.length > 0 || phones.length > 0) {
+      conditions.push({
+        $or: [
+          { callerName: { $in: names.map(n => new RegExp(`^${n}$`, 'i')) } },
+          { phoneNumber: { $in: phones } },
+          ...(cleanPhones.map(cp => ({ phoneNumber: new RegExp(cp + '$') })))
+        ]
+      });
+    } else {
+      // No registered employees match -> return empty
+      return res.json({
+        success: true,
+        storage: { usedGB: 0.05, totalGB: 5.0, freeGB: 4.95, count: 0 },
+        recordings: []
+      });
     }
 
     if (type && type !== 'all') {

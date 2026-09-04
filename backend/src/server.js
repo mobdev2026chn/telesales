@@ -408,14 +408,24 @@ app.post(['/api/calls/sync', '/api/user/calls/sync'], async (req, res) => {
     const inserted = [];
     for (const call of calls) {
       const callTime = call.timestamp ? new Date(call.timestamp) : new Date();
-      const startTime = new Date(callTime.getTime() - 5000);
-      const endTime = new Date(callTime.getTime() + 5000);
+      const startTime = new Date(callTime.getTime() - 90000);
+      const endTime = new Date(callTime.getTime() + 90000);
       const cleanPhone = (call.phoneNumber || '').replace(/[^0-9]/g, '').slice(-10);
 
-      // Strict duplicate detection: same phone number within 5 seconds
+      // Strict duplicate detection: same phone within 90s or same phone + duration within 5 mins
       const existing = await CallLog.findOne({
-        ...(cleanPhone.length >= 8 ? { phoneNumber: new RegExp(cleanPhone + '$') } : { phoneNumber: call.phoneNumber }),
-        timestamp: { $gte: startTime, $lte: endTime }
+        $or: [
+          {
+            ...(cleanPhone.length >= 8 ? { phoneNumber: new RegExp(cleanPhone + '$') } : { phoneNumber: call.phoneNumber }),
+            timestamp: { $gte: startTime, $lte: endTime }
+          },
+          {
+            ...(cleanPhone.length >= 8 ? { phoneNumber: new RegExp(cleanPhone + '$') } : { phoneNumber: call.phoneNumber }),
+            durationSeconds: call.durationSeconds || 0,
+            type: call.type || 'outgoing',
+            timestamp: { $gte: new Date(callTime.getTime() - 300000), $lte: new Date(callTime.getTime() + 300000) }
+          }
+        ]
       });
 
       // Find matching Recording audioUrl in MongoDB if available

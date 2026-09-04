@@ -1999,13 +1999,13 @@
         setTxt('kpiUniqueCalls', uniqueClients);
 
         // Call Mix
-        const inPct = totalCalls ? Math.max(4, Math.round(incoming / totalCalls * 100)) : 20;
+        const inPct = totalCalls ? Math.round(incoming / totalCalls * 100) : 0;
         const mixInBar = document.getElementById('mixInboundBar');
-        if (mixInBar) mixInBar.style.width = `${inPct}%`;
+        if (mixInBar) mixInBar.style.width = `${totalCalls ? Math.max(3, inPct) : 0}%`;
         setTxt('mixInboundCount', `${incoming} CALL${incoming === 1 ? '' : 'S'}`);
         setTxt('mixOutboundCount', `${outgoing} CALL${outgoing === 1 ? '' : 'S'}`);
         setTxt('dashConnRate', `${connectRate}%`);
-        setTxt('dashAvgDur', d.talkTimeFormatted || '—');
+        setTxt('dashAvgDur', d.avgDurationFormatted || (connectedCalls ? '0m 00s' : '—'));
         setTxt('dashUniqueClients', uniqueClients);
 
         // Hourly Activity (9A - 7P) with real peak hours
@@ -2256,13 +2256,21 @@
       const btn = document.getElementById('audioPlayPauseBtn');
       btn.innerText = '▶ PLAY';
 
-      // Attach actual audio stream if recording URL exists
-      if (c.recordingUrl) {
-        let audioSrc = c.recordingUrl;
+      // Attach audio stream or base64 audio
+      let audioSrc = '';
+      if (c.audioData && c.audioData.length > 50) {
+        audioSrc = c.audioData.startsWith('data:') ? c.audioData : `data:audio/mp4;base64,${c.audioData}`;
+      } else if (c.recordingUrl) {
+        audioSrc = c.recordingUrl;
         if (audioSrc.startsWith('/')) {
-          audioSrc = 'https://telesales.askeva.io' + audioSrc;
+          audioSrc = `${window.location.origin}${audioSrc}`;
         }
-        liveHtmlAudio = new Audio(audioSrc);
+      }
+
+      if (audioSrc) {
+        liveHtmlAudio = new Audio();
+        liveHtmlAudio.src = audioSrc;
+        liveHtmlAudio.preload = 'auto';
         liveHtmlAudio.onloadedmetadata = () => {
           if (liveHtmlAudio && liveHtmlAudio.duration && !isNaN(liveHtmlAudio.duration) && liveHtmlAudio.duration > 0) {
             Store.audioDurationSec = Math.round(liveHtmlAudio.duration);
@@ -2280,6 +2288,9 @@
           Store.audioIsPlaying = false;
           btn.innerText = '↺ REPLAY';
           clearInterval(Store.audioIntervalTimer);
+        };
+        liveHtmlAudio.onerror = (e) => {
+          console.warn('HTML5 live audio source notice:', audioSrc, e);
         };
       }
 

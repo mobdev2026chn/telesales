@@ -30,19 +30,42 @@ router.post('/calls/sync', async (req, res) => {
 
     const inserted = [];
     for (const call of calls) {
-      const log = await CallLog.create({
-        callerId: callerId || 'caller_1',
-        callerName: callerName || 'Caller Agent',
-        callerPhone: callerPhone || '+91 98250 00000',
-        contactName: call.contactName || 'Unknown',
-        phoneNumber: call.phoneNumber,
-        type: call.type || 'outgoing',
-        timestamp: call.timestamp ? new Date(call.timestamp) : new Date(),
-        durationSeconds: call.durationSeconds || 0,
-        simSlot: call.simSlot || 1,
-        note: call.note || '',
+      const cleanPhone = (call.phoneNumber || '').replace(/[^0-9]/g, '').slice(-10);
+      const callTime = call.timestamp ? new Date(call.timestamp) : new Date();
+      const startTime = new Date(callTime.getTime() - 90000);
+      const endTime = new Date(callTime.getTime() + 90000);
+
+      // Strict duplicate detection
+      const existing = await CallLog.findOne({
+        $or: [
+          {
+            ...(cleanPhone.length >= 8 ? { phoneNumber: new RegExp(cleanPhone + '$') } : { phoneNumber: call.phoneNumber }),
+            timestamp: { $gte: startTime, $lte: endTime }
+          },
+          {
+            ...(cleanPhone.length >= 8 ? { phoneNumber: new RegExp(cleanPhone + '$') } : { phoneNumber: call.phoneNumber }),
+            durationSeconds: call.durationSeconds || 0,
+            type: call.type || 'outgoing',
+            timestamp: { $gte: new Date(callTime.getTime() - 300000), $lte: new Date(callTime.getTime() + 300000) }
+          }
+        ]
       });
-      inserted.push(log);
+
+      if (!existing) {
+        const log = await CallLog.create({
+          callerId: callerEmp.id || callerEmp._id?.toString() || callerId || 'caller_1',
+          callerName: callerEmp.name || callerName || 'Caller Agent',
+          callerPhone: callerEmp.phone || callerPhone || '+91 98250 00000',
+          contactName: call.contactName || 'Unknown',
+          phoneNumber: call.phoneNumber,
+          type: call.type || 'outgoing',
+          timestamp: callTime,
+          durationSeconds: call.durationSeconds || 0,
+          simSlot: call.simSlot || 1,
+          note: call.note || '',
+        });
+        inserted.push(log);
+      }
     }
 
     res.json({
