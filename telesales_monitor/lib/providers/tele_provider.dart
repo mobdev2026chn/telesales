@@ -261,9 +261,15 @@ class TeleProvider extends ChangeNotifier {
           orElse: () => SimTrackingMode.bothSims,
         );
       }
-      final sessionMs = prefs.getInt('initial_setup_timestamp_ms') ?? prefs.getInt('login_session_timestamp_ms');
-      if (sessionMs != null) {
-        _loginSessionTimestamp = DateTime.fromMillisecondsSinceEpoch(sessionMs);
+      if (_isLoggedIn) {
+        final sessionMs = prefs.getInt('login_session_timestamp_ms');
+        if (sessionMs != null) {
+          _loginSessionTimestamp = DateTime.fromMillisecondsSinceEpoch(sessionMs);
+        } else {
+          _loginSessionTimestamp = DateTime.now();
+        }
+      } else {
+        _loginSessionTimestamp = null;
       }
       final savedCbJson = prefs.getString('saved_callbacks_json');
       if (savedCbJson != null && savedCbJson.isNotEmpty) {
@@ -348,12 +354,11 @@ class TeleProvider extends ChangeNotifier {
       await prefs.setString('current_user_id', _currentUserId);
       await prefs.setString('profile_photo_base64', _profilePhotoBase64);
       await prefs.setString('profile_photo_path', _profilePhotoPath);
-      if (_loginSessionTimestamp != null) {
-        // Only set initial_setup_timestamp_ms if not already set, preserving 1st login start!
-        if (prefs.getInt('initial_setup_timestamp_ms') == null) {
-          await prefs.setInt('initial_setup_timestamp_ms', _loginSessionTimestamp!.millisecondsSinceEpoch);
-        }
+      if (_isLoggedIn && _loginSessionTimestamp != null) {
         await prefs.setInt('login_session_timestamp_ms', _loginSessionTimestamp!.millisecondsSinceEpoch);
+      } else {
+        await prefs.remove('login_session_timestamp_ms');
+        await prefs.remove('initial_setup_timestamp_ms');
       }
       if (_callbacks.isNotEmpty) {
         final cbJson = jsonEncode(_callbacks.map((c) => c.toMap()).toList());
@@ -921,17 +926,30 @@ class TeleProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void purgeUserSession() {
+  void purgeUserSession() async {
     _isLoggedIn = false;
     _setupCompleted = true; // Permanently preserve setup completion so onboarding/permissions are never shown again!
     _authToken = '';
     _activeTabIndex = 0;
     _loginSessionTimestamp = null;
+    _verifiedTrackingNumber = '';
+    _callerName = 'Caller Agent';
+    _currentUserId = '';
     _callLogs.clear();
     _leads.clear();
     _callbacks.clear();
     _recordings.clear();
     _breakLogs.clear();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('login_session_timestamp_ms');
+      await prefs.remove('initial_setup_timestamp_ms');
+      await prefs.remove('verified_tracking_number');
+      await prefs.remove('caller_name');
+      await prefs.remove('current_user_id');
+      await prefs.remove('auth_token');
+      await prefs.setBool('is_logged_in', false);
+    } catch (_) {}
     _savePreferences();
     notifyListeners();
   }
@@ -978,14 +996,7 @@ class TeleProvider extends ChangeNotifier {
           _isManagerCallerMode = false;
           _isLoggedIn = true;
           _setupCompleted = true;
-
-          final prefs = await SharedPreferences.getInstance();
-          final initMs = prefs.getInt('initial_setup_timestamp_ms');
-          if (initMs != null) {
-            _loginSessionTimestamp = DateTime.fromMillisecondsSinceEpoch(initMs);
-          } else {
-            _loginSessionTimestamp ??= DateTime.now();
-          }
+          _loginSessionTimestamp = DateTime.now();
 
           _savePreferences();
           await fetchBackendData();
@@ -1046,14 +1057,7 @@ class TeleProvider extends ChangeNotifier {
           _currentRole = UserRole.caller;
           _isLoggedIn = true;
           _setupCompleted = true;
-
-          final prefs = await SharedPreferences.getInstance();
-          final initMs = prefs.getInt('initial_setup_timestamp_ms');
-          if (initMs != null) {
-            _loginSessionTimestamp = DateTime.fromMillisecondsSinceEpoch(initMs);
-          } else {
-            _loginSessionTimestamp ??= DateTime.now();
-          }
+          _loginSessionTimestamp = DateTime.now();
 
           _savePreferences();
           await fetchDeviceCallLogs();

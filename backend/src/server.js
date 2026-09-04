@@ -439,9 +439,9 @@ app.post(['/api/calls/sync', '/api/user/calls/sync'], async (req, res) => {
 
       if (!existing) {
         const log = await CallLog.create({
-          callerId: callerId || 'caller_1',
-          callerName: callerName || 'Caller Agent',
-          callerPhone: callerPhone || '+91 98250 00000',
+          callerId: callerEmp.id || callerEmp._id?.toString() || callerId || 'caller_1',
+          callerName: callerEmp.name || callerName || 'Caller Agent',
+          callerPhone: callerEmp.phone || callerPhone || '+91 98250 00000',
           contactName: call.contactName || 'Unknown',
           phoneNumber: call.phoneNumber,
           type: call.type || 'outgoing',
@@ -471,7 +471,7 @@ app.post(['/api/calls/sync', '/api/user/calls/sync'], async (req, res) => {
           if (lead) {
             lead.attempts = (lead.attempts || 0) + 1;
             lead.lastCallDate = callTime;
-            if (callerName) lead.assignedCaller = callerName;
+            if (callerEmp.name || callerName) lead.assignedCaller = callerEmp.name || callerName;
             if (contactName && !lead.name.startsWith('+')) lead.name = contactName;
             if (isConnected) lead.status = 'interested';
             lead.notes = `Last call: ${call.type || 'call'} (${call.durationSeconds || 0}s on ${new Date(callTime).toLocaleDateString()})`;
@@ -483,7 +483,7 @@ app.post(['/api/calls/sync', '/api/user/calls/sync'], async (req, res) => {
               phone: call.phoneNumber,
               status: autoStatus,
               attempts: 1,
-              assignedCaller: callerName || 'Mukhil',
+              assignedCaller: callerEmp.name || callerName || 'Caller Agent',
               notes: `Auto-created contact from call on ${new Date(callTime).toLocaleDateString()} (${call.durationSeconds || 0}s)`,
               lastCallDate: callTime,
               dateAdded: callTime,
