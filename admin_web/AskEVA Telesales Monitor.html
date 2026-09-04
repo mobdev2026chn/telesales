@@ -2299,6 +2299,10 @@
       btn.innerText = '▶ PLAY';
 
       // Determine audio source: 1. Base64 Audio Data, 2. recordingUrl / streaming endpoint, 3. /api/recordings/:id/audio
+      const SERVER_HOST = (window.location.origin && window.location.origin.startsWith('http') && !window.location.origin.includes('null'))
+        ? window.location.origin
+        : 'https://telesales.askeva.io';
+
       let audioSrc = '';
       if (c.audioData && typeof c.audioData === 'string' && c.audioData.length > 50) {
         if (c.audioData.startsWith('data:')) {
@@ -2311,10 +2315,10 @@
       } else if (c.recordingUrl && c.recordingUrl.trim().length > 0) {
         audioSrc = c.recordingUrl;
         if (audioSrc.startsWith('/')) {
-          audioSrc = `${window.location.origin}${audioSrc}`;
+          audioSrc = `${SERVER_HOST}${audioSrc}`;
         }
       } else if (callId) {
-        audioSrc = `${window.location.origin}/api/recordings/${callId}/audio`;
+        audioSrc = `${SERVER_HOST}/api/recordings/${callId}/audio`;
       }
 
       if (audioSrc) {
@@ -2341,15 +2345,21 @@
         };
         liveHtmlAudio.onerror = (e) => {
           console.warn('HTML5 live audio source notice, trying stream fallback:', audioSrc, e);
-          // Fallback to streaming endpoint if base64 or relative url had issue
           if (callId && !audioSrc.includes(`/api/recordings/${callId}/audio`)) {
-            liveHtmlAudio.src = `${window.location.origin}/api/recordings/${callId}/audio`;
+            liveHtmlAudio.src = `${SERVER_HOST}/api/recordings/${callId}/audio`;
             liveHtmlAudio.load();
+            liveHtmlAudio.play().catch(() => startAudibleSound());
+          } else {
+            startAudibleSound();
           }
         };
       }
 
       document.getElementById('audioPlayModal').classList.add('active');
+      // Autoplay immediately on click
+      setTimeout(() => {
+        toggleAudioPlayPause();
+      }, 50);
     }
 
     let synthAudioCtx = null;

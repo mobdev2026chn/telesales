@@ -528,7 +528,9 @@ class MainActivity : FlutterActivity() {
                     val cleanBase64 = audioData.replace(Regex("^data:audio/\\w+;base64,"), "")
                     val bytes = Base64.decode(cleanBase64, Base64.DEFAULT)
                     if (bytes.isNotEmpty()) {
-                        val tempFile = File(cacheDir, "temp_b64_play_${System.currentTimeMillis()}.m4a")
+                        val isWav = bytes.size > 4 && bytes[0] == 'R'.code.toByte() && bytes[1] == 'I'.code.toByte() && bytes[2] == 'F'.code.toByte()
+                        val ext = if (isWav) ".wav" else ".m4a"
+                        val tempFile = File(cacheDir, "temp_b64_play_${System.currentTimeMillis()}$ext")
                         tempFile.writeBytes(bytes)
                         playLocalAudioFile(tempFile.absolutePath, result)
                         return
@@ -598,7 +600,7 @@ class MainActivity : FlutterActivity() {
             val audioManager = getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
             try {
                 audioManager?.mode = android.media.AudioManager.MODE_NORMAL
-                audioManager?.isSpeakerphoneOn = false
+                audioManager?.isSpeakerphoneOn = true
                 val maxVol = audioManager?.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC) ?: 15
                 audioManager?.setStreamVolume(
                     android.media.AudioManager.STREAM_MUSIC,
