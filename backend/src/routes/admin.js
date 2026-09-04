@@ -282,6 +282,22 @@ async function buildTelemetryQuery(queryParams) {
     dateCondition = { $gte: monthStart, $lte: todayEnd };
   }
 
+  if (Object.keys(callLogQuery).length === 0) {
+    const allEmployees = await Employee.find({ role: { $ne: 'admin' } });
+    if (allEmployees.length > 0) {
+      const names = allEmployees.map(c => c.name).filter(Boolean);
+      const phones = allEmployees.map(c => c.phone).filter(Boolean);
+      const cleanPhones = phones.map(p => p.replace(/[^0-9]/g, '').slice(-10)).filter(Boolean);
+      callLogQuery = {
+        $or: [
+          { callerName: { $in: names.map(n => new RegExp(`^${n}$`, 'i')) } },
+          { callerPhone: { $in: phones } },
+          ...(cleanPhones.map(cp => ({ callerPhone: new RegExp(cp + '$') })))
+        ]
+      };
+    }
+  }
+
   if (dateCondition) {
     if (Object.keys(callLogQuery).length === 0) {
       callLogQuery = { timestamp: dateCondition };
@@ -303,22 +319,33 @@ router.get('/dashboard', async (req, res) => {
 
     const { employeeQuery, callLogQuery } = await buildTelemetryQuery(req.query);
 
-    const totalCalls = await CallLog.countDocuments(callLogQuery);
-    const connectedCalls = await CallLog.countDocuments({ ...callLogQuery, durationSeconds: { $gt: 0 } });
-    const incoming = await CallLog.countDocuments({ ...callLogQuery, type: { $in: ['incoming', 'inbound'] } });
-    const outgoing = await CallLog.countDocuments({ ...callLogQuery, type: { $in: ['outgoing', 'outbound'] } });
-    const missed = await CallLog.countDocuments({ ...callLogQuery, type: 'missed' });
-    const rejected = await CallLog.countDocuments({ ...callLogQuery, type: { $in: ['rejected', 'neverAttended'] } });
-    const neverAttended = await CallLog.countDocuments({ 
-      ...callLogQuery,
-      $or: [{ type: 'rejected' }, { type: 'neverAttended' }, { durationSeconds: 0 }] 
-    });
+    // Fetch matching calls and deduplicate them in-memory to prevent double-counting
+    const rawCalls = await CallLog.find(callLogQuery).sort({ timestamp: -1 }).limit(1000);
+    const dedupedCalls = [];
+    const seen = new Set();
 
-    const durationAgg = await CallLog.aggregate([
-      { $match: callLogQuery },
-      { $group: { _id: null, totalSeconds: { $sum: '$durationSeconds' } } }
-    ]);
-    const totalSeconds = durationAgg.length > 0 ? durationAgg[0].totalSeconds : 0;
+    for (const c of rawCalls) {
+      const cleanTarget = (c.phoneNumber || '').replace(/[^0-9]/g, '').slice(-10);
+      const cleanCaller = (c.callerPhone || '').replace(/[^0-9]/g, '').slice(-10);
+      const callTs = new Date(c.timestamp || c.createdAt || Date.now()).getTime();
+      const timeBucket = Math.floor(callTs / 90000); // 90-second bucket
+      const dir = (c.type === 'incoming' || c.type === 'inbound') ? 'IN' : 'OUT';
+      const dedupKey = `${cleanCaller}_${cleanTarget}_${dir}_${c.durationSeconds || 0}_${timeBucket}`;
+
+      if (seen.has(dedupKey)) continue;
+      seen.add(dedupKey);
+      dedupedCalls.push(c);
+    }
+
+    const totalCalls = dedupedCalls.length;
+    const connectedCalls = dedupedCalls.filter(c => (c.durationSeconds || 0) > 0).length;
+    const incoming = dedupedCalls.filter(c => c.type === 'incoming' || c.type === 'inbound').length;
+    const outgoing = dedupedCalls.filter(c => c.type === 'outgoing' || c.type === 'outbound').length;
+    const missed = dedupedCalls.filter(c => c.type === 'missed').length;
+    const rejected = dedupedCalls.filter(c => c.type === 'rejected' || c.type === 'neverAttended').length;
+    const neverAttended = dedupedCalls.filter(c => c.type === 'rejected' || c.type === 'neverAttended' || (c.durationSeconds || 0) === 0).length;
+
+    const totalSeconds = dedupedCalls.reduce((acc, c) => acc + (c.durationSeconds || 0), 0);
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const talkTimeFormatted = `${hours}h ${minutes.toString().padStart(2, '0')}m`;
@@ -331,8 +358,8 @@ router.get('/dashboard', async (req, res) => {
       ? `${avgH}h ${avgM.toString().padStart(2, '0')}m` 
       : `${avgM}m ${avgS.toString().padStart(2, '0')}s`;
 
-    const distinctClients = await CallLog.distinct('phoneNumber', callLogQuery);
-    const distinctCallers = await CallLog.distinct('callerPhone', callLogQuery);
+    const distinctClients = new Set(dedupedCalls.map(c => (c.phoneNumber || '').replace(/[^0-9]/g, '').slice(-10)).filter(Boolean)).size;
+    const distinctCallers = new Set(dedupedCalls.map(c => (c.callerPhone || '').replace(/[^0-9]/g, '').slice(-10)).filter(Boolean)).size;
 
     // Aggregate Hourly Distribution from real call timestamps in IST (UTC+05:30)
     const hourlyCallsMap = {};
@@ -340,8 +367,7 @@ router.get('/dashboard', async (req, res) => {
       hourlyCallsMap[h] = 0;
     }
 
-    const callsForHistogram = await CallLog.find(callLogQuery).select('timestamp durationSeconds');
-    callsForHistogram.forEach(c => {
+    dedupedCalls.forEach(c => {
       if (c.timestamp) {
         const d = new Date(c.timestamp);
         const utcMs = d.getTime() + (d.getTimezoneOffset() * 60000);

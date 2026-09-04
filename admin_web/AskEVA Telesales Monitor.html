@@ -1553,18 +1553,42 @@
 
     function fmtTs(d) {
       if (!d) return '—';
-      const dateObj = (d instanceof Date) ? d : new Date(d);
+      const dateObj = (d instanceof Date) ? d : new Date(isNaN(d) ? d : Number(d));
       if (isNaN(dateObj.getTime())) return '—';
-      const M = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-      const rawH = dateObj.getHours();
-      const h12 = rawH % 12 || 12;
-      const ampm = rawH < 12 ? 'AM' : 'PM';
-      const min = String(dateObj.getMinutes()).padStart(2, '0');
-      
-      const now = new Date();
-      const isToday = dateObj.getDate() === now.getDate() && dateObj.getMonth() === now.getMonth() && dateObj.getFullYear() === now.getFullYear();
-      const dayPrefix = isToday ? 'TODAY' : `${dateObj.getDate()} ${M[dateObj.getMonth()]}`;
-      return `${dayPrefix} · ${h12}:${min} ${ampm}`;
+
+      try {
+        const istDateStr = new Intl.DateTimeFormat('en-IN', {
+          timeZone: 'Asia/Kolkata',
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric'
+        }).format(dateObj);
+
+        const now = new Date();
+        const istNowStr = new Intl.DateTimeFormat('en-IN', {
+          timeZone: 'Asia/Kolkata',
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric'
+        }).format(now);
+
+        const timeStr = new Intl.DateTimeFormat('en-IN', {
+          timeZone: 'Asia/Kolkata',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        }).format(dateObj).toUpperCase();
+
+        const parts = istDateStr.replace(',', '').split(' ');
+        const dayPrefix = (istDateStr === istNowStr) ? 'TODAY' : `${parts[0]} ${(parts[1] || '').toUpperCase()}`;
+        return `${dayPrefix} · ${timeStr}`;
+      } catch (_) {
+        const rawH = dateObj.getHours();
+        const h12 = rawH % 12 || 12;
+        const ampm = rawH < 12 ? 'AM' : 'PM';
+        const min = String(dateObj.getMinutes()).padStart(2, '0');
+        return `TODAY · ${h12}:${min} ${ampm}`;
+      }
     }
 
     function inPeriod(c, p, customDate) {
