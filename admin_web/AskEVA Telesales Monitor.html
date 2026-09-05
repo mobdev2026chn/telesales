@@ -2492,23 +2492,6 @@
         }, 1000);
       }
     }
-        clearInterval(Store.audioIntervalTimer);
-        Store.audioIntervalTimer = setInterval(() => {
-          if (Store.audioCurrentSec < Store.audioDurationSec) {
-            if (!liveHtmlAudio) {
-              Store.audioCurrentSec++;
-              updateAudioUI();
-            }
-          } else {
-            Store.audioIsPlaying = false;
-            clearInterval(Store.audioIntervalTimer);
-            if (liveHtmlAudio) liveHtmlAudio.pause();
-            stopAudibleSound();
-            btn.innerText = '↺ REPLAY';
-          }
-        }, 1000);
-      }
-    }
 
     function onScrubAudioInput(val) {
       Store.audioCurrentSec = Number(val);
