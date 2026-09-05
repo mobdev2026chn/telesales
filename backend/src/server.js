@@ -161,7 +161,7 @@ app.get(['/api/recordings/:id/audio', '/api/admin/recordings/:id/audio', '/api/r
   try {
     const recId = req.params.id;
     const isMongoId = /^[0-9a-fA-F]{24}$/.test(recId);
-    const rec = await Recording.findOne({
+    let rec = await Recording.findOne({
       $or: [
         { id: recId },
         ...(isMongoId ? [{ _id: recId }] : [])
@@ -169,28 +169,51 @@ app.get(['/api/recordings/:id/audio', '/api/admin/recordings/:id/audio', '/api/r
     });
 
     if (!rec) {
+      // Check if recId is a CallLog document ID
+      const callLog = await CallLog.findOne({
+        $or: [
+          { id: recId },
+          ...(isMongoId ? [{ _id: recId }] : [])
+        ]
+      });
+
+      if (callLog && callLog.phoneNumber) {
+        const cleanPhone = callLog.phoneNumber.replace(/[^0-9]/g, '').slice(-10);
+        if (cleanPhone.length >= 8) {
+          rec = await Recording.findOne({
+            $or: [
+              { phoneNumber: new RegExp(cleanPhone + '$') },
+              { contactName: new RegExp(cleanPhone + '$') }
+            ],
+            audioData: { $type: 'string', $ne: '' }
+          }).sort({ createdAt: -1 });
+        }
+      }
+    }
+
+    if (!rec) {
       // Check if ID matches a physical filename in uploadsDir
       const directPath = path.join(uploadsDir, recId);
       if (fs.existsSync(directPath)) {
         return streamAudioFile(directPath, req, res, getAudioMimeType(recId));
       }
-      return res.status(404).json({ success: false, message: 'Recording not found' });
+      return res.status(404).json({ success: false, message: 'Audio stream content not available' });
     }
 
     // 1. Try disk file from audioUrl or fileName
     let targetFileName = rec.fileName || (rec.audioUrl ? path.basename(rec.audioUrl) : `CALL_${rec.id}.wav`);
     let filePath = path.join(uploadsDir, targetFileName);
 
-    if (fs.existsSync(filePath) && fs.statSync(filePath).size > 0) {
+    if (fs.existsSync(filePath) && fs.statSync(filePath).size > 100) {
       return streamAudioFile(filePath, req, res, getAudioMimeType(targetFileName));
     }
 
     // 2. Try reconstructing from Base64 audioData stored in MongoDB
-    if (rec.audioData && typeof rec.audioData === 'string' && rec.audioData.length > 50) {
+    if (rec.audioData && typeof rec.audioData === 'string' && rec.audioData.length > 100) {
       try {
         const cleanBase64 = rec.audioData.replace(/^data:audio\/\w+;base64,/, '');
         const buffer = Buffer.from(cleanBase64, 'base64');
-        if (buffer.length > 0) {
+        if (buffer.length > 100) {
           // Cache file to disk
           try { fs.writeFileSync(filePath, buffer); } catch (_) {}
           return streamAudioBuffer(buffer, req, res, getAudioMimeType(targetFileName));
@@ -337,7 +360,19 @@ app.get(['/api/recordings', '/api/admin/recordings'], async (req, res) => {
       ];
     }
 
-    const recordings = await Recording.find(query).sort({ createdAt: -1 });
+    const rawRecordings = await Recording.find(query).select('-audioData').sort({ createdAt: -1 }).lean();
+    const recordings = rawRecordings.map(r => {
+      const recId = r.id || r._id;
+      const directPath = path.join(uploadsDir, r.fileName || `CALL_${recId}.wav`);
+      const hasDiskFile = fs.existsSync(directPath) && fs.statSync(directPath).size > 100;
+      const hasAudio = hasDiskFile || (r.storageSizeBytes && r.storageSizeBytes > 1000);
+      return {
+        ...r,
+        hasAudio,
+        audioUrl: `/api/recordings/${recId}/audio`,
+      };
+    });
+
     const totalStorageBytes = recordings.reduce((acc, r) => acc + (r.storageSizeBytes || 450000), 0);
     const usedGB = +(totalStorageBytes / (1024 * 1024 * 1024)).toFixed(2);
 
