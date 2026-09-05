@@ -27,7 +27,7 @@ if (!fs.existsSync(uploadsDir)) {
 }
 
 // Middlewares - Increase payload limit for actual base64 audio uploads
-app.use(cors());
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
@@ -37,6 +37,11 @@ app.use('/web', express.static(path.join(__dirname, '../../admin_web')));
 app.use('/assets/images', express.static(path.join(__dirname, '../../telesales_monitor/assets/images')));
 app.use(express.static(path.join(__dirname, '../../admin_web')));
 app.use(express.static(path.join(__dirname, '../uploads')));
+
+// Health check endpoint
+app.get(['/health', '/api/health'], (req, res) => {
+  res.json({ success: true, status: 'ok', domain: 'telesales', timestamp: Date.now() });
+});
 
 // Direct logo handler
 app.get(['/ask_eva_logo.jpg', '/ask_eva_logo.png', '/admin/ask_eva_logo.jpg', '/admin/ask_eva_logo.png', '/web/ask_eva_logo.png'], (req, res) => {
@@ -314,19 +319,22 @@ app.post(['/api/recordings', '/api/user/recordings/upload', '/api/admin/recordin
 
 app.get(['/api/recordings', '/api/admin/recordings'], async (req, res) => {
   try {
-    const allEmployees = await Employee.find({});
+    const isAdmin = req.path.includes('/admin') || req.query.role === 'admin' || req.query.loggedInRole === 'admin';
     let query = {};
-    if (allEmployees.length > 0) {
-      const names = allEmployees.map(c => c.name).filter(Boolean);
-      const phones = allEmployees.map(c => c.phone).filter(Boolean);
-      const cleanPhones = phones.map(p => p.replace(/[^0-9]/g, '').slice(-10)).filter(Boolean);
-      query = {
-        $or: [
-          { callerName: { $in: names.map(n => new RegExp(`^${n}$`, 'i')) } },
-          { phoneNumber: { $in: phones } },
-          ...(cleanPhones.map(cp => ({ phoneNumber: new RegExp(cp + '$') })))
-        ]
-      };
+
+    const { callerName, phoneNumber, team } = req.query;
+
+    if (callerName && callerName.trim() && callerName !== 'ALL') {
+      const cleanName = callerName.trim();
+      query.callerName = new RegExp(cleanName, 'i');
+    }
+
+    if (phoneNumber && phoneNumber.trim()) {
+      const cleanPhone = phoneNumber.replace(/[^0-9]/g, '').slice(-10);
+      query.$or = [
+        { phoneNumber: new RegExp(cleanPhone + '$') },
+        { phoneNumber: phoneNumber }
+      ];
     }
 
     const recordings = await Recording.find(query).sort({ createdAt: -1 });

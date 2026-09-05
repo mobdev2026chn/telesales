@@ -1421,6 +1421,7 @@
           <button id="audioPlayPauseBtn" onclick="toggleAudioPlayPause()" style="background: var(--green-500); border: 1.5px solid var(--ink-900); border-radius: 999px; padding: 8px 24px; font-family: var(--font-mono); font-size: 12px; font-weight: 700; cursor: pointer; box-shadow: 2px 2px 0 var(--ink-900);">▶ PLAY</button>
           <button onclick="skipAudioTime(10)" style="background: #fff; border: 1.5px solid var(--ink-900); border-radius: 999px; padding: 6px 14px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; cursor: pointer;">+10s ↻</button>
         </div>
+        <div id="audioModalNotice" style="font-family: var(--font-mono); font-size: 11px; font-weight: 700; margin-top: 10px; min-height: 18px;"></div>
       </div>
 
       <!-- HIDDEN REAL HTML5 AUDIO ELEMENT -->
@@ -1432,9 +1433,33 @@
 
   <!-- JAVASCRIPT APPLICATION CORE -->
   <script>
-    const API_BASE = (window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1'))
-      ? 'https://telesales.askeva.io/api'
-      : (window.location.origin.startsWith('file:') ? 'https://telesales.askeva.io/api' : 'https://telesales.askeva.io/api');
+    let API_BASE = (window.location.origin && window.location.origin.startsWith('http') && !window.location.origin.includes('null'))
+      ? `${window.location.origin}/api`
+      : 'http://localhost:5004/api';
+
+    const CANDIDATE_API_BASES = [
+      (window.location.origin && window.location.origin.startsWith('http') && !window.location.origin.includes('null')) ? `${window.location.origin}/api` : null,
+      'http://localhost:5004/api',
+      'http://127.0.0.1:5004/api',
+      'http://localhost:5000/api',
+      'https://telesales.askeva.io/api'
+    ].filter(Boolean);
+
+    async function detectActiveApiBase() {
+      for (const base of CANDIDATE_API_BASES) {
+        try {
+          const controller = new AbortController();
+          const tid = setTimeout(() => controller.abort(), 1200);
+          const res = await fetch(`${base}/health`, { signal: controller.signal });
+          clearTimeout(tid);
+          if (res.ok) {
+            API_BASE = base;
+            return base;
+          }
+        } catch (_) {}
+      }
+      return API_BASE;
+    }
 
     // Consistent Phone Formatter (+91 XXXXX XXXXX)
     function formatPhone(p) {
@@ -1775,6 +1800,7 @@
     // Parallel Live Backend Sync
     async function syncWithBackend() {
       try {
+        await detectActiveApiBase();
         const fetchUsers = async () => {
           try {
             const res = await fetch(`${API_BASE}/admin/users`);
@@ -2301,10 +2327,13 @@
       // Determine audio source: 1. Base64 Audio Data, 2. recordingUrl / streaming endpoint, 3. /api/recordings/:id/audio
       const SERVER_HOST = (window.location.origin && window.location.origin.startsWith('http') && !window.location.origin.includes('null'))
         ? window.location.origin
-        : 'https://telesales.askeva.io';
+        : API_BASE.replace(/\/api$/, '');
+
+      const hasDirectAudio = !!(c.audioData && typeof c.audioData === 'string' && c.audioData.length > 50);
+      const notice = document.getElementById('audioModalNotice');
 
       let audioSrc = '';
-      if (c.audioData && typeof c.audioData === 'string' && c.audioData.length > 50) {
+      if (hasDirectAudio) {
         if (c.audioData.startsWith('data:')) {
           audioSrc = c.audioData;
         } else {
@@ -2312,24 +2341,28 @@
           const mime = isWav ? 'audio/wav' : 'audio/mp4';
           audioSrc = `data:${mime};base64,${c.audioData}`;
         }
+        if (notice) notice.innerHTML = '🔊 <span style="color: #2E7D32;">Recorded Audio Binary Loaded & Ready</span>';
       } else if (c.recordingUrl && c.recordingUrl.trim().length > 0) {
-        audioSrc = c.recordingUrl;
-        if (audioSrc.startsWith('/')) {
-          audioSrc = `${SERVER_HOST}${audioSrc}`;
-        }
+        audioSrc = c.recordingUrl.startsWith('/') ? `${SERVER_HOST}${c.recordingUrl}` : c.recordingUrl;
+        if (notice) notice.innerHTML = '🌐 <span style="color: #1565C0;">Connecting to Server Audio Stream...</span>';
       } else if (callId) {
         audioSrc = `${SERVER_HOST}/api/recordings/${callId}/audio`;
+        if (notice) notice.innerHTML = '🌐 <span style="color: #1565C0;">Connecting to Server Audio Stream...</span>';
       }
 
       if (audioSrc) {
         liveHtmlAudio = new Audio();
         liveHtmlAudio.src = audioSrc;
         liveHtmlAudio.preload = 'auto';
+        liveHtmlAudio.volume = 1.0;
         liveHtmlAudio.onloadedmetadata = () => {
           if (liveHtmlAudio && liveHtmlAudio.duration && !isNaN(liveHtmlAudio.duration) && liveHtmlAudio.duration > 0 && isFinite(liveHtmlAudio.duration)) {
             Store.audioDurationSec = Math.round(liveHtmlAudio.duration);
             scrubber.max = Store.audioDurationSec;
             document.getElementById('audioTotalDurationText').innerText = fmtSecTime(Store.audioDurationSec);
+          }
+          if (notice && hasDirectAudio) {
+            notice.innerHTML = '🔊 <span style="color: #2E7D32;">Playing Real Call Recording Audio</span>';
           }
         };
         liveHtmlAudio.ontimeupdate = () => {
@@ -2348,11 +2381,13 @@
           if (callId && !audioSrc.includes(`/api/recordings/${callId}/audio`)) {
             liveHtmlAudio.src = `${SERVER_HOST}/api/recordings/${callId}/audio`;
             liveHtmlAudio.load();
-            liveHtmlAudio.play().catch(() => startAudibleSound());
+            liveHtmlAudio.play().catch(() => handleMissingAudioNotice());
           } else {
-            startAudibleSound();
+            handleMissingAudioNotice();
           }
         };
+      } else {
+        handleMissingAudioNotice();
       }
 
       document.getElementById('audioPlayModal').classList.add('active');
@@ -2362,90 +2397,85 @@
       }, 50);
     }
 
-    let synthAudioCtx = null;
-    let synthOscillator = null;
-    let synthGainNode = null;
-
-    function startAudibleSound() {
-      try {
-        const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
-        if (!synthAudioCtx && AudioCtxClass) {
-          synthAudioCtx = new AudioCtxClass();
-        }
-        if (synthAudioCtx && synthAudioCtx.state === 'suspended') {
-          synthAudioCtx.resume();
-        }
-
-        stopAudibleSound();
-
-        if (synthAudioCtx) {
-          synthOscillator = synthAudioCtx.createOscillator();
-          synthGainNode = synthAudioCtx.createGain();
-
-          synthOscillator.type = 'triangle';
-          synthOscillator.frequency.setValueAtTime(320, synthAudioCtx.currentTime);
-          synthGainNode.gain.setValueAtTime(0.06, synthAudioCtx.currentTime);
-
-          synthOscillator.connect(synthGainNode);
-          synthGainNode.connect(synthAudioCtx.destination);
-          synthOscillator.start();
-        }
-
-        if ('speechSynthesis' in window) {
-          window.speechSynthesis.cancel();
-          const call = (Store.recordings && Store.recordings.find(x => x.id === Store.currentAudioCallId)) || Store.calls.find(x => x.id === Store.currentAudioCallId);
-          const client = call ? (call.client || 'Client') : 'Client';
-          const agent = call ? call.agent : 'Telesales executive';
-          const text = `Hello ${client}, this is ${agent} from AskEVA Telesales. Calling to follow up on your demo schedule and product requirements.`;
-          const utter = new SpeechSynthesisUtterance(text);
-          utter.rate = 1.0;
-          utter.pitch = 1.0;
-          window.speechSynthesis.speak(utter);
-        }
-      } catch (e) {
-        console.log('Audio synthesis note:', e);
+    function handleMissingAudioNotice() {
+      Store.audioIsPlaying = false;
+      clearInterval(Store.audioIntervalTimer);
+      const btn = document.getElementById('audioPlayPauseBtn');
+      if (btn) btn.innerText = '▶ PLAY';
+      const notice = document.getElementById('audioModalNotice');
+      if (notice) {
+        notice.innerHTML = '⚠️ <span style="color: #C62828;">Call recording audio was not uploaded from caller device (mobile upload timed out on long calls).</span>';
       }
+      playAudibleFeedbackTone();
     }
 
-    function stopAudibleSound() {
+    function playAudibleFeedbackTone() {
       try {
-        if (synthOscillator) {
-          synthOscillator.stop();
-          synthOscillator.disconnect();
-          synthOscillator = null;
-        }
-        if ('speechSynthesis' in window) {
-          window.speechSynthesis.cancel();
-        }
-      } catch (e) {}
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        if (ctx.state === 'suspended') ctx.resume();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(523.25, ctx.currentTime);
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.35);
+      } catch (e) {
+        console.warn('Tone note:', e);
+      }
     }
 
     function toggleAudioPlayPause() {
       const btn = document.getElementById('audioPlayPauseBtn');
+      const c = (Store.recordings && Store.recordings.find(x => x.id === Store.currentAudioCallId)) || Store.calls.find(x => x.id === Store.currentAudioCallId);
+      const hasAudio = !!(c && ((c.audioData && c.audioData.length > 50) || (c.recordingUrl && c.recordingUrl.length > 0)));
+
+      if (!hasAudio && !liveHtmlAudio) {
+        handleMissingAudioNotice();
+        return;
+      }
+
       if (Store.audioIsPlaying) {
-        // Pause: keep position
         Store.audioIsPlaying = false;
         clearInterval(Store.audioIntervalTimer);
         if (liveHtmlAudio) {
           liveHtmlAudio.pause();
-        } else {
-          stopAudibleSound();
         }
         btn.innerText = '▶ RESUME';
         pop(`PAUSED AT ${fmtSecTime(Store.audioCurrentSec)}`);
       } else {
-        // Play / Resume
         Store.audioIsPlaying = true;
         btn.innerText = '⏸ PAUSE';
         if (liveHtmlAudio) {
           liveHtmlAudio.currentTime = Store.audioCurrentSec;
           liveHtmlAudio.play().catch(err => {
-            console.warn('Live audio notice, fallback to synth:', err);
-            startAudibleSound();
+            console.warn('Live audio notice:', err);
+            handleMissingAudioNotice();
           });
         } else {
-          startAudibleSound();
+          handleMissingAudioNotice();
         }
+        clearInterval(Store.audioIntervalTimer);
+        Store.audioIntervalTimer = setInterval(() => {
+          if (Store.audioCurrentSec < Store.audioDurationSec) {
+            if (!liveHtmlAudio) {
+              Store.audioCurrentSec++;
+              updateAudioUI();
+            }
+          } else {
+            Store.audioIsPlaying = false;
+            clearInterval(Store.audioIntervalTimer);
+            if (liveHtmlAudio) liveHtmlAudio.pause();
+            btn.innerText = '↺ REPLAY';
+          }
+        }, 1000);
+      }
+    }
         clearInterval(Store.audioIntervalTimer);
         Store.audioIntervalTimer = setInterval(() => {
           if (Store.audioCurrentSec < Store.audioDurationSec) {
@@ -3430,6 +3460,10 @@
         const avgScore = scoredVals.length ? (scoredVals.reduce((a, b) => a + b, 0) / scoredVals.length).toFixed(1) : null;
         const overallText = avgScore ? `${avgScore} / 5 · ${scoredVals.length}/6 SCORED` : 'NOT SCORED YET';
         const fileName = `${c.dir === 'IN' ? 'INC' : 'OUT'}_CALL_REC_20260828_${c.id}.wav`;
+        const hasAudio = !!(c.audioData && c.audioData.length > 50);
+        const audioBadge = hasAudio
+          ? `<span style="background: #D7F5B1; color: #1B5E20; border: 1.5px solid #1B5E20; padding: 6px 14px; border-radius: 999px; font-family: var(--font-mono); font-size: 10px; font-weight: 700;">🔊 AUDIO READY</span>`
+          : `<span style="background: #FFE0B2; color: #B23B00; border: 1.5px solid #B23B00; padding: 6px 14px; border-radius: 999px; font-family: var(--font-mono); font-size: 10px; font-weight: 700;">⚠️ NO AUDIO UPLOADED</span>`;
 
         return `
           <div class="neo-card" style="padding: 20px 24px; animation: fadeUp 0.4s ease both;">
@@ -3438,8 +3472,9 @@
                 <div style="font-family: var(--font-display); font-size: 22px;">${c.agent} → ${c.client || formatPhone(c.phone)}</div>
                 <div style="font-family: var(--font-mono); font-size: 12px; color: #5A6352; margin-top: 6px;">${fmtTs(c.ts)} · ${fmtDur(c.dur)} · ${c.dir === 'IN' ? 'INBOUND' : 'OUTBOUND'} · SIM ${c.sim}</div>
               </div>
-              <div style="display: flex; gap: 8px; align-items: center;">
-                <button onclick="openAudioPlayerModal('${c.id}')" style="background: #C8FF4A; color: #10180C; border: 1.5px solid #10180C; border-radius: 999px; padding: 10px 22px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; cursor: pointer; box-shadow: 3px 3px 0 #10180C;">▶ PLAY AUDIO</button>
+              <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                ${audioBadge}
+                <button onclick="openAudioPlayerModal('${c.id}')" style="background: ${hasAudio ? '#C8FF4A' : '#EDE8DC'}; color: #10180C; border: 1.5px solid #10180C; border-radius: 999px; padding: 10px 22px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; cursor: pointer; box-shadow: 3px 3px 0 #10180C;">▶ PLAY AUDIO</button>
               </div>
             </div>
 

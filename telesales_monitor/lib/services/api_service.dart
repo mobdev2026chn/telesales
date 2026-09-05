@@ -23,7 +23,11 @@ class ApiService {
   }
 
   // Helper: Post with automatic host failover
-  static Future<http.Response?> _postWithFallback(String path, Map<String, dynamic> body) async {
+  static Future<http.Response?> _postWithFallback(
+    String path,
+    Map<String, dynamic> body, {
+    Duration timeout = const Duration(milliseconds: 4000),
+  }) async {
     final urlsToTry = [baseUrl, ...candidateBaseUrls.where((u) => u != baseUrl)];
     for (final base in urlsToTry) {
       try {
@@ -31,7 +35,7 @@ class ApiService {
           Uri.parse('$base$path'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode(body),
-        ).timeout(const Duration(milliseconds: 3500));
+        ).timeout(timeout);
 
         if (res.statusCode < 500) {
           baseUrl = base;
@@ -417,7 +421,7 @@ class ApiService {
         'transcript': transcript ?? 'Voice audio auto-recorded on hardware SIM ($fileName)',
       };
 
-      final res = await _postWithFallback('/recordings', payload);
+      final res = await _postWithFallback('/recordings', payload, timeout: const Duration(seconds: 90));
       return res != null && (res.statusCode == 200 || res.statusCode == 201);
     } catch (e) {
       debugPrint('ApiService.saveRecording notice: $e');

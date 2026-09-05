@@ -397,7 +397,7 @@ class MainActivity : FlutterActivity() {
         } catch (_: Exception) {}
         pcmAudioRecord = null
         try {
-            pcmRecordThread?.join(1000)
+            pcmRecordThread?.join(10000)
         } catch (_: Exception) {}
     }
 
