@@ -253,7 +253,6 @@ class MainActivity : FlutterActivity() {
 
             val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
             try {
-                audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
                 audioManager.isMicrophoneMute = false
             } catch (_: Exception) {}
 
@@ -271,9 +270,10 @@ class MainActivity : FlutterActivity() {
             if (!startedSuccessfully) {
                 currentRecordingFile = File(dir, "${prefix}_${timeStamp}.m4a")
                 val audioSources = arrayOf(
-                    MediaRecorder.AudioSource.VOICE_COMMUNICATION,
                     MediaRecorder.AudioSource.MIC,
+                    MediaRecorder.AudioSource.VOICE_RECOGNITION,
                     MediaRecorder.AudioSource.DEFAULT,
+                    MediaRecorder.AudioSource.VOICE_COMMUNICATION,
                     MediaRecorder.AudioSource.CAMCORDER
                 )
 
@@ -331,9 +331,10 @@ class MainActivity : FlutterActivity() {
             val bufferSize = Math.max(minBufSize, 4096)
 
             val sources = intArrayOf(
-                MediaRecorder.AudioSource.VOICE_COMMUNICATION,
                 MediaRecorder.AudioSource.MIC,
+                MediaRecorder.AudioSource.VOICE_RECOGNITION,
                 MediaRecorder.AudioSource.DEFAULT,
+                MediaRecorder.AudioSource.VOICE_COMMUNICATION,
                 MediaRecorder.AudioSource.CAMCORDER
             )
 

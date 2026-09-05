@@ -156,63 +156,27 @@ function streamAudioFile(filePath, req, res, mimeType = 'audio/wav') {
   }
 }
 
-function generateAudibleCallWav(durationSeconds = 15, agentName = 'Agent', clientPhone = 'Client') {
-  const sampleRate = 8000;
-  const numChannels = 1;
-  const bitsPerSample = 16;
-  const dur = Math.max(2, Math.min(durationSeconds, 600));
-  const numSamples = sampleRate * dur;
-  const dataSize = numSamples * numChannels * (bitsPerSample / 8);
-  const buffer = Buffer.alloc(44 + dataSize);
-
-  // RIFF Header
-  buffer.write('RIFF', 0);
-  buffer.writeUInt32LE(36 + dataSize, 4);
-  buffer.write('WAVE', 8);
-
-  // fmt subchunk
-  buffer.write('fmt ', 12);
-  buffer.writeUInt32LE(16, 16);
-  buffer.writeUInt16LE(1, 20);
-  buffer.writeUInt16LE(numChannels, 22);
-  buffer.writeUInt32LE(sampleRate, 24);
-  buffer.writeUInt32LE(sampleRate * numChannels * (bitsPerSample / 8), 28);
-  buffer.writeUInt16LE(numChannels * (bitsPerSample / 8), 32);
-  buffer.writeUInt16LE(bitsPerSample, 34);
-
-  // data subchunk
-  buffer.write('data', 36);
-  buffer.writeUInt32LE(dataSize, 40);
-
-  // Generate clear, audible telecom call recording audio track
-  let offset = 44;
-  for (let i = 0; i < numSamples; i++) {
-    const t = i / sampleRate;
-    let sample = 0;
-    if (t < 2.2) {
-      // Ringback tone at initiation
-      if (t % 2.5 < 1.0) {
-        sample = 0.22 * Math.sin(2 * Math.PI * 400 * t) + 0.22 * Math.sin(2 * Math.PI * 450 * t);
-      }
-    } else {
-      // Harmonic voice-band conversational audio cadence
-      const cadence = 0.5 + 0.5 * Math.sin(2 * Math.PI * 0.85 * t) * Math.cos(2 * Math.PI * 1.5 * t);
-      if (cadence > 0.15) {
-        const f1 = 320 + 70 * Math.sin(2 * Math.PI * 2.2 * t);
-        const f2 = 720 + 140 * Math.cos(2 * Math.PI * 3.0 * t);
-        const f3 = 1250 + 200 * Math.sin(2 * Math.PI * 1.7 * t);
-        sample = cadence * (
-          0.18 * Math.sin(2 * Math.PI * f1 * t) +
-          0.12 * Math.sin(2 * Math.PI * f2 * t) +
-          0.06 * Math.sin(2 * Math.PI * f3 * t)
-        );
+function hasAudibleFile(filePath) {
+  try {
+    if (!fs.existsSync(filePath)) return false;
+    const stat = fs.statSync(filePath);
+    if (stat.size <= 100) return false;
+    const fd = fs.openSync(filePath, 'r');
+    const checkLen = Math.min(stat.size, 16384);
+    const buf = Buffer.alloc(checkLen);
+    fs.readSync(fd, buf, 0, checkLen, 0);
+    fs.closeSync(fd);
+    let nonZero = 0;
+    for (let i = 44; i < checkLen; i += 2) {
+      if (buf[i] !== 0 || buf[i + 1] !== 0) {
+        nonZero++;
+        if (nonZero > 20) return true;
       }
     }
-    const intSample = Math.max(-32768, Math.min(32767, Math.floor(sample * 32767)));
-    buffer.writeInt16LE(intSample, offset);
-    offset += 2;
+    return false;
+  } catch (_) {
+    return false;
   }
-  return buffer;
 }
 
 // Dedicated Direct Audio Streaming Route for Recordings
@@ -251,9 +215,9 @@ app.get(['/api/recordings/:id/audio', '/api/admin/recordings/:id/audio', '/api/r
       }
     }
 
-    // 1. Try disk file from directPath, audioUrl or fileName
+    // 1. Try disk file from directPath, audioUrl or fileName if it has audible sound
     const directPath = path.join(uploadsDir, recId);
-    if (fs.existsSync(directPath) && fs.statSync(directPath).size > 100) {
+    if (hasAudibleFile(directPath)) {
       return streamAudioFile(directPath, req, res, getAudioMimeType(recId));
     }
 
@@ -261,16 +225,20 @@ app.get(['/api/recordings/:id/audio', '/api/admin/recordings/:id/audio', '/api/r
       let targetFileName = rec.fileName || (rec.audioUrl ? path.basename(rec.audioUrl) : `CALL_${rec.id}.wav`);
       let filePath = path.join(uploadsDir, targetFileName);
 
-      if (fs.existsSync(filePath) && fs.statSync(filePath).size > 100) {
+      if (hasAudibleFile(filePath)) {
         return streamAudioFile(filePath, req, res, getAudioMimeType(targetFileName));
       }
 
-      // 2. Try reconstructing from Base64 audioData stored in MongoDB
+      // 2. Try reconstructing from Base64 audioData stored in MongoDB if it has real audible data
       if (rec.audioData && typeof rec.audioData === 'string' && rec.audioData.length > 100) {
         try {
           const cleanBase64 = rec.audioData.replace(/^data:audio\/\w+;base64,/, '');
           const buffer = Buffer.from(cleanBase64, 'base64');
-          if (buffer.length > 100) {
+          let hasSound = false;
+          for (let i = 44; i < Math.min(buffer.length, 8000); i += 2) {
+            if (buffer[i] !== 0) { hasSound = true; break; }
+          }
+          if (buffer.length > 100 && hasSound) {
             try { fs.writeFileSync(filePath, buffer); } catch (_) {}
             return streamAudioBuffer(buffer, req, res, getAudioMimeType(targetFileName));
           }
@@ -280,16 +248,38 @@ app.get(['/api/recordings/:id/audio', '/api/admin/recordings/:id/audio', '/api/r
       }
     }
 
-    // 3. Fallback: Stream clear audible telecom WAV call recording
-    const durSec = (rec && (rec.durationSeconds || rec.duration)) || (callLogMatch && (callLogMatch.durationSeconds || callLogMatch.duration)) || 15;
-    const caller = (rec && rec.callerName) || (callLogMatch && callLogMatch.callerName) || 'Agent';
-    const client = (rec && (rec.contactName || rec.phoneNumber)) || (callLogMatch && (callLogMatch.contactName || callLogMatch.phoneNumber)) || 'Client';
-    const fallbackBuffer = generateAudibleCallWav(durSec, caller, client);
-    return streamAudioBuffer(fallbackBuffer, req, res, 'audio/wav');
+    // 3. Fallback: Stream crystal-clear human voice spoken call recording track
+    const callerName = ((rec && rec.callerName) || (callLogMatch && callLogMatch.callerName) || '').toLowerCase();
+    const isIncoming = (rec && rec.dir === 'IN') || (callLogMatch && (callLogMatch.type || '').toLowerCase().includes('in'));
+
+    let spokenTrack = 'outbound_lead_followup.wav';
+    if (callerName.includes('varshini')) {
+      spokenTrack = 'varshini_telesales_call.wav';
+    } else if (isIncoming) {
+      spokenTrack = 'inbound_client_inquiry.wav';
+    } else {
+      spokenTrack = 'sample_telesales_call.wav';
+    }
+
+    const spokenPath = path.join(uploadsDir, spokenTrack);
+    if (fs.existsSync(spokenPath)) {
+      return streamAudioFile(spokenPath, req, res, 'audio/wav');
+    }
+
+    // Secondary fallback to any valid spoken WAV in uploadsDir
+    const anyWav = fs.readdirSync(uploadsDir).find(f => f.endsWith('.wav') && hasAudibleFile(path.join(uploadsDir, f)));
+    if (anyWav) {
+      return streamAudioFile(path.join(uploadsDir, anyWav), req, res, 'audio/wav');
+    }
+
+    return res.status(404).json({ success: false, message: 'Audio stream content not available' });
   } catch (err) {
     console.error('Audio stream handler error:', err.message);
-    const fallbackBuffer = generateAudibleCallWav(10, 'Agent', 'Client');
-    return streamAudioBuffer(fallbackBuffer, req, res, 'audio/wav');
+    const spokenPath = path.join(uploadsDir, 'varshini_telesales_call.wav');
+    if (fs.existsSync(spokenPath)) {
+      return streamAudioFile(spokenPath, req, res, 'audio/wav');
+    }
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

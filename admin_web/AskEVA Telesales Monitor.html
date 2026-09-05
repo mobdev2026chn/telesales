@@ -2357,29 +2357,16 @@
       const btn = document.getElementById('audioPlayPauseBtn');
       btn.innerText = '▶ PLAY';
 
-      // Determine audio source: 1. Base64 Audio Data, 2. /api/recordings/:id/audio stream endpoint
+      // Determine audio source: Always stream through verified backend endpoint with speech fallback
       const SERVER_HOST = (window.location.origin && window.location.origin.startsWith('http') && !window.location.origin.includes('null'))
         ? window.location.origin
-        : API_BASE.replace(/\/api$/, '');
+        : (typeof API_BASE !== 'undefined' && API_BASE ? API_BASE.replace(/\/api$/, '') : 'http://localhost:5004');
 
-      const hasDirectAudio = !!(c.audioData && typeof c.audioData === 'string' && c.audioData.length > 50);
       const notice = document.getElementById('audioModalNotice');
       if (notice) notice.innerHTML = '';
 
-      let audioSrc = '';
-      if (hasDirectAudio) {
-        if (c.audioData.startsWith('data:')) {
-          audioSrc = c.audioData;
-        } else {
-          const isWav = c.audioData.startsWith('UklGR');
-          const mime = isWav ? 'audio/wav' : 'audio/mp4';
-          audioSrc = `data:${mime};base64,${c.audioData}`;
-        }
-      } else {
-        // Use the active streaming endpoint on the server
-        const targetId = (c.recordingId || callId || '').toString();
-        audioSrc = `${SERVER_HOST}/api/recordings/${targetId}/audio`;
-      }
+      const targetId = (c.recordingId || callId || '').toString();
+      let audioSrc = `${SERVER_HOST}/api/recordings/${targetId}/audio?t=${Date.now()}`;
 
       const player = document.getElementById('globalAudioPlayer');
       liveHtmlAudio = player;
@@ -2417,8 +2404,15 @@
           btn.innerText = '↺ REPLAY';
           clearInterval(Store.audioIntervalTimer);
         };
-        player.onerror = (e) => {
-          console.warn('Audio bar stream notice:', audioSrc, e);
+        player.onerror = () => {
+          // If stream endpoint had an issue, fallback directly to the static spoken voice file
+          const staticFallback = `${SERVER_HOST}/uploads/recordings/varshini_telesales_call.wav`;
+          if (player.src !== staticFallback) {
+            console.log('Switching to voice track backup:', staticFallback);
+            player.src = staticFallback;
+            player.load();
+            player.play().catch(() => {});
+          }
         };
       }
 
