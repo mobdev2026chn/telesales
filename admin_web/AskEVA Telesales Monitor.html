@@ -2357,13 +2357,13 @@
           const mime = isWav ? 'audio/wav' : 'audio/mp4';
           audioSrc = `data:${mime};base64,${c.audioData}`;
         }
-        if (notice) notice.innerHTML = '🔊 <span style="color: #2E7D32;">Recorded Audio Binary Loaded & Ready</span>';
+        if (notice) notice.innerHTML = '';
       } else if (c.recordingUrl && c.recordingUrl.trim().length > 0) {
         audioSrc = c.recordingUrl.startsWith('/') ? `${SERVER_HOST}${c.recordingUrl}` : c.recordingUrl;
-        if (notice) notice.innerHTML = '🌐 <span style="color: #1565C0;">Connecting to Server Audio Stream...</span>';
+        if (notice) notice.innerHTML = '';
       } else if (callId) {
         audioSrc = `${SERVER_HOST}/api/recordings/${callId}/audio`;
-        if (notice) notice.innerHTML = '🌐 <span style="color: #1565C0;">Connecting to Server Audio Stream...</span>';
+        if (notice) notice.innerHTML = '';
       }
 
       if (audioSrc) {
@@ -2377,9 +2377,7 @@
             scrubber.max = Store.audioDurationSec;
             document.getElementById('audioTotalDurationText').innerText = fmtSecTime(Store.audioDurationSec);
           }
-          if (notice && hasDirectAudio) {
-            notice.innerHTML = '🔊 <span style="color: #2E7D32;">Playing Real Call Recording Audio</span>';
-          }
+          if (notice) notice.innerHTML = '';
         };
         liveHtmlAudio.ontimeupdate = () => {
           if (liveHtmlAudio) {
@@ -2420,7 +2418,7 @@
       if (btn) btn.innerText = '▶ PLAY';
       const notice = document.getElementById('audioModalNotice');
       if (notice) {
-        notice.innerHTML = '⚠️ <span style="color: #C62828;">Call recording audio was not uploaded from caller device (mobile upload timed out on long calls).</span>';
+        notice.innerHTML = '';
       }
       playAudibleFeedbackTone();
     }
@@ -3476,10 +3474,6 @@
         const avgScore = scoredVals.length ? (scoredVals.reduce((a, b) => a + b, 0) / scoredVals.length).toFixed(1) : null;
         const overallText = avgScore ? `${avgScore} / 5 · ${scoredVals.length}/6 SCORED` : 'NOT SCORED YET';
         const fileName = `${c.dir === 'IN' ? 'INC' : 'OUT'}_CALL_REC_20260828_${c.id}.wav`;
-        const hasAudio = !!(c.audioData && c.audioData.length > 50);
-        const audioBadge = hasAudio
-          ? `<span style="background: #D7F5B1; color: #1B5E20; border: 1.5px solid #1B5E20; padding: 6px 14px; border-radius: 999px; font-family: var(--font-mono); font-size: 10px; font-weight: 700;">🔊 AUDIO READY</span>`
-          : `<span style="background: #FFE0B2; color: #B23B00; border: 1.5px solid #B23B00; padding: 6px 14px; border-radius: 999px; font-family: var(--font-mono); font-size: 10px; font-weight: 700;">⚠️ NO AUDIO UPLOADED</span>`;
 
         return `
           <div class="neo-card" style="padding: 20px 24px; animation: fadeUp 0.4s ease both;">
@@ -3488,9 +3482,8 @@
                 <div style="font-family: var(--font-display); font-size: 22px;">${c.agent} → ${c.client || formatPhone(c.phone)}</div>
                 <div style="font-family: var(--font-mono); font-size: 12px; color: #5A6352; margin-top: 6px;">${fmtTs(c.ts)} · ${fmtDur(c.dur)} · ${c.dir === 'IN' ? 'INBOUND' : 'OUTBOUND'} · SIM ${c.sim}</div>
               </div>
-              <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                ${audioBadge}
-                <button onclick="openAudioPlayerModal('${c.id}')" style="background: ${hasAudio ? '#C8FF4A' : '#EDE8DC'}; color: #10180C; border: 1.5px solid #10180C; border-radius: 999px; padding: 10px 22px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; cursor: pointer; box-shadow: 3px 3px 0 #10180C;">▶ PLAY AUDIO</button>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <button onclick="openAudioPlayerModal('${c.id}')" style="background: #C8FF4A; color: #10180C; border: 1.5px solid #10180C; border-radius: 999px; padding: 10px 22px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; cursor: pointer; box-shadow: 3px 3px 0 #10180C;">▶ PLAY AUDIO</button>
               </div>
             </div>
 
