@@ -2315,8 +2315,22 @@
     let liveHtmlAudio = null;
 
     function openAudioPlayerModal(callId) {
-      const c = (Store.recordings && Store.recordings.find(x => x.id === callId)) || Store.calls.find(x => x.id === callId);
+      let c = (Store.recordings && Store.recordings.find(x => x.id === callId)) || Store.calls.find(x => x.id === callId);
       if (!c) return;
+
+      // Auto-link to matching recording in Store.recordings by phone number or recordingId
+      if (!c.audioData && Store.recordings && Store.recordings.length > 0) {
+        const cleanP = (c.phone || c.phoneNumber || '').replace(/[^0-9]/g, '').slice(-10);
+        const matchRec = Store.recordings.find(r => {
+          const recP = (r.phone || r.phoneNumber || '').replace(/[^0-9]/g, '').slice(-10);
+          return (cleanP.length >= 8 && recP === cleanP) || (r.id === c.recordingId) || (r.recordingUrl && c.recordingUrl && r.recordingUrl === c.recordingUrl);
+        });
+        if (matchRec) {
+          if (matchRec.audioData) c.audioData = matchRec.audioData;
+          if (matchRec.recordingUrl) c.recordingUrl = matchRec.recordingUrl;
+          if (!c.client && matchRec.client) c.client = matchRec.client;
+        }
+      }
 
       Store.currentAudioCallId = callId;
       Store.audioDurationSec = c.dur > 0 ? c.dur : 60;
