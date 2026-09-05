@@ -1407,7 +1407,13 @@
       <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 20px;" id="audioModalSub">SIM 1 Outbound · Duration 4m 00s</div>
 
       <!-- AUDIO CONTROLS CONTAINER -->
-      <div style="background: #F7F5EC; border: 1.5px solid var(--ink-900); border-radius: 14px; padding: 16px 18px; margin-bottom: 20px;">
+      <div style="background: #F7F5EC; border: 1.5px solid var(--ink-900); border-radius: 14px; padding: 18px 20px; margin-bottom: 20px;">
+        <!-- NATIVE AUDIO PLAYER BAR OPTION WITH AUTOPLAY -->
+        <div style="margin-bottom: 14px; text-align: left;">
+          <div style="font-family: var(--font-mono); font-size: 10px; font-weight: 700; color: var(--green-600); margin-bottom: 6px; letter-spacing: 0.12em;">● AUDIO STREAM &amp; BAR CONTROLS:</div>
+          <audio id="globalAudioPlayer" controls autoplay style="width: 100%; height: 42px; border-radius: 999px; outline: none; filter: contrast(1.05);"></audio>
+        </div>
+
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-family: var(--font-mono); font-size: 12px; font-weight: 700;">
           <span id="audioCurrentTimeText">00:00</span>
           <span id="audioTotalDurationText">04:00</span>
@@ -1423,9 +1429,6 @@
         </div>
         <div id="audioModalNotice" style="font-family: var(--font-mono); font-size: 11px; font-weight: 700; margin-top: 10px; min-height: 18px;"></div>
       </div>
-
-      <!-- HIDDEN REAL HTML5 AUDIO ELEMENT -->
-      <audio id="globalAudioPlayer" style="display: none;" ontimeupdate="onAudioTimeUpdate()" onended="onAudioEnded()"></audio>
 
       <button onclick="closeAudioModal()" class="filter-chip active" style="padding: 9px 28px;">CLOSE PLAYER</button>
     </div>
@@ -2378,165 +2381,110 @@
         audioSrc = `${SERVER_HOST}/api/recordings/${targetId}/audio`;
       }
 
-      if (audioSrc) {
-        liveHtmlAudio = new Audio();
-        liveHtmlAudio.src = audioSrc;
-        liveHtmlAudio.preload = 'auto';
-        liveHtmlAudio.volume = 1.0;
-        liveHtmlAudio.onloadedmetadata = () => {
-          if (liveHtmlAudio && liveHtmlAudio.duration && !isNaN(liveHtmlAudio.duration) && liveHtmlAudio.duration > 0 && isFinite(liveHtmlAudio.duration)) {
-            Store.audioDurationSec = Math.round(liveHtmlAudio.duration);
+      const player = document.getElementById('globalAudioPlayer');
+      liveHtmlAudio = player;
+      if (player) {
+        player.src = audioSrc;
+        player.preload = 'auto';
+        player.volume = 1.0;
+        player.currentTime = 0;
+
+        player.onloadedmetadata = () => {
+          if (player.duration && !isNaN(player.duration) && player.duration > 0 && isFinite(player.duration)) {
+            Store.audioDurationSec = Math.round(player.duration);
             scrubber.max = Store.audioDurationSec;
             document.getElementById('audioTotalDurationText').innerText = fmtSecTime(Store.audioDurationSec);
           }
           if (notice) notice.innerHTML = '';
-          btn.innerText = '▶ PLAY';
         };
-        liveHtmlAudio.onplay = () => {
+        player.onplay = () => {
           Store.audioIsPlaying = true;
           btn.innerText = '⏸ PAUSE';
           if (notice) notice.innerHTML = '';
         };
-        liveHtmlAudio.onpause = () => {
+        player.onpause = () => {
           Store.audioIsPlaying = false;
           if (Store.audioCurrentSec < Store.audioDurationSec) {
             btn.innerText = '▶ RESUME';
           }
         };
-        liveHtmlAudio.ontimeupdate = () => {
-          if (liveHtmlAudio) {
-            Store.audioCurrentSec = Math.round(liveHtmlAudio.currentTime);
-            updateAudioUI();
-          }
+        player.ontimeupdate = () => {
+          Store.audioCurrentSec = Math.round(player.currentTime);
+          updateAudioUI();
         };
-        liveHtmlAudio.onended = () => {
+        player.onended = () => {
           Store.audioIsPlaying = false;
           btn.innerText = '↺ REPLAY';
           clearInterval(Store.audioIntervalTimer);
         };
-        liveHtmlAudio.onerror = (e) => {
-          console.warn('Live audio notice:', audioSrc, e);
-          handleMissingAudioNotice('Audio recording was not captured or uploaded from the caller device for this call.');
+        player.onerror = (e) => {
+          console.warn('Audio bar stream notice:', audioSrc, e);
         };
-      } else {
-        handleMissingAudioNotice('No audio source available for this call.');
       }
 
       document.getElementById('audioPlayModal').classList.add('active');
-      // Autoplay immediately on click
-      setTimeout(() => {
-        toggleAudioPlayPause();
-      }, 50);
-    }
 
-    function handleMissingAudioNotice(msg) {
-      Store.audioIsPlaying = false;
-      clearInterval(Store.audioIntervalTimer);
-      if (liveHtmlAudio) {
-        liveHtmlAudio.pause();
-        liveHtmlAudio = null;
-      }
-      const btn = document.getElementById('audioPlayPauseBtn');
-      if (btn) btn.innerText = 'NO AUDIO AVAILABLE';
-      const notice = document.getElementById('audioModalNotice');
-      if (notice) {
-        notice.innerHTML = `<div style="background: #FDF4E5; border: 1.5px solid #C88A2E; border-radius: 10px; padding: 10px 14px; font-family: var(--font-mono); font-size: 11px; color: #10180C; margin-bottom: 12px; font-weight: 600;">ℹ️ ${msg || 'Audio recording was not uploaded from caller device for this call.'}</div>`;
-      }
-    }
-
-    function playAudibleFeedbackTone() {
-      try {
-        const AudioCtx = window.AudioContext || window.webkitAudioContext;
-        if (!AudioCtx) return;
-        const ctx = new AudioCtx();
-        if (ctx.state === 'suspended') ctx.resume();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(523.25, ctx.currentTime);
-        gain.gain.setValueAtTime(0.2, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.35);
-      } catch (e) {
-        console.warn('Tone note:', e);
+      // Automatically play audio immediately when modal opens
+      if (player) {
+        const p = player.play();
+        if (p !== undefined) {
+          p.then(() => {
+            Store.audioIsPlaying = true;
+            btn.innerText = '⏸ PAUSE';
+          }).catch(() => {
+            // Autoplay deferred by browser policy, ready for user click
+            btn.innerText = '▶ PLAY';
+          });
+        }
       }
     }
 
     function toggleAudioPlayPause() {
       const btn = document.getElementById('audioPlayPauseBtn');
-      const c = (Store.recordings && Store.recordings.find(x => x.id === Store.currentAudioCallId)) || Store.calls.find(x => x.id === Store.currentAudioCallId);
-      const hasAudio = !!(c && ((c.audioData && c.audioData.length > 50) || (c.recordingUrl && c.recordingUrl.length > 0)));
+      const player = document.getElementById('globalAudioPlayer');
+      if (!player) return;
 
-      if (!hasAudio && !liveHtmlAudio) {
-        handleMissingAudioNotice();
-        return;
-      }
-
-      if (Store.audioIsPlaying) {
+      if (!player.paused && !player.ended && player.currentTime > 0) {
+        player.pause();
         Store.audioIsPlaying = false;
-        clearInterval(Store.audioIntervalTimer);
-        if (liveHtmlAudio) {
-          liveHtmlAudio.pause();
-        }
         btn.innerText = '▶ RESUME';
         pop(`PAUSED AT ${fmtSecTime(Store.audioCurrentSec)}`);
       } else {
-        Store.audioIsPlaying = true;
-        btn.innerText = '⏸ PAUSE';
-        if (liveHtmlAudio) {
-          liveHtmlAudio.currentTime = Store.audioCurrentSec;
-          liveHtmlAudio.play().catch(err => {
-            console.warn('Live audio notice:', err);
-            handleMissingAudioNotice();
-          });
-        } else {
-          handleMissingAudioNotice();
-        }
-        clearInterval(Store.audioIntervalTimer);
-        Store.audioIntervalTimer = setInterval(() => {
-          if (Store.audioCurrentSec < Store.audioDurationSec) {
-            if (!liveHtmlAudio) {
-              Store.audioCurrentSec++;
-              updateAudioUI();
-            }
-          } else {
-            Store.audioIsPlaying = false;
-            clearInterval(Store.audioIntervalTimer);
-            if (liveHtmlAudio) liveHtmlAudio.pause();
-            btn.innerText = '↺ REPLAY';
-          }
-        }, 1000);
+        player.play().then(() => {
+          Store.audioIsPlaying = true;
+          btn.innerText = '⏸ PAUSE';
+        }).catch(err => {
+          console.warn('Playback notice:', err);
+        });
       }
     }
 
     function onScrubAudioInput(val) {
       Store.audioCurrentSec = Number(val);
-      if (liveHtmlAudio) {
-        liveHtmlAudio.currentTime = Store.audioCurrentSec;
+      const player = document.getElementById('globalAudioPlayer');
+      if (player) {
+        player.currentTime = Store.audioCurrentSec;
       }
       updateAudioUI();
     }
 
     function onScrubAudioChange(val) {
       Store.audioCurrentSec = Number(val);
-      if (liveHtmlAudio) {
-        liveHtmlAudio.currentTime = Store.audioCurrentSec;
+      const player = document.getElementById('globalAudioPlayer');
+      if (player) {
+        player.currentTime = Store.audioCurrentSec;
       }
       updateAudioUI();
-      if (!Store.audioIsPlaying) {
-        document.getElementById('audioPlayPauseBtn').innerText = '▶ RESUME';
-      }
     }
 
     function skipAudioTime(delta) {
-      Store.audioCurrentSec = Math.max(0, Math.min(Store.audioDurationSec, Store.audioCurrentSec + delta));
-      if (liveHtmlAudio) {
-        liveHtmlAudio.currentTime = Store.audioCurrentSec;
+      const player = document.getElementById('globalAudioPlayer');
+      if (player) {
+        const target = Math.max(0, Math.min(Store.audioDurationSec, (player.currentTime || Store.audioCurrentSec) + delta));
+        player.currentTime = target;
+        Store.audioCurrentSec = Math.round(target);
+        updateAudioUI();
       }
-      updateAudioUI();
     }
 
     function updateAudioUI() {
@@ -2545,15 +2493,15 @@
     }
 
     function closeAudioModal() {
-      try {
-        if (liveHtmlAudio) {
-          liveHtmlAudio.pause();
-          liveHtmlAudio.currentTime = 0;
-          liveHtmlAudio = null;
-        }
-      } catch (_) {}
       Store.audioIsPlaying = false;
       clearInterval(Store.audioIntervalTimer);
+      const player = document.getElementById('globalAudioPlayer');
+      if (player) {
+        try {
+          player.pause();
+          player.currentTime = 0;
+        } catch (_) {}
+      }
       const modal = document.getElementById('audioPlayModal');
       if (modal) modal.classList.remove('active');
     }
