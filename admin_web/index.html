@@ -644,17 +644,16 @@
       <div style="font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); letter-spacing: 0.14em; margin-bottom: 22px;">ADMIN &amp; MANAGER PORTAL</div>
 
       <div id="webLoginError" style="display: none; background: #FEE2E2; border: 1.5px solid #EF4444; color: #B91C1C; padding: 10px 14px; border-radius: 10px; font-size: 12px; margin-bottom: 16px; font-weight: 600;"></div>
-
-      <form id="webLoginForm" onsubmit="handleWebLogin(event)">
+      <form id="webLoginForm" onsubmit="event.preventDefault(); handleWebLogin(event); return false;">
         <div class="form-group">
           <label class="form-label">EMAIL ADDRESS</label>
-          <input type="email" id="webLoginEmail" class="form-control" placeholder="admin@askeva.com" value="admin@askeva.com" required />
+          <input type="email" id="webLoginEmail" class="form-control" placeholder="admin@askeva.com" value="admin@askeva.com" required onkeydown="if(event.key==='Enter'){event.preventDefault();handleWebLogin(event);}" />
         </div>
 
         <div class="form-group">
           <label class="form-label">PASSWORD</label>
           <div style="position: relative; display: flex; align-items: center;">
-            <input type="password" id="webLoginPassword" class="form-control" placeholder="admin123" value="admin123" required style="padding-right: 36px;" />
+            <input type="password" id="webLoginPassword" class="form-control" placeholder="admin123" value="admin123" required style="padding-right: 36px;" onkeydown="if(event.key==='Enter'){event.preventDefault();handleWebLogin(event);}" />
             <button type="button" onclick="toggleLoginPasswordVisibility()" id="btnToggleLoginPass" title="Show / Hide Password" style="position: absolute; right: 10px; background: none; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; color: var(--ink-900);">
               <svg id="eyeIconLoginPass" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
@@ -664,7 +663,7 @@
           </div>
         </div>
 
-        <button type="submit" style="width: 100%; margin-top: 10px; padding: 12px; background: var(--green-500); color: var(--ink-900); border: 1.5px solid var(--ink-900); border-radius: 999px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; cursor: pointer; box-shadow: var(--shadow-btn);">LOGIN TO PORTAL →</button>
+        <button type="button" id="webLoginBtn" onclick="handleWebLogin(event)" style="width: 100%; margin-top: 10px; padding: 12px; background: var(--green-500); color: var(--ink-900); border: 1.5px solid var(--ink-900); border-radius: 999px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; cursor: pointer; box-shadow: var(--shadow-btn);">LOGIN TO PORTAL →</button>
         <div style="margin-top: 14px; font-family: var(--font-mono); font-size: 11px; color: #5A6352; text-align: center;">Default Admin: <strong>admin@askeva.com</strong> · Pass: <strong>admin123</strong></div>
       </form>
     </div>
