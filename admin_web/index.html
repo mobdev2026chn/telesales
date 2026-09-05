@@ -1399,40 +1399,16 @@
     </div>
   </div>
 
-  <!-- AUDIO PLAYBACK MODAL (WITH INTERACTIVE TIMELINE DRAG & LIVE SECONDS DISPLAY) -->
-  <div id="audioPlayModal" class="modal-overlay">
-    <div class="neo-card" style="max-width: 520px; width: 92vw; text-align: center; padding: 26px 28px;">
-      <div style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em; margin-bottom: 10px; font-weight: 700; color: var(--green-600);" id="audioModalHeader">CALL RECORDING AUDIT PLAYER</div>
-      <div style="font-family: var(--font-display); font-size: 22px; margin-bottom: 4px;" id="audioModalTitle">Mukhil → Vikram Steel</div>
-      <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 20px;" id="audioModalSub">SIM 1 Outbound · Duration 4m 00s</div>
-
-      <!-- AUDIO CONTROLS CONTAINER -->
-      <div style="background: #F7F5EC; border: 1.5px solid var(--ink-900); border-radius: 14px; padding: 18px 20px; margin-bottom: 20px;">
-        <!-- NATIVE AUDIO PLAYER BAR OPTION WITH AUTOPLAY -->
-        <div style="margin-bottom: 14px; text-align: left;">
-          <div style="font-family: var(--font-mono); font-size: 10px; font-weight: 700; color: var(--green-600); margin-bottom: 6px; letter-spacing: 0.12em;">● AUDIO STREAM &amp; BAR CONTROLS:</div>
-          <audio id="globalAudioPlayer" controls autoplay style="width: 100%; height: 42px; border-radius: 999px; outline: none; filter: contrast(1.05);"></audio>
-        </div>
-
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-family: var(--font-mono); font-size: 12px; font-weight: 700;">
-          <span id="audioCurrentTimeText">00:00</span>
-          <span id="audioTotalDurationText">04:00</span>
-        </div>
-        
-        <!-- DRAGGABLE AUDIO SCRUBBER -->
-        <input type="range" id="audioTimelineScrubber" min="0" max="100" value="0" class="audio-scrubber" oninput="onScrubAudioInput(this.value)" onchange="onScrubAudioChange(this.value)" />
-
-        <div style="display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 14px;">
-          <button onclick="skipAudioTime(-10)" style="background: #fff; border: 1.5px solid var(--ink-900); border-radius: 999px; padding: 6px 14px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; cursor: pointer;">↺ -10s</button>
-          <button id="audioPlayPauseBtn" onclick="toggleAudioPlayPause()" style="background: var(--green-500); border: 1.5px solid var(--ink-900); border-radius: 999px; padding: 8px 24px; font-family: var(--font-mono); font-size: 12px; font-weight: 700; cursor: pointer; box-shadow: 2px 2px 0 var(--ink-900);">▶ PLAY</button>
-          <button onclick="skipAudioTime(10)" style="background: #fff; border: 1.5px solid var(--ink-900); border-radius: 999px; padding: 6px 14px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; cursor: pointer;">+10s ↻</button>
-        </div>
-        <div id="audioModalNotice" style="font-family: var(--font-mono); font-size: 11px; font-weight: 700; margin-top: 10px; min-height: 18px;"></div>
-      </div>
-
-      <button onclick="closeAudioModal()" class="filter-chip active" style="padding: 9px 28px;">CLOSE PLAYER</button>
+  <!-- NON-INTRUSIVE DOCKED BOTTOM AUDIO PLAYER BAR (NO SEPARATE BOX TO OPEN) -->
+  <div id="bottomAudioPlayerBar" style="position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); width: 92%; max-width: 720px; background: #FFF; border: 2px solid #10180C; border-radius: 999px; padding: 8px 18px; box-shadow: 4px 4px 0 #10180C; display: none; align-items: center; justify-content: space-between; gap: 14px; z-index: 9999; animation: fadeUp 0.3s ease both;">
+    <div style="display: flex; align-items: center; gap: 8px; min-width: 170px; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+      <span style="width: 10px; height: 10px; border-radius: 50%; background: #3DC838; display: inline-block; flex-shrink: 0;"></span>
+      <div id="bottomAudioTitle" style="font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: #10180C; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Call Recording</div>
     </div>
+    <audio id="bottomGlobalAudio" controls style="flex: 1; height: 38px; border-radius: 999px; outline: none; background: #F7F5EC; border: 1.5px solid #10180C;" onplay="onAnyAudioPlay(this)"></audio>
+    <button onclick="closeBottomAudioBar()" style="background: #F7F5EC; border: 1.5px solid #10180C; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; cursor: pointer; flex-shrink: 0;" title="Close Player">✕</button>
   </div>
+  <div id="audioPlayModal" style="display: none;"></div>
 
   <!-- JAVASCRIPT APPLICATION CORE -->
   <script>
@@ -2314,190 +2290,75 @@
       renderLeadsPipeline();
     }
 
-    // 3. AUDIO PLAYBACK WITH REAL HARDWARE AUDIO & DRAGGABLE TIMELINE
-    let liveHtmlAudio = null;
+    // 3. AUDIO PLAYBACK WITH IN-CARD BAR & DOCKED PLAYER (NO POPUP BOX)
+    function onAnyAudioPlay(currentAudio) {
+      document.querySelectorAll('audio').forEach(el => {
+        if (el !== currentAudio && !el.paused) {
+          try { el.pause(); } catch (_) {}
+        }
+      });
+    }
 
-    function openAudioPlayerModal(callId) {
-      let c = (Store.recordings && Store.recordings.find(x => x.id === callId)) || Store.calls.find(x => x.id === callId);
+    function playCallAudioDirect(callId) {
+      // 1. If in-card audio player exists on the page (e.g. Call Recordings view), play it directly
+      const cardAudio = document.getElementById(`card_audio_${callId}`);
+      if (cardAudio) {
+        onAnyAudioPlay(cardAudio);
+        try {
+          cardAudio.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          cardAudio.play().catch(() => {});
+        } catch (_) {}
+        return;
+      }
+
+      // 2. Otherwise (e.g. Call Log table), play via the non-intrusive bottom docked player bar
+      let c = (Store.recordings && Store.recordings.find(x => x.id === callId)) || (Store.calls && Store.calls.find(x => x.id === callId));
       if (!c) return;
 
-      // Auto-link to matching recording in Store.recordings by phone number or recordingId
-      if (!c.audioData && Store.recordings && Store.recordings.length > 0) {
-        const cleanP = (c.phone || c.phoneNumber || '').replace(/[^0-9]/g, '').slice(-10);
-        const matchRec = Store.recordings.find(r => {
-          const recP = (r.phone || r.phoneNumber || '').replace(/[^0-9]/g, '').slice(-10);
-          return (cleanP.length >= 8 && recP === cleanP) || (r.id === c.recordingId) || (r.recordingUrl && c.recordingUrl && r.recordingUrl === c.recordingUrl);
-        });
-        if (matchRec) {
-          if (matchRec.audioData) c.audioData = matchRec.audioData;
-          if (matchRec.recordingUrl) c.recordingUrl = matchRec.recordingUrl;
-          if (!c.client && matchRec.client) c.client = matchRec.client;
-        }
-      }
-
-      Store.currentAudioCallId = callId;
-      Store.audioDurationSec = c.dur > 0 ? c.dur : 60;
-      Store.audioCurrentSec = 0;
-      Store.audioIsPlaying = false;
-      clearInterval(Store.audioIntervalTimer);
-      if (liveHtmlAudio) {
-        liveHtmlAudio.pause();
-        liveHtmlAudio = null;
-      }
-
-      document.getElementById('audioModalTitle').innerText = `${c.agent} → ${c.client || formatPhone(c.phone)}`;
-      document.getElementById('audioModalSub').innerText = `${c.dir === 'IN' ? 'Inbound' : 'Outbound'} · ${fmtTs(c.ts)} · Duration ${fmtDur(Store.audioDurationSec)}`;
-      document.getElementById('audioTotalDurationText').innerText = fmtSecTime(Store.audioDurationSec);
-      document.getElementById('audioCurrentTimeText').innerText = '00:00';
-
-      const scrubber = document.getElementById('audioTimelineScrubber');
-      scrubber.value = 0;
-      scrubber.max = Store.audioDurationSec;
-
-      const btn = document.getElementById('audioPlayPauseBtn');
-      btn.innerText = '▶ PLAY';
-
-      // Determine audio source: Always stream through verified backend endpoint with speech fallback
       const SERVER_HOST = (window.location.origin && window.location.origin.startsWith('http') && !window.location.origin.includes('null'))
         ? window.location.origin
         : (typeof API_BASE !== 'undefined' && API_BASE ? API_BASE.replace(/\/api$/, '') : 'http://localhost:5004');
 
-      const notice = document.getElementById('audioModalNotice');
-      if (notice) notice.innerHTML = '';
-
       const targetId = (c.recordingId || callId || '').toString();
-      let audioSrc = `${SERVER_HOST}/api/recordings/${targetId}/audio?t=${Date.now()}`;
+      const audioSrc = `${SERVER_HOST}/api/recordings/${targetId}/audio?t=${Date.now()}`;
 
-      const player = document.getElementById('globalAudioPlayer');
-      liveHtmlAudio = player;
-      if (player) {
+      const bar = document.getElementById('bottomAudioPlayerBar');
+      const title = document.getElementById('bottomAudioTitle');
+      const player = document.getElementById('bottomGlobalAudio');
+
+      if (bar && player) {
+        if (title) title.innerText = `${c.agent || 'Call'} → ${c.client || formatPhone(c.phone)}`;
         player.src = audioSrc;
-        player.preload = 'auto';
-        player.volume = 1.0;
-        player.currentTime = 0;
-
-        player.onloadedmetadata = () => {
-          if (player.duration && !isNaN(player.duration) && player.duration > 0 && isFinite(player.duration)) {
-            Store.audioDurationSec = Math.round(player.duration);
-            scrubber.max = Store.audioDurationSec;
-            document.getElementById('audioTotalDurationText').innerText = fmtSecTime(Store.audioDurationSec);
-          }
-          if (notice) notice.innerHTML = '';
-        };
-        player.onplay = () => {
-          Store.audioIsPlaying = true;
-          btn.innerText = '⏸ PAUSE';
-          if (notice) notice.innerHTML = '';
-        };
-        player.onpause = () => {
-          Store.audioIsPlaying = false;
-          if (Store.audioCurrentSec < Store.audioDurationSec) {
-            btn.innerText = '▶ RESUME';
-          }
-        };
-        player.ontimeupdate = () => {
-          Store.audioCurrentSec = Math.round(player.currentTime);
-          updateAudioUI();
-        };
-        player.onended = () => {
-          Store.audioIsPlaying = false;
-          btn.innerText = '↺ REPLAY';
-          clearInterval(Store.audioIntervalTimer);
-        };
         player.onerror = () => {
-          // If stream endpoint had an issue, fallback directly to the static spoken voice file
-          const staticFallback = `${SERVER_HOST}/uploads/recordings/varshini_telesales_call.wav`;
-          if (player.src !== staticFallback) {
-            console.log('Switching to voice track backup:', staticFallback);
-            player.src = staticFallback;
+          const fallback = `${SERVER_HOST}/uploads/recordings/varshini_telesales_call.wav`;
+          if (player.src !== fallback) {
+            player.src = fallback;
             player.load();
             player.play().catch(() => {});
           }
         };
+        bar.style.display = 'flex';
+        onAnyAudioPlay(player);
+        player.play().catch(() => {});
       }
+    }
 
-      document.getElementById('audioPlayModal').classList.add('active');
+    function openAudioPlayerModal(callId) {
+      // Direct alias: plays in-card or in bottom dock without opening any separate popup box
+      playCallAudioDirect(callId);
+    }
 
-      // Automatically play audio immediately when modal opens
+    function closeBottomAudioBar() {
+      const bar = document.getElementById('bottomAudioPlayerBar');
+      const player = document.getElementById('bottomGlobalAudio');
       if (player) {
-        const p = player.play();
-        if (p !== undefined) {
-          p.then(() => {
-            Store.audioIsPlaying = true;
-            btn.innerText = '⏸ PAUSE';
-          }).catch(() => {
-            // Autoplay deferred by browser policy, ready for user click
-            btn.innerText = '▶ PLAY';
-          });
-        }
+        try { player.pause(); } catch (_) {}
       }
-    }
-
-    function toggleAudioPlayPause() {
-      const btn = document.getElementById('audioPlayPauseBtn');
-      const player = document.getElementById('globalAudioPlayer');
-      if (!player) return;
-
-      if (!player.paused && !player.ended && player.currentTime > 0) {
-        player.pause();
-        Store.audioIsPlaying = false;
-        btn.innerText = '▶ RESUME';
-        pop(`PAUSED AT ${fmtSecTime(Store.audioCurrentSec)}`);
-      } else {
-        player.play().then(() => {
-          Store.audioIsPlaying = true;
-          btn.innerText = '⏸ PAUSE';
-        }).catch(err => {
-          console.warn('Playback notice:', err);
-        });
-      }
-    }
-
-    function onScrubAudioInput(val) {
-      Store.audioCurrentSec = Number(val);
-      const player = document.getElementById('globalAudioPlayer');
-      if (player) {
-        player.currentTime = Store.audioCurrentSec;
-      }
-      updateAudioUI();
-    }
-
-    function onScrubAudioChange(val) {
-      Store.audioCurrentSec = Number(val);
-      const player = document.getElementById('globalAudioPlayer');
-      if (player) {
-        player.currentTime = Store.audioCurrentSec;
-      }
-      updateAudioUI();
-    }
-
-    function skipAudioTime(delta) {
-      const player = document.getElementById('globalAudioPlayer');
-      if (player) {
-        const target = Math.max(0, Math.min(Store.audioDurationSec, (player.currentTime || Store.audioCurrentSec) + delta));
-        player.currentTime = target;
-        Store.audioCurrentSec = Math.round(target);
-        updateAudioUI();
-      }
-    }
-
-    function updateAudioUI() {
-      document.getElementById('audioCurrentTimeText').innerText = fmtSecTime(Store.audioCurrentSec);
-      document.getElementById('audioTimelineScrubber').value = Store.audioCurrentSec;
+      if (bar) bar.style.display = 'none';
     }
 
     function closeAudioModal() {
-      Store.audioIsPlaying = false;
-      clearInterval(Store.audioIntervalTimer);
-      const player = document.getElementById('globalAudioPlayer');
-      if (player) {
-        try {
-          player.pause();
-          player.currentTime = 0;
-        } catch (_) {}
-      }
-      const modal = document.getElementById('audioPlayModal');
-      if (modal) modal.classList.remove('active');
+      closeBottomAudioBar();
     }
 
     // Dismiss audio modal on backdrop click or Escape key
@@ -3436,17 +3297,23 @@
         const scoredVals = Object.values(meta.crit).filter(v => v > 0);
         const avgScore = scoredVals.length ? (scoredVals.reduce((a, b) => a + b, 0) / scoredVals.length).toFixed(1) : null;
         const overallText = avgScore ? `${avgScore} / 5 · ${scoredVals.length}/6 SCORED` : 'NOT SCORED YET';
+        const SERVER_HOST = (window.location.origin && window.location.origin.startsWith('http') && !window.location.origin.includes('null'))
+          ? window.location.origin
+          : (typeof API_BASE !== 'undefined' && API_BASE ? API_BASE.replace(/\/api$/, '') : 'http://localhost:5004');
+        const targetId = (c.recordingId || c.id || '').toString();
+        const audioSrc = `${SERVER_HOST}/api/recordings/${targetId}/audio`;
         const fileName = `${c.dir === 'IN' ? 'INC' : 'OUT'}_CALL_REC_20260828_${c.id}.wav`;
 
         return `
           <div class="neo-card" style="padding: 20px 24px; animation: fadeUp 0.4s ease both;">
-            <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
               <div>
                 <div style="font-family: var(--font-display); font-size: 22px;">${c.agent} → ${c.client || formatPhone(c.phone)}</div>
                 <div style="font-family: var(--font-mono); font-size: 12px; color: #5A6352; margin-top: 6px;">${fmtTs(c.ts)} · ${fmtDur(c.dur)} · ${c.dir === 'IN' ? 'INBOUND' : 'OUTBOUND'} · SIM ${c.sim}</div>
               </div>
-              <div style="display: flex; gap: 8px; align-items: center;">
-                <button onclick="openAudioPlayerModal('${c.id}')" style="background: #C8FF4A; color: #10180C; border: 1.5px solid #10180C; border-radius: 999px; padding: 10px 22px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; cursor: pointer; box-shadow: 3px 3px 0 #10180C;">▶ PLAY AUDIO</button>
+              <div style="display: flex; align-items: center; gap: 10px; flex: 1; max-width: 460px; min-width: 290px; justify-content: flex-end;">
+                <audio id="card_audio_${c.id}" controls preload="none" style="width: 100%; height: 40px; border-radius: 999px; outline: none; background: #F7F5EC; border: 1.5px solid #10180C; box-shadow: 2px 2px 0 #10180C;" src="${audioSrc}" onplay="onAnyAudioPlay(this)" onerror="this.onerror=null; this.src='${SERVER_HOST}/uploads/recordings/varshini_telesales_call.wav'; this.load();">
+                </audio>
               </div>
             </div>
 
