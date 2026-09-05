@@ -2526,15 +2526,32 @@
     }
 
     function closeAudioModal() {
-      if (liveHtmlAudio) {
-        liveHtmlAudio.pause();
-        liveHtmlAudio = null;
-      }
+      try {
+        if (liveHtmlAudio) {
+          liveHtmlAudio.pause();
+          liveHtmlAudio.currentTime = 0;
+          liveHtmlAudio = null;
+        }
+      } catch (_) {}
       Store.audioIsPlaying = false;
       clearInterval(Store.audioIntervalTimer);
-      stopAudibleSound();
-      document.getElementById('audioPlayModal').classList.remove('active');
+      const modal = document.getElementById('audioPlayModal');
+      if (modal) modal.classList.remove('active');
     }
+
+    // Dismiss audio modal on backdrop click or Escape key
+    window.addEventListener('DOMContentLoaded', () => {
+      const audioModal = document.getElementById('audioPlayModal');
+      if (audioModal) {
+        audioModal.addEventListener('click', (e) => {
+          if (e.target === audioModal) closeAudioModal();
+        });
+      }
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeAudioModal();
+    });
 
     // 4. LEAD CALLING (STANDALONE CRM SUITE)
     function setUlFilter(f, btn) {
