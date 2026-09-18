@@ -31,3 +31,9 @@ Thumbs.db
 !.env.example
 node_modules/
 backend/uploads/recordings/*.wav
+backend/uploads/recordings/*.m4a
+backend/uploads/recordings/*.mp3
+backend/uploads/recordings/*.amr
+
+# Recording diagnostics from test phones
+backend/logs/

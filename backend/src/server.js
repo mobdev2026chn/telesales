@@ -17,6 +17,7 @@ const authRoutes = require('./routes/auth');
 const recordingRoutes = require('./routes/recordings');
 const leadRoutes = require('./routes/leads');
 const notificationRoutes = require('./routes/notifications');
+const diagnosticsRoutes = require('./routes/diagnostics');
 
 // Connect to MongoDB, then create the first admin if (and only if) there is none
 connectDB().then((connected) => {
@@ -64,7 +65,9 @@ const ROUTE_RULES = [
   { test: (m, p) => p === '/health' || p.startsWith('/auth/'), rule: 'public' }, // auth routes guard themselves
   { test: (m, p) => m === 'DELETE' && /^\/admin\/users\//.test(p) && !/photo/.test(p), rule: requireAuth({ roles: ['admin'] }) },
   { test: (m, p) => /^\/(admin\/)?users?\/photo$|^\/admin\/users\/[^/]+\/photo$/.test(p), rule: requireAuth({ roles: ANY, legacy: true }) },
-  { test: (m, p) => m === 'GET' && p === '/admin/users', rule: requireAuth({ roles: MANAGERS, legacy: true }) },
+  // No legacy access: old app builds log in by downloading this list and checking passwords on the phone,
+  // so they can no longer start NEW sessions. Already-signed-in old builds keep syncing via the rules below.
+  { test: (m, p) => m === 'GET' && p === '/admin/users', rule: requireAuth({ roles: MANAGERS }) },
   { test: (m, p) => /^\/admin\/users/.test(p), rule: requireAuth({ roles: MANAGERS }) },
   { test: (m, p) => m === 'GET' && p === '/admin/calls', rule: requireAuth({ roles: MANAGERS }) },
   { test: (m, p) => /\/recordings\/[^/]+\/comment$/.test(p), rule: requireAuth({ roles: MANAGERS, legacy: true }) },
@@ -85,10 +88,22 @@ app.use('/api', (req, res, next) => {
   return (hit ? hit.rule : requireAuth())(req, res, next);
 });
 
-app.use('/admin', express.static(path.join(__dirname, '../../admin_web')));
-app.use('/web', express.static(path.join(__dirname, '../../admin_web')));
+// Admin web: serve ONLY the portal's own files. admin_web/ also holds internal documents
+// and shortcuts that must never be downloadable from the public site.
+const ADMIN_WEB_DIR = path.join(__dirname, '../../admin_web');
+const ADMIN_WEB_FILES = new Set([
+  'index.html', 'manifest.json', 'favicon.ico', 'apple-touch-icon.png',
+  'ask_eva_logo.png', 'ask_eva_logo.jpg', 'ask_eva_logo_192.png', 'ask_eva_logo_512.png',
+]);
+function serveAdminWeb(req, res, next) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+  const name = req.path === '/' ? 'index.html' : req.path.replace(/^\//, '');
+  if (!ADMIN_WEB_FILES.has(name)) return next();
+  res.sendFile(path.join(ADMIN_WEB_DIR, name));
+}
+app.use(['/admin', '/web'], serveAdminWeb);
+app.use(serveAdminWeb);
 app.use('/assets/images', express.static(path.join(__dirname, '../../telesales_monitor/assets/images')));
-app.use(express.static(path.join(__dirname, '../../admin_web')));
 // Call audio is NOT served statically: it goes through the authenticated /api/recordings/:id/audio route only.
 
 // Health check endpoint
@@ -111,6 +126,7 @@ app.get(['/ask_eva_logo.jpg', '/ask_eva_logo.png', '/admin/ask_eva_logo.jpg', '/
 app.use(recordingRoutes);
 app.use(leadRoutes);
 app.use(notificationRoutes);
+app.use(diagnosticsRoutes);
 app.use(userRoutes);
 
 // Aliases used by the mobile app
