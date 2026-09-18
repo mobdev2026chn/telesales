@@ -9,11 +9,16 @@
   "icons": [
     {
       "src": "favicon.ico",
-      "sizes": "256x256 64x64 32x32 16x16",
+      "sizes": "64x64 48x48 32x32 16x16",
       "type": "image/x-icon"
     },
     {
-      "src": "ask_eva_logo.png",
+      "src": "ask_eva_logo_192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "ask_eva_logo_512.png",
       "sizes": "512x512",
       "type": "image/png"
     }

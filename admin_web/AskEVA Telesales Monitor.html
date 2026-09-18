@@ -1414,14 +1414,14 @@
   <script>
     let API_BASE = (window.location.origin && window.location.origin.startsWith('http') && !window.location.origin.includes('null'))
       ? `${window.location.origin}/api`
-      : 'http://localhost:5004/api';
+      : 'https://telesales.askeva.io/api';
 
     const CANDIDATE_API_BASES = [
       (window.location.origin && window.location.origin.startsWith('http') && !window.location.origin.includes('null')) ? `${window.location.origin}/api` : null,
+      'https://telesales.askeva.io/api',
+      'http://telesales.askeva.io/api',
       'http://localhost:5004/api',
       'http://127.0.0.1:5004/api',
-      'http://localhost:5000/api',
-      'https://telesales.askeva.io/api'
     ].filter(Boolean);
 
     async function detectActiveApiBase() {
@@ -1548,6 +1548,31 @@
       return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
     }
 
+    function updateCardAudioDuration(id, audioEl) {
+      if (!audioEl) return;
+      if (audioEl.duration && isFinite(audioEl.duration) && audioEl.duration > 0) {
+        const sec = Math.round(audioEl.duration);
+        const el = document.getElementById(`dur_text_${id}`);
+        if (el) el.innerText = fmtDur(sec);
+      }
+    }
+
+    function updateCardAudioProgress(id, audioEl) {
+      if (!audioEl) return;
+      const cur = Math.round(audioEl.currentTime || 0);
+      const dur = (audioEl.duration && isFinite(audioEl.duration) && audioEl.duration > 0)
+        ? Math.round(audioEl.duration)
+        : 0;
+      const el = document.getElementById(`dur_text_${id}`);
+      if (el) {
+        if (dur > 0 && cur > 0) {
+          el.innerText = `${fmtDur(cur)} / ${fmtDur(dur)}`;
+        } else if (dur > 0) {
+          el.innerText = fmtDur(dur);
+        }
+      }
+    }
+
     function fmtTalk(s) {
       if (!s || s <= 0) return '0h 00m';
       const h = Math.floor(s / 3600);
@@ -1600,20 +1625,25 @@
       const cDate = (c.ts instanceof Date) ? c.ts : new Date(c.ts);
       if (isNaN(cDate.getTime())) return false;
 
-      if (customDate) {
-        const [cy, cm, cd] = customDate.split('-').map(Number);
-        return cDate.getFullYear() === cy && (cDate.getMonth() + 1) === cm && cDate.getDate() === cd;
-      }
+      // Calendar periods in India time, same as the server and the mobile app:
+      // WEEK = Monday to today, MONTH = 1st of the month to today (YYYY-MM-DD strings compare in date order)
+      const istDay = (d) => new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit'
+      }).format(d);
+      const callDateStr = istDay(cDate);
+      if (customDate) return callDateStr === customDate;
 
-      const now = new Date();
-      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-
+      const nowDateStr = istDay(new Date());
       if (p === 'today') {
-        return cDate.getTime() >= todayStart;
+        return callDateStr === nowDateStr;
       } else if (p === 'week') {
-        return cDate.getTime() >= (todayStart - 6 * 86400000);
+        const [y, mo, d] = nowDateStr.split('-').map(Number);
+        const today = new Date(Date.UTC(y, mo - 1, d));
+        const daysSinceMonday = (today.getUTCDay() + 6) % 7;
+        const weekStartStr = new Date(today.getTime() - daysSinceMonday * 86400000).toISOString().slice(0, 10);
+        return callDateStr >= weekStartStr && callDateStr <= nowDateStr;
       } else if (p === 'month') {
-        return cDate.getTime() >= (todayStart - 29 * 86400000);
+        return callDateStr >= `${nowDateStr.slice(0, 7)}-01` && callDateStr <= nowDateStr;
       }
       return true;
     }
@@ -1821,7 +1851,7 @@
 
         const fetchCalls = async () => {
           try {
-            const res = await fetch(`${API_BASE}/admin/calls`);
+            const res = await fetch(`${API_BASE}/admin/calls?limit=5000`);
             const json = await res.json();
             if (json.success && Array.isArray(json.calls)) {
               if (json.calls.length === 0) {
@@ -1833,17 +1863,26 @@
               const uniqueCalls = [];
               
               for (const c of json.calls) {
+                // Same definitions as the server: incoming = received / missed / declined;
+                // missed = unanswered incoming; NO ANSWER = declined or unanswered outgoing
                 const dur = c.durationSeconds ?? c.dur ?? c.duration ?? 0;
-                const dir = (c.type === 'INBOUND' || c.type === 'incoming' || c.dir === 'IN') ? 'IN' : 'OUT';
+                const rawType = (c.rawType || c.type || '').toString().toLowerCase();
+                const dir = ['incoming', 'inbound', 'missed', 'rejected'].includes(rawType) || c.dir === 'IN' ? 'IN' : 'OUT';
                 const isConn = dur > 0 || c.out === 'CONNECTED' || c.status === 'CONNECTED';
-                const isMissed = !isConn && (c.type === 'MISSED' || (dir === 'IN' && dur === 0));
+                const isMissed = !isConn && ['incoming', 'inbound', 'missed'].includes(rawType);
                 const tsDate = new Date(c.timestamp || c.ts || Date.now());
                 const cleanPhone = (c.phoneNumber || c.phone || '').replace(/[^0-9]/g, '').slice(-10);
-                const timeBucket = Math.floor(tsDate.getTime() / 90000);
-                const dedupKey = `${cleanPhone}_${dir}_${dur}_${timeBucket}`;
+                const cleanCaller = (c.callerPhone || '').replace(/[^0-9]/g, '').slice(-10);
+                // Only an identical caller + number + timestamp is a duplicate; quick redials are separate calls
+                const dedupKey = `${cleanCaller}_${cleanPhone}_${tsDate.getTime()}`;
 
                 if (seenCallKeys.has(dedupKey)) continue;
                 seenCallKeys.add(dedupKey);
+
+                const rawRecUrl = (c.recordingUrl || c.audioPath || '').toString();
+                const isDummyRec = rawRecUrl.includes('/CALL_') || rawRecUrl.includes('placeholder');
+                const hasRealAudio = (c.audioData && c.audioData.length > 50);
+                const hasRealRec = !isDummyRec && (c.hasRecording === true || (rawRecUrl.length > 0 && !isDummyRec) || hasRealAudio);
 
                 uniqueCalls.push({
                   id: c.id || c._id,
@@ -1856,8 +1895,8 @@
                   dur: dur,
                   ts: tsDate,
                   sim: c.simSlot || c.sim || 1,
-                  rec: !!(c.rec || c.hasRecording || c.recordingUrl || c.audioPath),
-                  recordingUrl: c.recordingUrl || c.audioPath || '',
+                  rec: hasRealRec,
+                  recordingUrl: isDummyRec ? '' : rawRecUrl,
                   audioData: c.audioData || ''
                 });
               }
@@ -1922,6 +1961,7 @@
                   dur: r.durationSeconds || 0,
                   ts: new Date(r.createdAt || Date.now()),
                   rec: true,
+                  fileName: r.fileName || '',
                   recordingUrl: r.audioUrl || '',
                   audioData: r.audioData || '',
                   sim: 1,
@@ -1936,25 +1976,38 @@
           }
         };
 
-        await Promise.allSettled([fetchUsers(), fetchCalls(), fetchLeads(), fetchRecordings(), fetchDashboardData(Store.dashPeriod, Store.dashCustomDate)]);
+        // Users first: the dashboard request needs to know which callers are in scope
+        await fetchUsers();
+        await Promise.allSettled([fetchCalls(), fetchLeads(), fetchRecordings(), fetchDashboardData()]);
       } catch (err) {}
     }
 
-    // Live Dashboard Telemetry Fetcher (Today / Week / Month / Custom Date)
-    async function fetchDashboardData(period, customDate) {
+    // Identifies which period + people the dashboard numbers belong to
+    function dashRequestKey() {
+      const me = getActiveUser();
+      const scope = (!me || me.role === 'ADMIN') ? 'ALL' : getScopedCallers().map(u => u.id).join(',');
+      const when = Store.dashCustomDate ? `date=${Store.dashCustomDate}` : `period=${Store.dashPeriod || 'today'}`;
+      return { scope, when, key: `${when}|${scope}` };
+    }
+
+    // Live Dashboard Telemetry Fetcher (Today / Week / Month / Custom Date).
+    // The server counts every call in MongoDB; these numbers are the single source of truth.
+    async function fetchDashboardData() {
+      const { scope, when, key } = dashRequestKey();
+      Store.dashDataPendingKey = key;
       try {
-        const me = getActiveUser();
-        let qs = customDate ? `?date=${customDate}` : `?period=${period || 'today'}`;
-        if (me && me.role && me.role !== 'ADMIN') {
-          qs += `&userId=${me.id}&loggedInRole=${me.role.toLowerCase()}`;
-        }
+        let qs = `?${when}`;
+        if (scope !== 'ALL') qs += `&callerIds=${encodeURIComponent(scope)}`;
         const res = await fetch(`${API_BASE}/admin/dashboard${qs}`);
         const json = await res.json();
-        if (json.success && json.data) {
+        // Ignore responses for a period / user the admin has already switched away from
+        if (json.success && json.data && Store.dashDataPendingKey === key) {
           Store.dashData = json.data;
+          Store.dashDataKey = key;
           renderDashboard();
         }
       } catch (err) {
+        if (Store.dashDataPendingKey === key) Store.dashDataPendingKey = null; // allow a retry on next render
         console.warn('Dashboard fetch notice:', err);
       }
     }
@@ -2011,13 +2064,13 @@
       if (dateInput) dateInput.value = '';
       document.querySelectorAll('#tab-dash .filter-chip').forEach(c => c.classList.remove('active'));
       if (btn) btn.classList.add('active');
-      fetchDashboardData(p, null);
+      renderDashboard(); // fetches the server numbers for the new period
     }
 
     function onDashDateSelect(val) {
       if (!val) {
         Store.dashCustomDate = null;
-        fetchDashboardData(Store.dashPeriod, null);
+        renderDashboard();
         return;
       }
       const y = new Date(val).getFullYear();
@@ -2029,14 +2082,16 @@
       }
       Store.dashCustomDate = val;
       document.querySelectorAll('#tab-dash .filter-chip').forEach(c => c.classList.remove('active'));
-      fetchDashboardData(null, val);
+      renderDashboard();
     }
 
     function renderDashboard() {
       const setTxt = (id, v) => { const el = document.getElementById(id); if (el) el.innerText = v; };
 
-      // 1. If live aggregated dashboard data is available, display directly
-      if (Store.dashData) {
+      // 1. Server-counted numbers for the current period + scope (single source of truth)
+      const { key } = dashRequestKey();
+      if (!(Store.dashData && Store.dashDataKey === key) && Store.dashDataPendingKey !== key) fetchDashboardData();
+      if (Store.dashData && Store.dashDataKey === key) {
         const d = Store.dashData;
         const totalCalls = d.totalCalls || 0;
         const connectedCalls = d.connectedCalls || 0;
@@ -2046,7 +2101,7 @@
         const rejected = (d.rejected !== undefined) ? d.rejected : Math.max(0, (d.neverAttended || 0) - missed);
         const neverAttended = d.neverAttended || (missed + rejected);
         const connectRate = d.connectRatioPercent ?? (totalCalls ? Math.round(connectedCalls / totalCalls * 100) : 0);
-        const uniqueClients = d.uniqueClients || (totalCalls > 0 ? Math.round(totalCalls * 0.61) : 0);
+        const uniqueClients = d.uniqueClients || 0;
 
         setTxt('kpiTotalCalls', totalCalls);
         setTxt('kpiTotalTalk', `${d.talkTimeFormatted || '0h 00m'} total talk time`);
@@ -2252,6 +2307,14 @@
         const clientStyle = c.client ? 'font-weight: 600;' : 'font-style: italic; color: #5A6352;';
         const clientText = c.client || 'Unknown caller';
 
+        const cleanPhone = (c.phone || '').replace(/[^0-9]/g, '').slice(-10);
+        const matchingRec = (Store.recordings || []).find(r => {
+          const rPhone = (r.phone || '').replace(/[^0-9]/g, '').slice(-10);
+          return cleanPhone.length >= 8 && rPhone.length >= 8 && rPhone === cleanPhone;
+        });
+        const hasRec = c.rec || !!matchingRec;
+        const playId = (matchingRec ? matchingRec.id : c.id);
+
         return `
           <div class="table-body-row" style="grid-template-columns: 1fr 1.5fr 1.3fr 0.9fr 0.9fr 0.7fr 1.1fr 0.5fr 0.6fr;">
             <strong>${c.agent}</strong>
@@ -2266,7 +2329,7 @@
             <span style="font-family: var(--font-mono); font-size: 11px;">${fmtTs(c.ts)}</span>
             <span style="font-family: var(--font-mono); font-size: 11px;">SIM ${c.sim}</span>
             <span>
-              ${c.rec ? `<span onclick="openAudioPlayerModal('${c.id}')" style="cursor: pointer; font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: #3DC838;" title="Play Audio">▶</span>` : '<span style="color: #B9B3A2;">—</span>'}
+              ${hasRec ? `<span onclick="openAudioPlayerModal('${playId}')" style="cursor: pointer; font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: #3DC838;" title="Play Audio">▶</span>` : '<span style="color: #B9B3A2;">—</span>'}
             </span>
           </div>
         `;
@@ -2315,6 +2378,11 @@
       let c = (Store.recordings && Store.recordings.find(x => x.id === callId)) || (Store.calls && Store.calls.find(x => x.id === callId));
       if (!c) return;
 
+      if (!c.rec && !c.recordingUrl && !c.audioData) {
+        pop('⚠️ NO VOICE RECORDING CAPTURED FOR THIS CALL');
+        return;
+      }
+
       const SERVER_HOST = (window.location.origin && window.location.origin.startsWith('http') && !window.location.origin.includes('null'))
         ? window.location.origin
         : (typeof API_BASE !== 'undefined' && API_BASE ? API_BASE.replace(/\/api$/, '') : 'http://localhost:5004');
@@ -2330,12 +2398,8 @@
         if (title) title.innerText = `${c.agent || 'Call'} → ${c.client || formatPhone(c.phone)}`;
         player.src = audioSrc;
         player.onerror = () => {
-          const fallback = `${SERVER_HOST}/uploads/recordings/varshini_telesales_call.wav`;
-          if (player.src !== fallback) {
-            player.src = fallback;
-            player.load();
-            player.play().catch(() => {});
-          }
+          console.warn('Original call audio could not be played for:', targetId);
+          pop('⚠️ RECORDING AUDIO FILE NOT FOUND ON SERVER');
         };
         bar.style.display = 'flex';
         onAnyAudioPlay(player);
@@ -3302,24 +3366,29 @@
           : (typeof API_BASE !== 'undefined' && API_BASE ? API_BASE.replace(/\/api$/, '') : 'http://localhost:5004');
         const targetId = (c.recordingId || c.id || '').toString();
         const audioSrc = `${SERVER_HOST}/api/recordings/${targetId}/audio`;
-        const fileName = `${c.dir === 'IN' ? 'INC' : 'OUT'}_CALL_REC_20260828_${c.id}.wav`;
+        const displayFileName = c.fileName || (c.recordingUrl ? c.recordingUrl.split('/').pop() : `${c.dir === 'IN' ? 'INC' : 'OUT'}_CALL_REC_${c.id}.wav`);
+        const displayDur = c.dur > 0 ? c.dur : 60;
 
         return `
           <div class="neo-card" style="padding: 20px 24px; animation: fadeUp 0.4s ease both;">
             <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
               <div>
                 <div style="font-family: var(--font-display); font-size: 22px;">${c.agent} → ${c.client || formatPhone(c.phone)}</div>
-                <div style="font-family: var(--font-mono); font-size: 12px; color: #5A6352; margin-top: 6px;">${fmtTs(c.ts)} · ${fmtDur(c.dur)} · ${c.dir === 'IN' ? 'INBOUND' : 'OUTBOUND'} · SIM ${c.sim}</div>
+                <div style="font-family: var(--font-mono); font-size: 12px; color: #5A6352; margin-top: 6px;">${fmtTs(c.ts)} · <strong style="color: #10180C;">${fmtDur(displayDur)}</strong> · ${c.dir === 'IN' ? 'INBOUND' : 'OUTBOUND'} · SIM ${c.sim}</div>
               </div>
-              <div style="display: flex; align-items: center; gap: 10px; flex: 1; max-width: 460px; min-width: 290px; justify-content: flex-end;">
-                <audio id="card_audio_${c.id}" controls preload="none" style="width: 100%; height: 40px; border-radius: 999px; outline: none; background: #F7F5EC; border: 1.5px solid #10180C; box-shadow: 2px 2px 0 #10180C;" src="${audioSrc}" onplay="onAnyAudioPlay(this)" onerror="this.onerror=null; this.src='${SERVER_HOST}/uploads/recordings/varshini_telesales_call.wav'; this.load();">
+              <div style="display: flex; align-items: center; gap: 12px; flex: 1; max-width: 540px; min-width: 320px; justify-content: flex-end;">
+                <div id="rec_dur_badge_${c.id}" style="background: #10180C; color: #3DC838; font-family: var(--font-mono); font-size: 12px; font-weight: 700; padding: 7px 14px; border-radius: 999px; border: 1.5px solid #10180C; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; box-shadow: 2px 2px 0 #10180C; letter-spacing: 0.05em;">
+                  <span>⏱️</span>
+                  <span id="dur_text_${c.id}">${fmtDur(displayDur)}</span>
+                </div>
+                <audio id="card_audio_${c.id}" controls preload="metadata" style="flex: 1; min-width: 220px; height: 40px; border-radius: 999px; outline: none; background: #F7F5EC; border: 1.5px solid #10180C; box-shadow: 2px 2px 0 #10180C;" src="${audioSrc}" onplay="onAnyAudioPlay(this)" onloadedmetadata="updateCardAudioDuration('${c.id}', this)" ontimeupdate="updateCardAudioProgress('${c.id}', this)">
                 </audio>
               </div>
             </div>
 
             <!-- CLARIFIED AUDIO SOURCE & TEAM ATTRIBUTION -->
             <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; border: 1px solid #10180C; border-radius: 10px; background: #F7F5EC; padding: 10px 14px; margin-top: 14px; font-family: var(--font-mono); font-size: 11px;">
-              <div>📁 <strong>SOURCE FILE:</strong> <span style="color: #5A6352;">${fileName} (WAV · 8 kHz Mono)</span></div>
+              <div>📁 <strong>SOURCE FILE:</strong> <span style="color: #5A6352;">${displayFileName} (WAV · Original Recorded Audio)</span></div>
               <div>👥 <strong>TEAM AUDIT:</strong> Assigned to ${teamName}'S TEAM</div>
             </div>
 
