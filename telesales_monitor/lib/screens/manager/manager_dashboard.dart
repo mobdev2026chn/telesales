@@ -15,36 +15,29 @@ class ManagerDashboard extends StatelessWidget {
     final tele = Provider.of<TeleProvider>(context);
     final stats = tele.backendStats;
 
-    final logs = tele.simTrackedCallLogs;
-    final totalCalls = stats != null ? (stats['totalCalls'] as int? ?? tele.trackedTotalCalls) : tele.trackedTotalCalls;
-    final connectedCalls = stats != null ? (stats['connectedCalls'] as int? ?? tele.trackedConnectedCalls) : tele.trackedConnectedCalls;
-    final talkTimeFormatted = stats != null ? (stats['talkTimeFormatted'] as String? ?? tele.trackedTalkTimeFormatted) : tele.trackedTalkTimeFormatted;
-    final uniqueClients = stats != null ? (stats['uniqueClients'] as int? ?? logs.map((c) => c.phoneNumber).where((p) => p.isNotEmpty).toSet().length) : logs.map((c) => c.phoneNumber).where((p) => p.isNotEmpty).toSet().length;
-    final incoming = stats != null ? (stats['incoming'] as int? ?? tele.trackedIncomingCalls) : tele.trackedIncomingCalls;
-    final outgoing = stats != null ? (stats['outgoing'] as int? ?? tele.trackedOutgoingCalls) : tele.trackedOutgoingCalls;
-    final missed = stats != null ? (stats['missed'] as int? ?? tele.trackedMissedCalls) : tele.trackedMissedCalls;
-    final neverAttended = stats != null ? (stats['neverAttended'] as int? ?? tele.trackedNeverAttendedCalls) : tele.trackedNeverAttendedCalls;
-
-    int totalTalkSec = 0;
-    for (var c in logs) {
-      totalTalkSec += c.duration.inSeconds;
-    }
-    final avgSecs = connectedCalls > 0 ? (totalTalkSec ~/ connectedCalls) : 0;
-    final avgM = avgSecs ~/ 60;
-    final avgS = avgSecs % 60;
-    final avgDurationStr = avgSecs > 0 ? (avgM > 0 ? '${avgM}m ${avgS}s' : '${avgS}s') : '0s';
+    // Team numbers counted by the server for the selected period (same as the admin web)
+    final totalCalls = tele.totalCalls;
+    final connectedCalls = tele.connectedCalls;
+    final talkTimeFormatted = tele.talkTimeFormatted;
+    final uniqueClients = tele.uniqueCalls;
+    final incoming = tele.incomingCalls;
+    final outgoing = tele.outgoingCalls;
+    final missed = tele.missedCalls;
+    final neverAttended = tele.neverAttendedCalls;
+    final avgDurationStr = tele.averageTalkTimeFormatted;
     final connectRateStr = totalCalls > 0 ? ((connectedCalls / totalCalls) * 100).toStringAsFixed(1) : '0.0';
 
     String topTalkTimeName = 'NO CALLS LOGGED YET';
     String topTalkTimeDuration = '0H 00M';
 
-    if (stats != null && stats['topPerformer'] != null) {
-      final top = stats['topPerformer'] as Map<String, dynamic>;
+    // Only the server knows who the top performer is; team totals are never shown as one person's numbers.
+    if (stats != null && stats['topPerformer'] is Map) {
+      final top = Map<String, dynamic>.from(stats['topPerformer'] as Map);
       topTalkTimeName = top['name']?.toString() ?? 'NO CALLS LOGGED YET';
-      topTalkTimeDuration = top['duration']?.toString() ?? '0H 00M';
-    } else if (tele.trackedTotalCalls > 0) {
-      topTalkTimeName = tele.currentUserName.toUpperCase();
-      topTalkTimeDuration = tele.trackedTalkTimeFormatted.toUpperCase();
+      topTalkTimeDuration = top['duration']?.toString() ?? '—';
+    } else if (tele.totalCalls > 0) {
+      topTalkTimeName = '—';
+      topTalkTimeDuration = '—';
     }
 
     // Dynamic Hourly Bar Pattern (9AM - 6PM)
@@ -53,11 +46,11 @@ class ManagerDashboard extends StatelessWidget {
       final rawList = stats['hourlyCalls'] as List;
       int maxCnt = 1;
       for (var h in rawList) {
-        final c = (h is Map && h['calls'] is int) ? h['calls'] as int : 0;
+        final c = (h is Map && h['calls'] is num) ? (h['calls'] as num).toInt() : 0;
         if (c > maxCnt) maxCnt = c;
       }
       for (var h in rawList) {
-        final cnt = (h is Map && h['calls'] is int) ? h['calls'] as int : 0;
+        final cnt = (h is Map && h['calls'] is num) ? (h['calls'] as num).toInt() : 0;
         final hour = (h is Map && h['hour'] != null) ? h['hour'].toString() : '';
         final isPk = (h is Map && h['isPeak'] == true) || (cnt > 0 && cnt == maxCnt);
         final val = cnt > 0 ? (cnt / maxCnt).clamp(0.15, 1.0) : 0.08;
@@ -70,7 +63,7 @@ class ManagerDashboard extends StatelessWidget {
       }
     } else {
       final List<int> hourCounts = List.filled(11, 0);
-      for (var c in logs) {
+      for (var c in tele.simTrackedCallLogs) {
         final h = c.timestamp.hour;
         if (h >= 9 && h <= 19) {
           hourCounts[h - 9]++;
@@ -105,7 +98,11 @@ class ManagerDashboard extends StatelessWidget {
     }
 
     final hasCustomCalendar = tele.selectedDateRange != null || tele.selectedCustomDate != null;
-    final targetProgress = totalCalls > 0 ? (totalCalls / 300).clamp(0.01, 1.0) : 0.0;
+    // Team target = sum of each caller's admin-set daily target
+    final teamTarget = tele.employees
+        .where((e) => e.role.toLowerCase() == 'caller')
+        .fold<int>(0, (sum, e) => sum + (e.dailyTarget > 0 ? e.dailyTarget : 40));
+    final targetProgress = totalCalls > 0 && teamTarget > 0 ? (totalCalls / teamTarget).clamp(0.01, 1.0) : 0.0;
 
     return RefreshIndicator(
       color: AppTheme.greenNeon,
@@ -343,7 +340,7 @@ class ManagerDashboard extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '$connectedCalls connected · $uniqueClients unique clients · target 300',
+                    '$connectedCalls connected · $uniqueClients unique clients · target $teamTarget',
                     style: AppTheme.body(size: 11, color: AppTheme.lightMuted),
                   ),
                   const SizedBox(height: 12),

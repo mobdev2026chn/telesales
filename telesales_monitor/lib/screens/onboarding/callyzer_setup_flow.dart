@@ -145,7 +145,8 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
                       Navigator.pop(ctx);
                       Navigator.of(context).pushReplacement(
                         PageRouteBuilder(
-                          pageBuilder: (context, animation, secondaryAnimation) => const MainShell(),
+                          // Setup is per device; every user still signs in with their own account.
+                          pageBuilder: (context, animation, secondaryAnimation) => Provider.of<TeleProvider>(context, listen: false).isLoggedIn ? const MainShell() : const LoginScreen(),
                           transitionsBuilder: (context, animation, secondaryAnimation, child) =>
                               FadeTransition(opacity: animation, child: child),
                           transitionDuration: const Duration(milliseconds: 300),
@@ -185,7 +186,7 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
   }
 
   void _showVerifyViaCallLogModal(BuildContext context, TeleProvider tele) {
-    final phone = _phoneController.text.isNotEmpty ? '+91${_phoneController.text}' : '+91 98250 12340';
+    final phone = _phoneController.text.isNotEmpty ? '+91${_phoneController.text}' : 'this SIM';
 
     showModalBottomSheet(
       context: context,
@@ -961,7 +962,7 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
 
   // ================= STEP 5: SIM NUMBER VERIFICATION =================
   Widget _buildSimVerificationStep(TeleProvider tele) {
-    final phone = _phoneController.text.isNotEmpty ? '+91 ${_phoneController.text}' : '+91 98250 12340';
+    final phone = _phoneController.text.isNotEmpty ? '+91 ${_phoneController.text}' : 'this SIM';
 
     return SingleChildScrollView(
       key: const ValueKey('step_5_verify_sim'),

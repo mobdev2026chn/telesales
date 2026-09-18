@@ -43,11 +43,7 @@ class NotificationItem {
       title: json['title']?.toString() ?? 'New Feedback',
       message: json['message']?.toString() ?? '',
       comment: json['comment']?.toString() ?? '',
-      rating: (json['rating'] is int)
-          ? json['rating'] as int
-          : (json['rating'] is double)
-              ? (json['rating'] as double).toInt()
-              : 0,
+      rating: (json['rating'] is num) ? (json['rating'] as num).toInt() : 0,
       isRead: json['isRead'] == true,
       createdAt: json['createdAt'] != null
           ? (DateTime.tryParse(json['createdAt'].toString()) ?? DateTime.now())

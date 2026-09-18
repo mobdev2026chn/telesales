@@ -23,8 +23,8 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
   final _nameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
-  final _passwordCtrl = TextEditingController(text: '123456');
-  final _targetCtrl = TextEditingController(text: '100');
+  final _passwordCtrl = TextEditingController();
+  final _targetCtrl = TextEditingController(text: '40');
 
   String _selectedRole = 'caller';
   String _selectedTeam = 'Telesales Team';
@@ -55,7 +55,7 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
       password: _passwordCtrl.text.trim(),
       role: _selectedRole,
       team: _selectedTeam,
-      dailyTarget: int.tryParse(_targetCtrl.text.trim()) ?? 100,
+      dailyTarget: int.tryParse(_targetCtrl.text.trim()) ?? 40,
     );
 
     setState(() => _isLoading = false);
@@ -227,7 +227,7 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                   obscureText: _obscurePassword,
                   style: AppTheme.bodyBold(size: 13, color: AppTheme.ink900),
                   decoration: InputDecoration(
-                    hintText: 'Password (e.g. 123456)',
+                    hintText: 'At least 6 characters',
                     hintStyle: AppTheme.body(size: 12, color: AppTheme.muted),
                     filled: true,
                     fillColor: AppTheme.paper,
@@ -249,7 +249,7 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                       borderSide: const BorderSide(color: AppTheme.ink900, width: 1.5),
                     ),
                   ),
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Password is required' : null,
+                  validator: (v) => (v == null || v.trim().length < 6) ? 'Password must be at least 6 characters' : null,
                 ),
                 const SizedBox(height: 14),
 

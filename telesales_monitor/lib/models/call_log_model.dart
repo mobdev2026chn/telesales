@@ -16,7 +16,7 @@ class CallLogModel {
   final String? note;
   final String? recordingPath;
   final String agentName;
-  final int simSlot; // 1 for SIM 1, 2 for SIM 2
+  final int simSlot; // 1 for SIM 1, 2 for SIM 2, 0 when the device could not tell
   final bool isCrmContact;
 
   CallLogModel({
@@ -33,7 +33,7 @@ class CallLogModel {
     this.isCrmContact = false,
   });
 
-  String get simBadge => 'SIM $simSlot';
+  String get simBadge => simSlot > 0 ? 'SIM $simSlot' : 'SIM ?';
 
   String get durationFormatted {
     if (type == CallType.missed || type == CallType.neverAttended || type == CallType.rejected) {

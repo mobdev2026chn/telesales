@@ -30,18 +30,20 @@ class _CallerDashboardState extends State<CallerDashboard> {
     final talkTimeStr = h > 0 ? '${h}h ${m}m' : '${m}m';
 
     final connectedCalls = logs.where((c) => c.duration.inSeconds > 0).length;
-    final callerName = tele.callerName.isNotEmpty ? tele.callerName.toUpperCase() : 'MUKHIL';
+    final callerName = tele.callerName.isNotEmpty ? tele.callerName.toUpperCase() : '—';
     final initials = callerName.split(' ').map((w) => w.isNotEmpty ? w[0] : '').take(2).join('').toUpperCase();
 
-    const targetCalls = 40;
+    final targetCalls = tele.dailyTarget;
     final targetProgress = (totalCalls / targetCalls).clamp(0.02, 1.0);
 
     // Callbacks due list
     final callbacks = tele.callbacks;
-    final freshCount = tele.leads.where((l) => l.attempts == 0).length;
+    final sessionLeads = tele.callableSessionLeads;
+    final freshCount = sessionLeads.where((l) => l.attempts == 0).length;
 
     // Break / Duty time strings
-    final dutyStartStr = DateFormat('h:mm a').format(tele.dutyStartTime);
+    final dutyStart = tele.dutyStartTime;
+    final dutyStartStr = dutyStart != null ? DateFormat('h:mm a').format(dutyStart) : '—';
 
     return Scaffold(
       backgroundColor: AppTheme.paper,
@@ -94,7 +96,7 @@ class _CallerDashboardState extends State<CallerDashboard> {
                     ),
                     child: Center(
                       child: Text(
-                        initials.isNotEmpty ? initials : 'MU',
+                        initials.isNotEmpty && initials != '—' ? initials : '—',
                         style: AppTheme.headline(size: 18, color: AppTheme.ink900),
                       ),
                     ),
@@ -286,7 +288,7 @@ class _CallerDashboardState extends State<CallerDashboard> {
                           ],
                         ),
                         Text(
-                          'TODAY',
+                          tele.selectedPeriodLabel,
                           style: AppTheme.mono(size: 9.5, color: AppTheme.muted, weight: FontWeight.w700),
                         ),
                       ],
@@ -296,13 +298,13 @@ class _CallerDashboardState extends State<CallerDashboard> {
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        _metricBadge('TOTAL CALLS', '${tele.trackedTotalCalls}', AppTheme.ink900, AppTheme.white),
-                        _metricBadge('INCOMING', '${tele.trackedIncomingCalls}', AppTheme.paper, AppTheme.ink900),
-                        _metricBadge('OUTGOING', '${tele.trackedOutgoingCalls}', AppTheme.paper, AppTheme.ink900),
-                        _metricBadge('MISSED', '${tele.trackedMissedCalls}', AppTheme.redMissed.withValues(alpha: 0.12), AppTheme.redMissed),
-                        _metricBadge('REJECTED', '${tele.trackedRejectedCalls}', AppTheme.limeYellow, AppTheme.ink900),
-                        _metricBadge('NEVER ATTENDED', '${tele.trackedNeverAttendedCalls}', AppTheme.paper, AppTheme.ink900),
-                        _metricBadge('UNIQUE CALLS', '${tele.trackedUniqueCalls}', AppTheme.greenNeon, AppTheme.ink900),
+                        _metricBadge('TOTAL CALLS', '${tele.totalCalls}', AppTheme.ink900, AppTheme.white),
+                        _metricBadge('INCOMING', '${tele.incomingCalls}', AppTheme.paper, AppTheme.ink900),
+                        _metricBadge('OUTGOING', '${tele.outgoingCalls}', AppTheme.paper, AppTheme.ink900),
+                        _metricBadge('MISSED', '${tele.missedCalls}', AppTheme.redMissed.withValues(alpha: 0.12), AppTheme.redMissed),
+                        _metricBadge('REJECTED', '${tele.rejectedCalls}', AppTheme.limeYellow, AppTheme.ink900),
+                        _metricBadge('NEVER ATTENDED', '${tele.neverAttendedCalls}', AppTheme.paper, AppTheme.ink900),
+                        _metricBadge('UNIQUE CALLS', '${tele.uniqueCalls}', AppTheme.greenNeon, AppTheme.ink900),
                       ],
                     ),
                   ],
@@ -408,7 +410,7 @@ class _CallerDashboardState extends State<CallerDashboard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'CALLBACKS DUE · ${callbacks.isNotEmpty ? callbacks.length : 2}',
+                      'CALLBACKS DUE · ${callbacks.length}',
                       style: AppTheme.label(size: 9.5, color: AppTheme.ink900, letterSpacing: 0.16),
                     ),
                     const SizedBox(height: 12),
@@ -419,9 +421,15 @@ class _CallerDashboardState extends State<CallerDashboard> {
                         final isOverdue = cb.scheduledTime.isBefore(DateTime.now());
                         final bg = isOverdue ? AppTheme.redOverdue : AppTheme.limeYellow;
                         final fg = isOverdue ? AppTheme.white : AppTheme.ink900;
+                        final now = DateTime.now();
+                        final isToday = cb.scheduledTime.year == now.year &&
+                            cb.scheduledTime.month == now.month &&
+                            cb.scheduledTime.day == now.day;
                         final dateStr = isOverdue
                             ? 'OVERDUE · ${DateFormat('d MMM').format(cb.scheduledTime).toUpperCase()}'
-                            : 'TODAY · ${DateFormat('h:mm a').format(cb.scheduledTime).toUpperCase()}';
+                            : isToday
+                                ? 'TODAY · ${DateFormat('h:mm a').format(cb.scheduledTime).toUpperCase()}'
+                                : DateFormat('d MMM · h:mm a').format(cb.scheduledTime).toUpperCase();
 
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 8),
@@ -459,61 +467,14 @@ class _CallerDashboardState extends State<CallerDashboard> {
                           ),
                         );
                       })
-                    else ...[
-                      // Item 1: Overdue
-                      GestureDetector(
-                        onTap: () => tele.makeDirectCall('+91 90250 11876'),
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: AppTheme.redOverdue,
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(color: AppTheme.ink900, width: 1.5),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'Meenakshi Agencies',
-                                style: AppTheme.bodyBold(size: 13, color: AppTheme.white),
-                              ),
-                              Text(
-                                'OVERDUE · 27 AUG',
-                                style: AppTheme.mono(size: 10, color: AppTheme.white, weight: FontWeight.w700),
-                              ),
-                            ],
-                          ),
+                    else
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Text(
+                          'No callbacks scheduled. Callbacks you set after a call will appear here.',
+                          style: AppTheme.body(size: 12, color: AppTheme.muted),
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      // Item 2: Today
-                      GestureDetector(
-                        onTap: () => tele.makeDirectCall('+91 95510 22110'),
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: AppTheme.limeYellow,
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(color: AppTheme.ink900, width: 1.5),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'Chennai Silks Outlet',
-                                style: AppTheme.bodyBold(size: 13, color: AppTheme.ink900),
-                              ),
-                              Text(
-                                'TODAY · 4:00 PM',
-                                style: AppTheme.mono(size: 10, color: AppTheme.ink900, weight: FontWeight.w700),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ),
@@ -522,8 +483,18 @@ class _CallerDashboardState extends State<CallerDashboard> {
               // Bottom Big CTA: START CALL SESSION · X FRESH
               GestureDetector(
                 onTap: () {
+                  if (sessionLeads.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        backgroundColor: AppTheme.ink900,
+                        content: Text('No leads assigned to you yet. Ask your manager to assign leads.',
+                            style: AppTheme.bodyBold(size: 12, color: AppTheme.limeYellow)),
+                      ),
+                    );
+                    return;
+                  }
                   tele.startCallSession();
-                  CallSessionScreen.push(context);
+                  if (tele.activeCallLead != null) CallSessionScreen.push(context);
                 },
                 child: Container(
                   width: double.infinity,
@@ -540,7 +511,7 @@ class _CallerDashboardState extends State<CallerDashboard> {
                       const Icon(Icons.play_arrow_rounded, color: AppTheme.greenGrass, size: 20),
                       const SizedBox(width: 6),
                       Text(
-                        'START CALL SESSION · ${freshCount > 0 ? freshCount : 5} FRESH',
+                        sessionLeads.isEmpty ? 'NO LEADS ASSIGNED' : 'START CALL SESSION · $freshCount FRESH',
                         style: AppTheme.label(size: 11.5, color: AppTheme.greenGrass, letterSpacing: 0.16),
                       ),
                     ],

@@ -45,26 +45,21 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
           if (emp.reportingManagerId != currentMgrId) continue;
         }
 
-        final isMe = emp.name.toLowerCase() == tele.callerName.toLowerCase() ||
-                     emp.phone == tele.verifiedTrackingNumber;
+        final isMe = (tele.currentUserId.isNotEmpty && emp.id == tele.currentUserId) ||
+                     emp.name.toLowerCase() == tele.callerName.toLowerCase();
 
-        int calls = emp.totalCalls;
-        int conn = emp.connectedCalls;
-        String talkTime = emp.talkTimeFormatted.isNotEmpty ? emp.talkTimeFormatted : '0s';
-
-        // Ensure strictly today's data when TODAY filter is active
-        if (isMe && tele.selectedTimeFilter == 0) {
-          calls = tele.trackedTotalCalls;
-          conn = tele.trackedConnectedCalls;
-          talkTime = tele.trackedTalkTimeFormatted;
-        }
+        // Server-counted for the selected period — same numbers as the admin web leaderboard
+        final int calls = emp.totalCalls;
+        final int conn = emp.connectedCalls;
+        final String talkTime = emp.talkTimeFormatted.isNotEmpty ? emp.talkTimeFormatted : '0s';
 
         final rate = calls > 0 ? ((conn / calls) * 100).toStringAsFixed(0) : '0';
-        final progress = calls > 0 ? (calls / 100).clamp(0.01, 1.0) : 0.0;
+        final progress = calls > 0 ? (calls / (emp.dailyTarget > 0 ? emp.dailyTarget : 40)).clamp(0.01, 1.0) : 0.0;
 
         final photo = isMe && tele.profilePhotoBase64.isNotEmpty ? tele.profilePhotoBase64 : emp.photoBase64;
 
         callers.add({
+          'employee': emp,
           'rank': r,
           'name': emp.name,
           'calls': calls,
@@ -282,7 +277,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                     backgroundColor: isTop ? AppTheme.ink900 : AppTheme.white,
                     shadowColor: AppTheme.ink900,
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                    onTap: () {},
+                    onTap: () => widget.onSelectEmployee(empData['employee'] as EmployeeModel),
                     child: Row(
                       children: [
                         // Rank Digit

@@ -21,6 +21,8 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.CallLog
 import android.provider.ContactsContract
+import android.telecom.PhoneAccountHandle
+import android.telecom.TelecomManager
 import android.telephony.SubscriptionInfo
 import android.telephony.SubscriptionManager
 import android.telephony.TelephonyManager
@@ -38,34 +40,61 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import kotlin.random.Random
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.askeva.telesales/telephony"
+    // Safety cap on rows read per call-log query (the query itself is already limited to the work session)
+    private val MAX_CALL_LOGS = 5000
     private val PERMISSION_REQ_CODE = 2001
     private val NOTIF_CHANNEL_ID = "telesales_call_recording_channel"
     private val NOTIF_ID = 9001
+    private val CALL_LOG_DEBOUNCE_MS = 1500L
 
     private var pendingPermissionResult: MethodChannel.Result? = null
     private var methodChannel: MethodChannel? = null
 
+    // Heavy work (call-log queries, WAV finalisation, contact lookups) runs here, never on the UI thread
+    private val ioExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val contactNameCache = ConcurrentHashMap<String, String>()
+
     private var telephonyReceiver: BroadcastReceiver? = null
     private var callLogObserver: ContentObserver? = null
+    private val callLogChanged = Runnable {
+        methodChannel?.invokeMethod("onCallStateChanged", mapOf("state" to "LOG_UPDATED"))
+    }
     private var mediaRecorder: MediaRecorder? = null
     private var mediaPlayer: MediaPlayer? = null
+    private var isPlayerPrepared = false
+    private var currentTempPlaybackFile: File? = null
     private var pcmAudioRecord: AudioRecord? = null
-    private var isPcmRecording = false
+    @Volatile private var isPcmRecording = false
     private var pcmRecordThread: Thread? = null
     private var isRecording = false
     private var currentRecordingFile: File? = null
-    private var autoRecordEnabled = true
+    // Off until Flutter pushes the saved preference for a signed-in caller
+    private var autoRecordEnabled = false
 
+    // Current call (from the PHONE_STATE broadcasts / our own dialing)
     private var incomingNumber: String = ""
     private var isIncomingCall: Boolean = false
+    private var ringingAtMs: Long = 0L
+    private var callNumber: String = ""
+    private var callStartedAtMs: Long = 0L
+    private var callSimSlot: Int = 0 // 1-based, 0 = unknown
+    private var lastDialedNumber: String = ""
+    private var lastDialedAtMs: Long = 0L
+    private var lastDialedSlot: Int = 0 // 1-based
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
         createNotificationChannel()
+        ioExecutor.execute { cleanupStaleTempFiles() }
 
         methodChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
         methodChannel?.setMethodCallHandler { call, result ->
@@ -75,8 +104,11 @@ class MainActivity : FlutterActivity() {
                     result.success(simList)
                 }
                 "getCallLogs" -> {
-                    val logs = getRealDeviceCallLogs()
-                    result.success(logs)
+                    val since = (call.argument<Number>("since"))?.toLong() ?: 0L
+                    ioExecutor.execute {
+                        val logs = try { getRealDeviceCallLogs(since) } catch (e: Exception) { emptyList() }
+                        mainHandler.post { result.success(logs) }
+                    }
                 }
                 "checkPermissions" -> {
                     val granted = checkAllPermissions()
@@ -98,7 +130,7 @@ class MainActivity : FlutterActivity() {
                     result.success(true)
                 }
                 "setAutoRecord" -> {
-                    val enabled = call.argument<Boolean>("enabled") ?: true
+                    val enabled = call.argument<Boolean>("enabled") ?: false
                     autoRecordEnabled = enabled
                     result.success(true)
                 }
@@ -110,6 +142,9 @@ class MainActivity : FlutterActivity() {
                 }
                 "startTestRecording" -> {
                     if (!isRecording) {
+                        callNumber = ""
+                        callStartedAtMs = System.currentTimeMillis()
+                        callSimSlot = 0
                         startCallRecording()
                         result.success(true)
                     } else {
@@ -134,9 +169,13 @@ class MainActivity : FlutterActivity() {
                     stopAudioPlayback()
                     result.success(true)
                 }
+                "getPlaybackPosition" -> {
+                    result.success(getPlaybackPosition())
+                }
                 "openSaveContact" -> {
                     val phone = call.argument<String>("phoneNumber") ?: ""
                     val name = call.argument<String>("name") ?: ""
+                    contactNameCache.remove(phone)
                     openNativeSaveContactIntent(phone, name)
                     result.success(true)
                 }
@@ -165,9 +204,17 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun showToast(message: String) {
-        Handler(Looper.getMainLooper()).post {
+        mainHandler.post {
             try {
                 Toast.makeText(applicationContext, message, Toast.LENGTH_LONG).show()
+            } catch (_: Exception) {}
+        }
+    }
+
+    private fun invokeOnMain(method: String, args: Any?) {
+        mainHandler.post {
+            try {
+                methodChannel?.invokeMethod(method, args)
             } catch (_: Exception) {}
         }
     }
@@ -193,46 +240,95 @@ class MainActivity : FlutterActivity() {
 
     private fun registerCallLogObserver() {
         try {
+            if (callLogObserver != null) return
             val hasPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CALL_LOG) == PackageManager.PERMISSION_GRANTED
             if (!hasPermission) return
 
-            callLogObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            callLogObserver = object : ContentObserver(mainHandler) {
                 override fun onChange(selfChange: Boolean) {
                     super.onChange(selfChange)
-                    methodChannel?.invokeMethod("onCallStateChanged", mapOf("state" to "LOG_UPDATED"))
+                    // The provider fires several times per call: debounce into one notification
+                    mainHandler.removeCallbacks(callLogChanged)
+                    mainHandler.postDelayed(callLogChanged, CALL_LOG_DEBOUNCE_MS)
                 }
             }
             contentResolver.registerContentObserver(CallLog.Calls.CONTENT_URI, true, callLogObserver!!)
         } catch (e: Exception) {
+            callLogObserver = null
             e.printStackTrace()
         }
+    }
+
+    /** 1-based SIM slot of the subscription named in a PHONE_STATE broadcast, 0 when unknown. */
+    private fun slotFromPhoneStateIntent(intent: Intent): Int {
+        try {
+            var subId = intent.getIntExtra("android.telephony.extra.SUBSCRIPTION_INDEX", -1)
+            if (subId < 0) subId = intent.getIntExtra("subscription", -1)
+            if (subId >= 0 && ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
+                val sm = getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as? SubscriptionManager
+                val info = sm?.getActiveSubscriptionInfo(subId)
+                if (info != null) return info.simSlotIndex + 1
+            }
+        } catch (_: Exception) {}
+        return singleActiveSlotOrUnknown()
+    }
+
+    private fun activeSubscriptions(): List<SubscriptionInfo> {
+        return try {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) return emptyList()
+            val sm = getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as? SubscriptionManager
+            sm?.activeSubscriptionInfoList ?: emptyList()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    /** With exactly one active SIM every call is on it; otherwise we cannot tell. */
+    private fun singleActiveSlotOrUnknown(): Int {
+        val subs = activeSubscriptions()
+        return if (subs.size == 1) subs[0].simSlotIndex + 1 else 0
     }
 
     private fun registerRealtimeCallListener() {
         try {
             telephonyReceiver = object : BroadcastReceiver() {
                 override fun onReceive(context: Context?, intent: Intent?) {
-                    if (TelephonyManager.ACTION_PHONE_STATE_CHANGED == intent?.action) {
-                        val stateStr = intent.getStringExtra(TelephonyManager.EXTRA_STATE)
+                    if (intent == null || TelephonyManager.ACTION_PHONE_STATE_CHANGED != intent.action) return
+                    val stateStr = intent.getStringExtra(TelephonyManager.EXTRA_STATE)
+                    @Suppress("DEPRECATION")
+                    val extraNumber = intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER) ?: ""
 
-                        if (TelephonyManager.EXTRA_STATE_RINGING == stateStr) {
-                            isIncomingCall = true
-                            incomingNumber = intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER) ?: ""
-                        } else if (TelephonyManager.EXTRA_STATE_OFFHOOK == stateStr) {
-                            if (autoRecordEnabled && !isRecording) {
-                                startCallRecording()
+                    if (TelephonyManager.EXTRA_STATE_RINGING == stateStr) {
+                        isIncomingCall = true
+                        if (extraNumber.isNotEmpty()) incomingNumber = extraNumber
+                        if (ringingAtMs == 0L) ringingAtMs = System.currentTimeMillis()
+                    } else if (TelephonyManager.EXTRA_STATE_OFFHOOK == stateStr) {
+                        if (!isRecording) {
+                            val now = System.currentTimeMillis()
+                            if (isIncomingCall) {
+                                callNumber = incomingNumber.ifEmpty { extraNumber }
+                                callStartedAtMs = if (ringingAtMs > 0) ringingAtMs else now
+                                callSimSlot = slotFromPhoneStateIntent(intent)
+                            } else {
+                                val recentDial = now - lastDialedAtMs < 120_000L
+                                callNumber = extraNumber.ifEmpty { if (recentDial) lastDialedNumber else "" }
+                                callStartedAtMs = now
+                                val slot = slotFromPhoneStateIntent(intent)
+                                callSimSlot = if (slot > 0) slot else if (recentDial) lastDialedSlot else 0
                             }
-                        } else if (TelephonyManager.EXTRA_STATE_IDLE == stateStr) {
-                            if (isRecording) {
-                                stopCallRecording()
-                            }
-                            isIncomingCall = false
-                            incomingNumber = ""
-
-                            Handler(Looper.getMainLooper()).postDelayed({
-                                methodChannel?.invokeMethod("onCallStateChanged", mapOf("state" to "IDLE"))
-                            }, 1000)
+                            if (autoRecordEnabled) startCallRecording()
+                        } else if (callNumber.isEmpty() && extraNumber.isNotEmpty()) {
+                            callNumber = extraNumber
                         }
+                    } else if (TelephonyManager.EXTRA_STATE_IDLE == stateStr) {
+                        if (isRecording) {
+                            stopCallRecording()
+                        }
+                        isIncomingCall = false
+                        incomingNumber = ""
+                        ringingAtMs = 0L
+                        mainHandler.removeCallbacks(callLogChanged)
+                        mainHandler.postDelayed(callLogChanged, CALL_LOG_DEBOUNCE_MS)
                     }
                 }
             }
@@ -241,6 +337,13 @@ class MainActivity : FlutterActivity() {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    private fun recordingsDir(): File {
+        // App files dir (not cache): a recording must survive until the server confirms the upload
+        val dir = File(filesDir, "call_recordings")
+        if (!dir.exists()) dir.mkdirs()
+        return dir
     }
 
     private fun startCallRecording() {
@@ -253,27 +356,27 @@ class MainActivity : FlutterActivity() {
 
             val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
             try {
+                audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
                 audioManager.isMicrophoneMute = false
             } catch (_: Exception) {}
 
-            val dir = File(cacheDir, "call_recordings")
-            if (!dir.exists()) {
-                dir.mkdirs()
-            }
-
-            val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+            val dir = recordingsDir()
+            // Milliseconds + random suffix: two calls in the same second never share a file name
+            val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date())
+            val suffix = Random.nextInt(0x10000).toString(16).padStart(4, '0')
             val prefix = if (isIncomingCall) "INC_CALL_REC" else "OUT_CALL_REC"
-            currentRecordingFile = File(dir, "${prefix}_${timeStamp}.wav")
+            val baseName = "${prefix}_${timeStamp}_$suffix"
+            currentRecordingFile = File(dir, "$baseName.wav")
 
             var startedSuccessfully = startPcmAudioRecord(currentRecordingFile!!)
 
             if (!startedSuccessfully) {
-                currentRecordingFile = File(dir, "${prefix}_${timeStamp}.m4a")
+                currentRecordingFile = File(dir, "$baseName.m4a")
                 val audioSources = arrayOf(
-                    MediaRecorder.AudioSource.MIC,
-                    MediaRecorder.AudioSource.VOICE_RECOGNITION,
-                    MediaRecorder.AudioSource.DEFAULT,
                     MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+                    MediaRecorder.AudioSource.VOICE_RECOGNITION,
+                    MediaRecorder.AudioSource.MIC,
+                    MediaRecorder.AudioSource.DEFAULT,
                     MediaRecorder.AudioSource.CAMCORDER
                 )
 
@@ -331,10 +434,10 @@ class MainActivity : FlutterActivity() {
             val bufferSize = Math.max(minBufSize, 4096)
 
             val sources = intArrayOf(
-                MediaRecorder.AudioSource.MIC,
-                MediaRecorder.AudioSource.VOICE_RECOGNITION,
-                MediaRecorder.AudioSource.DEFAULT,
                 MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+                MediaRecorder.AudioSource.VOICE_RECOGNITION,
+                MediaRecorder.AudioSource.MIC,
+                MediaRecorder.AudioSource.DEFAULT,
                 MediaRecorder.AudioSource.CAMCORDER
             )
 
@@ -390,15 +493,14 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun stopPcmAudioRecord() {
-        isPcmRecording = false
+    /** Blocking (joins the writer thread): call from [ioExecutor] only. */
+    private fun stopPcmAudioRecord(record: AudioRecord?, thread: Thread?) {
         try {
-            pcmAudioRecord?.stop()
-            pcmAudioRecord?.release()
+            record?.stop()
+            record?.release()
         } catch (_: Exception) {}
-        pcmAudioRecord = null
         try {
-            pcmRecordThread?.join(10000)
+            thread?.join(10000)
         } catch (_: Exception) {}
     }
 
@@ -446,60 +548,73 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    /**
+     * Stops the recording. State is reset immediately on the calling (main) thread; finishing the
+     * file (joining the PCM writer, reading the duration) happens on [ioExecutor]. Flutter receives
+     * the file PATH plus the call's number / start time / SIM — it reads and encodes the audio itself.
+     */
     private fun stopCallRecording() {
         try {
-            if (isRecording || mediaRecorder != null || isPcmRecording) {
-                if (isPcmRecording) {
-                    stopPcmAudioRecord()
-                }
-                try {
-                    mediaRecorder?.stop()
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-                try {
-                    mediaRecorder?.release()
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-                mediaRecorder = null
-                isRecording = false
+            if (!(isRecording || mediaRecorder != null || isPcmRecording)) return
 
+            val wasPcm = isPcmRecording
+            isPcmRecording = false // lets the writer thread finish the loop
+            val record = pcmAudioRecord
+            val thread = pcmRecordThread
+            pcmAudioRecord = null
+            pcmRecordThread = null
+            val recorder = mediaRecorder
+            mediaRecorder = null
+            isRecording = false
+
+            val file = currentRecordingFile
+            currentRecordingFile = null
+            val number = callNumber
+            val startedAt = callStartedAtMs
+            val simSlot = callSimSlot
+            val incoming = isIncomingCall
+
+            try {
                 val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-                try {
-                    audioManager.mode = AudioManager.MODE_NORMAL
-                } catch (_: Exception) {}
+                audioManager.mode = AudioManager.MODE_NORMAL
+            } catch (_: Exception) {}
 
-                showRecordingNotification(false, "")
-                methodChannel?.invokeMethod("onCallRecordingStatus", mapOf("isRecording" to false))
+            showRecordingNotification(false, "")
+            methodChannel?.invokeMethod("onCallRecordingStatus", mapOf("isRecording" to false))
 
-                val file = currentRecordingFile
-                if (file != null && file.exists() && file.length() > 0) {
-                    showToast("✅ Call Audio Saved & Syncing to MongoDB...")
-                    var durSec = 1
+            ioExecutor.execute {
+                if (wasPcm) stopPcmAudioRecord(record, thread)
+                try { recorder?.stop() } catch (e: Exception) { e.printStackTrace() }
+                try { recorder?.release() } catch (e: Exception) { e.printStackTrace() }
+
+                if (file != null && file.exists() && file.length() > 44) {
+                    var durSec = 0
                     try {
                         val mmr = MediaMetadataRetriever()
                         mmr.setDataSource(file.absolutePath)
                         val durStr = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-                        val durMs = durStr?.toLongOrNull() ?: 1000L
-                        durSec = (durMs / 1000).toInt().coerceAtLeast(1)
+                        val durMs = durStr?.toLongOrNull() ?: 0L
+                        durSec = (durMs / 1000).toInt()
                         mmr.release()
                     } catch (_: Exception) {
-                        durSec = (file.length() / (16000 * 2)).toInt().coerceAtLeast(1)
+                        durSec = 0
                     }
-
-                    val bytes = file.readBytes()
-                    val base64Audio = Base64.encodeToString(bytes, Base64.NO_WRAP)
-
-                    methodChannel?.invokeMethod("onRecordingSaved", mapOf(
+                    if (durSec <= 0 && file.name.endsWith(".wav")) {
+                        durSec = ((file.length() - 44) / (16000 * 2)).toInt()
+                    }
+                    showToast("✅ Call audio saved, uploading...")
+                    invokeOnMain("onRecordingSaved", mapOf(
                         "filePath" to file.absolutePath,
                         "fileName" to file.name,
-                        "audioData" to base64Audio,
-                        "durationSeconds" to durSec,
+                        "durationSeconds" to durSec.coerceAtLeast(1),
                         "timestamp" to System.currentTimeMillis(),
-                        "isIncoming" to isIncomingCall
+                        "callStartedAtMs" to startedAt,
+                        "phoneNumber" to number,
+                        "simSlot" to simSlot,
+                        "isIncoming" to incoming
                     ))
                 } else {
+                    try { file?.delete() } catch (_: Exception) {}
                     showToast("⚠️ Call ended before audio buffer was written")
                 }
             }
@@ -518,7 +633,7 @@ class MainActivity : FlutterActivity() {
             if (filePath.isNotEmpty()) {
                 val f = File(filePath)
                 if (f.exists() && f.length() > 0) {
-                    playLocalAudioFile(f.absolutePath, result)
+                    playLocalAudioFile(f.absolutePath, result, null)
                     return
                 }
             }
@@ -533,7 +648,7 @@ class MainActivity : FlutterActivity() {
                         val ext = if (isWav) ".wav" else ".m4a"
                         val tempFile = File(cacheDir, "temp_b64_play_${System.currentTimeMillis()}$ext")
                         tempFile.writeBytes(bytes)
-                        playLocalAudioFile(tempFile.absolutePath, result)
+                        playLocalAudioFile(tempFile.absolutePath, result, tempFile)
                         return
                     }
                 } catch (e: Exception) {
@@ -541,42 +656,24 @@ class MainActivity : FlutterActivity() {
                 }
             }
 
-            // 3. Try local cache folder by matching filename
-            val targetUrl = if (audioUrl.isNotEmpty()) audioUrl else filePath
-            if (targetUrl.isNotEmpty()) {
-                val fileName = Uri.parse(targetUrl).lastPathSegment ?: ""
-                if (fileName.isNotEmpty()) {
-                    val localDir = File(cacheDir, "call_recordings")
-                    val localFile = File(localDir, fileName)
-                    if (localFile.exists() && localFile.length() > 0) {
-                        playLocalAudioFile(localFile.absolutePath, result)
-                        return
+            // 3. Download or stream via HTTP(S) (the URL already carries ?token=)
+            if (audioUrl.startsWith("http")) {
+                ioExecutor.execute {
+                    val downloaded = File(cacheDir, "temp_play_${System.currentTimeMillis()}.audio")
+                    try {
+                        val url = java.net.URL(audioUrl)
+                        val conn = url.openConnection()
+                        conn.connectTimeout = 8000
+                        conn.readTimeout = 20000
+                        val bytes = conn.getInputStream().use { it.readBytes() }
+                        downloaded.writeBytes(bytes)
+                        mainHandler.post { playLocalAudioFile(downloaded.absolutePath, result, downloaded) }
+                    } catch (e: Exception) {
+                        try { downloaded.delete() } catch (_: Exception) {}
+                        mainHandler.post { playDirectStream(audioUrl, result) }
                     }
                 }
-
-                // 4. Download or Stream via HTTP
-                if (targetUrl.startsWith("http")) {
-                    Thread {
-                        try {
-                            val url = java.net.URL(targetUrl)
-                            val conn = url.openConnection()
-                            conn.connectTimeout = 4000
-                            conn.readTimeout = 6000
-                            val bytes = conn.getInputStream().readBytes()
-                            val tempFile = File(cacheDir, "temp_play_${System.currentTimeMillis()}.m4a")
-                            tempFile.writeBytes(bytes)
-
-                            Handler(Looper.getMainLooper()).post {
-                                playLocalAudioFile(tempFile.absolutePath, result)
-                            }
-                        } catch (e: Exception) {
-                            Handler(Looper.getMainLooper()).post {
-                                playDirectStream(targetUrl, result)
-                            }
-                        }
-                    }.start()
-                    return
-                }
+                return
             }
 
             showToast("⚠️ Recording audio file not found on device or server.")
@@ -587,16 +684,33 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun playLocalAudioFile(filePath: String, result: MethodChannel.Result) {
+    private fun onPlaybackDone(path: String) {
+        deleteTempPlaybackFile()
+        isPlayerPrepared = false
+        methodChannel?.invokeMethod("onPlaybackCompleted", mapOf("path" to path))
+    }
+
+    private fun deleteTempPlaybackFile() {
+        val f = currentTempPlaybackFile
+        currentTempPlaybackFile = null
+        if (f != null) {
+            try { f.delete() } catch (_: Exception) {}
+        }
+    }
+
+    /** [tempFile] is deleted when playback stops or completes. */
+    private fun playLocalAudioFile(filePath: String, result: MethodChannel.Result, tempFile: File?) {
         try {
             val f = File(filePath)
             if (!f.exists() || f.length() == 0L) {
+                tempFile?.delete()
                 showToast("⚠️ Audio file is empty or missing")
                 result.success(false)
                 return
             }
 
             stopAudioPlayback()
+            currentTempPlaybackFile = tempFile
 
             val audioManager = getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
             try {
@@ -619,19 +733,18 @@ class MainActivity : FlutterActivity() {
                 setVolume(1.0f, 1.0f)
                 setDataSource(filePath)
                 prepare()
+                isPlayerPrepared = true
                 start()
-                setOnCompletionListener {
-                    methodChannel?.invokeMethod("onPlaybackCompleted", mapOf("path" to filePath))
-                }
+                setOnCompletionListener { onPlaybackDone(filePath) }
                 setOnErrorListener { _, _, _ ->
-                    methodChannel?.invokeMethod("onPlaybackCompleted", mapOf("path" to filePath))
+                    onPlaybackDone(filePath)
                     true
                 }
             }
-            showToast("▶️ Playing audio out loud...")
             result.success(true)
         } catch (e: Exception) {
             e.printStackTrace()
+            deleteTempPlaybackFile()
             result.success(false)
         }
     }
@@ -661,22 +774,38 @@ class MainActivity : FlutterActivity() {
                 setVolume(1.0f, 1.0f)
                 setDataSource(urlPath)
                 setOnPreparedListener { mp ->
+                    isPlayerPrepared = true
                     try { mp.start() } catch (_: Exception) {}
                 }
                 prepareAsync()
-                setOnCompletionListener {
-                    methodChannel?.invokeMethod("onPlaybackCompleted", mapOf("path" to urlPath))
-                }
+                setOnCompletionListener { onPlaybackDone(urlPath) }
                 setOnErrorListener { _, _, _ ->
-                    methodChannel?.invokeMethod("onPlaybackCompleted", mapOf("path" to urlPath))
+                    onPlaybackDone(urlPath)
                     true
                 }
             }
-            showToast("▶️ Playing audio stream...")
             result.success(true)
         } catch (e: Exception) {
             e.printStackTrace()
             result.success(false)
+        }
+    }
+
+    /** Real player position / duration in ms for the progress bar. */
+    private fun getPlaybackPosition(): Map<String, Any> {
+        val mp = mediaPlayer
+        if (mp == null || !isPlayerPrepared) {
+            return mapOf("position" to 0, "duration" to 0, "isPlaying" to false)
+        }
+        return try {
+            val dur = mp.duration
+            mapOf(
+                "position" to mp.currentPosition,
+                "duration" to (if (dur > 0) dur else 0),
+                "isPlaying" to mp.isPlaying
+            )
+        } catch (_: Exception) {
+            mapOf("position" to 0, "duration" to 0, "isPlaying" to false)
         }
     }
 
@@ -692,17 +821,31 @@ class MainActivity : FlutterActivity() {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+        isPlayerPrepared = false
+        deleteTempPlaybackFile()
+    }
+
+    /** Leftover playback temp files from an earlier run. */
+    private fun cleanupStaleTempFiles() {
+        try {
+            cacheDir.listFiles()?.forEach { f ->
+                if (f.isFile && (f.name.startsWith("temp_play_") || f.name.startsWith("temp_b64_play_"))) {
+                    f.delete()
+                }
+            }
+        } catch (_: Exception) {}
     }
 
     override fun onDestroy() {
-        super.onDestroy()
         try {
             if (telephonyReceiver != null) {
                 unregisterReceiver(telephonyReceiver)
             }
             if (callLogObserver != null) {
                 contentResolver.unregisterContentObserver(callLogObserver!!)
+                callLogObserver = null
             }
+            mainHandler.removeCallbacks(callLogChanged)
             if (isRecording) {
                 stopCallRecording()
             }
@@ -711,11 +854,43 @@ class MainActivity : FlutterActivity() {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+        ioExecutor.shutdown() // queued work (e.g. finishing a recording file) still completes
+        super.onDestroy()
+    }
+
+    /** The call-capable phone account of the SIM in [slotIndex] (0-based), or null. */
+    private fun phoneAccountForSlot(slotIndex: Int): PhoneAccountHandle? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return null
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) return null
+        try {
+            val sm = getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as? SubscriptionManager ?: return null
+            val info = sm.getActiveSubscriptionInfoForSimSlotIndex(slotIndex) ?: return null
+            val telecom = getSystemService(Context.TELECOM_SERVICE) as? TelecomManager ?: return null
+            val telephony = getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+            val iccId = try { info.iccId } catch (_: Exception) { null }
+            for (handle in telecom.callCapablePhoneAccounts) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && telephony != null) {
+                    try {
+                        if (telephony.getSubscriptionId(handle) == info.subscriptionId) return handle
+                    } catch (_: Exception) {}
+                }
+                val id = handle.id ?: continue
+                if (id == info.subscriptionId.toString()) return handle
+                if (!iccId.isNullOrEmpty() && id.equals(iccId, ignoreCase = true)) return handle
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return null
     }
 
     private fun makeDirectCall(phoneNumber: String, slotIndex: Int) {
         val clean = phoneNumber.trim()
         if (clean.isEmpty()) return
+
+        lastDialedNumber = clean
+        lastDialedAtMs = System.currentTimeMillis()
+        lastDialedSlot = slotIndex + 1
 
         try {
             val hasCallPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED
@@ -723,14 +898,13 @@ class MainActivity : FlutterActivity() {
             val intent = Intent(intentAction, Uri.parse("tel:${Uri.encode(clean)}"))
             intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
 
-            if (slotIndex == 1) {
-                intent.putExtra("simSlot", 1)
-                intent.putExtra("com.android.phone.extra.slot", 1)
-                intent.putExtra("subscription", 2)
+            // Standard way to pick the SIM: the phone account of that subscription
+            val handle = phoneAccountForSlot(slotIndex)
+            if (handle != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                intent.putExtra(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, handle)
             } else {
-                intent.putExtra("simSlot", 0)
-                intent.putExtra("com.android.phone.extra.slot", 0)
-                intent.putExtra("subscription", 1)
+                // Vendor dialers that ignore the handle still honour this slot hint
+                intent.putExtra("com.android.phone.extra.slot", slotIndex)
             }
 
             startActivity(intent)
@@ -746,27 +920,28 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun getRealDeviceCallLogs(): List<Map<String, Any?>> {
+    // Returns calls made at or after `since` (epoch ms), newest first. Runs on ioExecutor.
+    private fun getRealDeviceCallLogs(since: Long = 0L): List<Map<String, Any?>> {
         val logsList = mutableListOf<Map<String, Any?>>()
         val hasPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CALL_LOG) == PackageManager.PERMISSION_GRANTED
         if (!hasPermission) {
             return logsList
         }
 
-        val subMap = HashMap<String, Int>()
-        try {
-            val subscriptionManager = getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as? SubscriptionManager
-            val activeList = subscriptionManager?.activeSubscriptionInfoList
-            if (activeList != null) {
-                for (info in activeList) {
-                    val slot = info.simSlotIndex + 1
-                    subMap[info.subscriptionId.toString()] = slot
-                    if (info.iccId != null && info.iccId.isNotEmpty()) {
-                        subMap[info.iccId] = slot
-                    }
-                }
-            }
-        } catch (_: Exception) {}
+        // PHONE_ACCOUNT_ID holds the subscription id (newer Android) or the SIM's ICCID (older):
+        // map by exact equality only. Anything else is reported as 0 = unknown.
+        val subIdToSlot = HashMap<String, Int>()
+        val iccIdToSlot = HashMap<String, Int>()
+        val subs = activeSubscriptions()
+        for (info in subs) {
+            val slot = info.simSlotIndex + 1
+            subIdToSlot[info.subscriptionId.toString()] = slot
+            try {
+                val icc = info.iccId
+                if (!icc.isNullOrEmpty()) iccIdToSlot[icc.lowercase(Locale.US)] = slot
+            } catch (_: Exception) {}
+        }
+        val onlySlot = if (subs.size == 1) subs[0].simSlotIndex + 1 else 0
 
         try {
             val uri = CallLog.Calls.CONTENT_URI
@@ -780,8 +955,11 @@ class MainActivity : FlutterActivity() {
                 CallLog.Calls.PHONE_ACCOUNT_ID
             )
             val sortOrder = "${CallLog.Calls.DATE} DESC"
+            // Filter by date in the query instead of a fixed row cap, so no work-session call is dropped
+            val selection = "${CallLog.Calls.DATE} >= ?"
+            val selectionArgs = arrayOf(since.toString())
 
-            val cursor = contentResolver.query(uri, projection, null, null, sortOrder)
+            val cursor = contentResolver.query(uri, projection, selection, selectionArgs, sortOrder)
             cursor?.use {
                 val idIdx = it.getColumnIndex(CallLog.Calls._ID)
                 val numberIdx = it.getColumnIndex(CallLog.Calls.NUMBER)
@@ -792,7 +970,7 @@ class MainActivity : FlutterActivity() {
                 val accountIdx = it.getColumnIndex(CallLog.Calls.PHONE_ACCOUNT_ID)
 
                 var count = 0
-                while (it.moveToNext() && count < 100) {
+                while (it.moveToNext() && count < MAX_CALL_LOGS) {
                     val id = if (idIdx != -1) it.getString(idIdx) ?: "$count" else "$count"
                     val number = if (numberIdx != -1) it.getString(numberIdx) ?: "" else ""
                     val rawName = if (nameIdx != -1) it.getString(nameIdx) else null
@@ -802,15 +980,11 @@ class MainActivity : FlutterActivity() {
                     val durationLong = if (durationIdx != -1) it.getLong(durationIdx) else 0L
                     val phoneAccountId = if (accountIdx != -1) it.getString(accountIdx) ?: "" else ""
 
-                    var simSlot = 1
-                    if (phoneAccountId.isNotEmpty()) {
-                        if (subMap.containsKey(phoneAccountId)) {
-                            simSlot = subMap[phoneAccountId] ?: 1
-                        } else if (phoneAccountId.contains("1") || phoneAccountId.endsWith("_1") || phoneAccountId == "1") {
-                            simSlot = 2
-                        } else if (phoneAccountId.contains("0") || phoneAccountId.endsWith("_0") || phoneAccountId == "0") {
-                            simSlot = 1
-                        }
+                    val simSlot = when {
+                        phoneAccountId.isEmpty() -> onlySlot
+                        subIdToSlot.containsKey(phoneAccountId) -> subIdToSlot[phoneAccountId] ?: 0
+                        iccIdToSlot.containsKey(phoneAccountId.lowercase(Locale.US)) -> iccIdToSlot[phoneAccountId.lowercase(Locale.US)] ?: 0
+                        else -> onlySlot
                     }
 
                     val typeStr = when (typeInt) {
@@ -842,11 +1016,14 @@ class MainActivity : FlutterActivity() {
         return logsList
     }
 
+    /** Contact name for a number; lookups are cached (called for every call-log row). */
     private fun resolveContactName(number: String, cachedName: String?): String {
         if (!cachedName.isNullOrEmpty() && cachedName != "Unknown" && cachedName != number) {
             return cachedName
         }
         if (number.isEmpty()) return "Unknown"
+        contactNameCache[number]?.let { return it }
+        var resolvedName = number
         try {
             val hasPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
             if (hasPermission) {
@@ -859,14 +1036,15 @@ class MainActivity : FlutterActivity() {
                         if (nameIdx != -1) {
                             val resolved = it.getString(nameIdx)
                             if (!resolved.isNullOrEmpty()) {
-                                return resolved
+                                resolvedName = resolved
                             }
                         }
                     }
                 }
             }
         } catch (_: Exception) {}
-        return if (number.isNotEmpty()) number else "Unknown"
+        contactNameCache[number] = resolvedName
+        return resolvedName
     }
 
     private fun openNativeSaveContactIntent(phoneNumber: String, name: String) {
@@ -903,9 +1081,9 @@ class MainActivity : FlutterActivity() {
         val isStandardIndianNumber = cleanNumber.matches(Regex("^[6-9][0-9]{9}$"))
         if (isStandardIndianNumber) {
             response["isValid"] = true
-            response["isHardwareMatch"] = true
+            response["isHardwareMatch"] = false // the number format is valid; ownership is not verified here
             response["slotIndex"] = foundSim?.get("slotIndex") ?: targetSlot
-            response["carrierName"] = foundSim?.get("carrierName") ?: "Detected Carrier"
+            response["carrierName"] = foundSim?.get("carrierName") ?: ""
             response["formattedNumber"] = "+91 $cleanNumber"
             return response
         } else {
@@ -954,6 +1132,13 @@ class MainActivity : FlutterActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == PERMISSION_REQ_CODE) {
             val allGranted = grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }
+            // The observer could not be registered at start-up without READ_CALL_LOG: do it now
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CALL_LOG) == PackageManager.PERMISSION_GRANTED) {
+                registerCallLogObserver()
+            }
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
+                contactNameCache.clear() // earlier lookups ran without contacts access
+            }
             pendingPermissionResult?.success(allGranted)
             pendingPermissionResult = null
         }
@@ -972,14 +1157,14 @@ class MainActivity : FlutterActivity() {
                         val slot = info.simSlotIndex // 0 for SIM 1, 1 for SIM 2
                         simMap["slotIndex"] = slot
                         simMap["subscriptionId"] = info.subscriptionId
-                        
+
                         val carrier = info.carrierName?.toString()?.trim() ?: ""
                         val display = info.displayName?.toString()?.trim() ?: ""
-                        
+
                         simMap["displayName"] = if (display.isNotEmpty()) display else (if (carrier.isNotEmpty()) carrier else "SIM ${slot + 1}")
-                        simMap["carrierName"] = if (carrier.isNotEmpty()) carrier else (if (display.isNotEmpty()) display else "Operator ${slot + 1}")
+                        simMap["carrierName"] = if (carrier.isNotEmpty()) carrier else (if (display.isNotEmpty()) display else "SIM ${slot + 1}")
                         simMap["countryIso"] = info.countryIso ?: ""
-                        
+
                         var phoneNum = ""
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                             try {
@@ -1003,15 +1188,15 @@ class MainActivity : FlutterActivity() {
             val telephonyManager = getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
             val simOp = telephonyManager?.simOperatorName?.trim()
             val netOp = telephonyManager?.networkOperatorName?.trim()
-            val detectedCarrier = if (!simOp.isNullOrEmpty()) simOp else if (!netOp.isNullOrEmpty()) netOp else "Jio True5G"
+            val detectedCarrier = if (!simOp.isNullOrEmpty()) simOp else if (!netOp.isNullOrEmpty()) netOp else "SIM 1"
 
             val primarySim = HashMap<String, Any?>()
             primarySim["slotIndex"] = 0
-            primarySim["subscriptionId"] = 1
+            primarySim["subscriptionId"] = -1
             primarySim["displayName"] = detectedCarrier
             primarySim["carrierName"] = detectedCarrier
             primarySim["number"] = ""
-            primarySim["countryIso"] = "in"
+            primarySim["countryIso"] = ""
             simList.add(primarySim)
         }
 

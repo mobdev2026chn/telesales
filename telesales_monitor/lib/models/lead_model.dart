@@ -25,7 +25,8 @@ class LeadModel {
   final DateTime dateAdded;
   DateTime lastCallDate;
   String note;
-  String assignedTo; // Scoped to individual caller
+  String assignedTo; // assigned caller name (display / legacy fallback)
+  String assignedCallerId; // assigned caller user id (authoritative)
 
   LeadModel({
     required this.id,
@@ -37,6 +38,7 @@ class LeadModel {
     required this.lastCallDate,
     required this.note,
     this.assignedTo = '',
+    this.assignedCallerId = '',
   });
 
   String get statusLabel {

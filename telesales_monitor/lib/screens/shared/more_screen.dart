@@ -18,7 +18,6 @@ class MoreScreen extends StatefulWidget {
 }
 
 class _MoreScreenState extends State<MoreScreen> {
-  bool _isReportSent = false;
   bool _showBanner = false;
   DateTimeRange? _reportDateRange;
 
@@ -51,19 +50,11 @@ class _MoreScreenState extends State<MoreScreen> {
     }
   }
 
+  // Nothing is exported on the device: point the user to the web portal.
   void _triggerExport() {
-    setState(() {
-      _isReportSent = true;
-      _showBanner = true;
-    });
-
+    setState(() => _showBanner = true);
     Future.delayed(const Duration(seconds: 4), () {
-      if (mounted) {
-        setState(() {
-          _showBanner = false;
-          _isReportSent = false;
-        });
-      }
+      if (mounted) setState(() => _showBanner = false);
     });
   }
 
@@ -469,7 +460,7 @@ class _MoreScreenState extends State<MoreScreen> {
                             const Icon(Icons.download_rounded, size: 16, color: AppTheme.ink900),
                             const SizedBox(width: 6),
                             Text(
-                              _isReportSent ? '✓ EXPORTED & DOWNLOADED' : 'DOWNLOAD REPORT (XLSX / CSV)',
+                              'EXPORT REPORT · WEB PORTAL',
                               style: AppTheme.label(size: 10.5, color: AppTheme.ink900, letterSpacing: 0.12),
                             ),
                           ],
@@ -485,9 +476,7 @@ class _MoreScreenState extends State<MoreScreen> {
               Builder(
                 builder: (ctx) {
                   final count = tele.recordings.length;
-                  final usedMb = count * 1.8;
-                  final usedGb = (usedMb / 1024).clamp(0.02, 5.0);
-                  final freeGb = (5.0 - usedGb).clamp(0.0, 5.0);
+                  final pending = tele.pendingUploadCount;
 
                   return NeoCard(
                     backgroundColor: AppTheme.white,
@@ -504,37 +493,17 @@ class _MoreScreenState extends State<MoreScreen> {
                               style: AppTheme.label(size: 9, color: AppTheme.ink900, letterSpacing: 0.18),
                             ),
                             Text(
-                              '$count SAVED AUDIOS',
+                              '$count ON SERVER',
                               style: AppTheme.mono(size: 9, color: AppTheme.greenDark, weight: FontWeight.w700),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 10),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(999),
-                          child: Container(
-                            height: 8,
-                            decoration: BoxDecoration(
-                              color: AppTheme.paper,
-                              borderRadius: BorderRadius.circular(999),
-                              border: Border.all(color: AppTheme.ink900, width: 0.8),
-                            ),
-                            child: FractionallySizedBox(
-                              alignment: Alignment.centerLeft,
-                              widthFactor: (usedGb / 5.0).clamp(0.05, 1.0),
-                              child: Container(color: AppTheme.greenNeon),
-                            ),
-                          ),
-                        ),
                         const SizedBox(height: 8),
                         Text(
-                          '${usedGb.toStringAsFixed(2)} GB used · ${freeGb.toStringAsFixed(2)} GB free of 5 GB storage',
+                          pending > 0
+                              ? '$pending recording(s) on this device waiting to upload — retried automatically.'
+                              : 'No recordings waiting to upload.',
                           style: AppTheme.mono(size: 10, color: AppTheme.muted),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Hardware recording audio saved locally and backed up to cloud vault.',
-                          style: AppTheme.body(size: 9.5, color: AppTheme.muted),
                         ),
                       ],
                     ),
@@ -557,7 +526,9 @@ class _MoreScreenState extends State<MoreScreen> {
                         Text('Sync device call log', style: AppTheme.bodyBold(size: 15, color: AppTheme.ink900)),
                         const SizedBox(height: 2),
                         Text(
-                          'Last synced ${DateFormat("h:mm a").format(DateTime.now())}',
+                          tele.lastCallSyncAt != null
+                              ? 'Last synced ${DateFormat("h:mm a").format(tele.lastCallSyncAt!)}'
+                              : 'Not synced yet',
                           style: AppTheme.body(size: 12, color: AppTheme.muted),
                         ),
                       ],
@@ -624,7 +595,7 @@ class _MoreScreenState extends State<MoreScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    '✓  SUCCESSFULLY EXPORTED — REPORT SENT',
+                    TeleProvider.exportUnavailableMessage.toUpperCase(),
                     style: AppTheme.label(
                       size: 10,
                       color: AppTheme.limeYellow,
@@ -681,10 +652,11 @@ class _MoreScreenState extends State<MoreScreen> {
                 side: const BorderSide(color: AppTheme.ink900, width: 1.2),
               ),
             ),
-            onPressed: () {
+            onPressed: () async {
+              final navigator = Navigator.of(context);
               Navigator.of(ctx).pop();
-              tele.purgeUserSession();
-              Navigator.of(context).pushAndRemoveUntil(
+              await tele.purgeUserSession();
+              navigator.pushAndRemoveUntil(
                 PageRouteBuilder(
                   pageBuilder: (context, animation, secondaryAnimation) => const LoginScreen(),
                   transitionsBuilder: (context, animation, secondaryAnimation, child) =>

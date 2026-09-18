@@ -240,10 +240,11 @@ class TopHeader extends StatelessWidget {
                 side: const BorderSide(color: AppTheme.ink900, width: 1.2),
               ),
             ),
-            onPressed: () {
+            onPressed: () async {
+              final navigator = Navigator.of(context);
               Navigator.of(ctx).pop();
-              tele.purgeUserSession();
-              Navigator.of(context).pushAndRemoveUntil(
+              await tele.purgeUserSession();
+              navigator.pushAndRemoveUntil(
                 PageRouteBuilder(
                   pageBuilder: (context, animation, secondaryAnimation) => const LoginScreen(),
                   transitionsBuilder: (context, animation, secondaryAnimation, child) =>

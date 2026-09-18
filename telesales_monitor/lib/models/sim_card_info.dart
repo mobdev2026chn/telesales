@@ -17,11 +17,11 @@ class SimCardInfo {
 
   factory SimCardInfo.fromMap(Map<dynamic, dynamic> map) {
     return SimCardInfo(
-      slotIndex: (map['slotIndex'] is int) ? map['slotIndex'] as int : 0,
-      subscriptionId: (map['subscriptionId'] is int) ? map['subscriptionId'] as int : 1,
+      slotIndex: (map['slotIndex'] as num?)?.toInt() ?? 0,
+      subscriptionId: (map['subscriptionId'] as num?)?.toInt() ?? -1,
       displayName: (map['displayName'] as String?)?.isNotEmpty == true
           ? map['displayName'] as String
-          : 'SIM ${((map['slotIndex'] as int? ?? 0) + 1)}',
+          : 'SIM ${(((map['slotIndex'] as num?)?.toInt() ?? 0) + 1)}',
       carrierName: (map['carrierName'] as String?)?.isNotEmpty == true
           ? map['carrierName'] as String
           : 'Carrier',

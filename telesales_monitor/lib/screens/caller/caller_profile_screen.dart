@@ -302,11 +302,11 @@ class _CallerProfileScreenState extends State<CallerProfileScreen> {
   Widget build(BuildContext context) {
     final tele = Provider.of<TeleProvider>(context);
 
-    final callerName = tele.callerName.isNotEmpty ? tele.callerName : 'Device Caller';
-    final phoneStr = tele.verifiedTrackingNumber.isNotEmpty ? tele.verifiedTrackingNumber : '+91 98250 12340';
-    final total = tele.trackedTotalCalls;
-    final connected = tele.trackedConnectedCalls;
-    final talkTimeStr = tele.trackedTalkTimeFormatted;
+    final callerName = tele.callerName.isNotEmpty ? tele.callerName : '—';
+    final phoneStr = tele.verifiedTrackingNumber.isNotEmpty ? tele.verifiedTrackingNumber : '—';
+    final total = tele.totalCalls;
+    final connected = tele.connectedCalls;
+    final talkTimeStr = tele.talkTimeFormatted;
 
     return RefreshIndicator(
       color: AppTheme.greenNeon,
@@ -545,8 +545,8 @@ class _CallerProfileScreenState extends State<CallerProfileScreen> {
                 ),
                 const SizedBox(height: 16),
                 _TargetBar(
-                  label: 'Total calls ($total logged)',
-                  progress: total > 0 ? (total / 50).clamp(0.05, 1.0) : 0.05,
+                  label: 'Total calls ($total / ${tele.dailyTarget} target)',
+                  progress: total > 0 ? (total / tele.dailyTarget).clamp(0.05, 1.0) : 0.05,
                   color: AppTheme.greenNeon,
                 ),
                 const SizedBox(height: 14),
@@ -556,10 +556,9 @@ class _CallerProfileScreenState extends State<CallerProfileScreen> {
                   color: AppTheme.limeYellow,
                 ),
                 const SizedBox(height: 14),
-                _TargetBar(
-                  label: 'Talk time ($talkTimeStr)',
-                  progress: total > 0 ? 0.75 : 0.05,
-                  color: AppTheme.greenGrass,
+                Text(
+                  'Talk time: $talkTimeStr',
+                  style: AppTheme.bodyBold(size: 12, color: AppTheme.ink900),
                 ),
               ],
             ),
@@ -637,10 +636,11 @@ class _CallerProfileScreenState extends State<CallerProfileScreen> {
                 side: const BorderSide(color: AppTheme.ink900, width: 1.2),
               ),
             ),
-            onPressed: () {
+            onPressed: () async {
+              final navigator = Navigator.of(context);
               Navigator.of(ctx).pop();
-              tele.purgeUserSession();
-              Navigator.of(context).pushAndRemoveUntil(
+              await tele.purgeUserSession();
+              navigator.pushAndRemoveUntil(
                 PageRouteBuilder(
                   pageBuilder: (context, animation, secondaryAnimation) => const LoginScreen(),
                   transitionsBuilder: (context, animation, secondaryAnimation, child) =>

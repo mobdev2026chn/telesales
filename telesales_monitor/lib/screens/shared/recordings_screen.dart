@@ -21,6 +21,16 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
   final Map<String, int> _ratings = {};
   final Map<String, TextEditingController> _commentCtrls = {};
 
+  static String _fmt(Duration d) => '${d.inMinutes}m ${(d.inSeconds % 60).toString().padLeft(2, '0')}s';
+
+  /// Real player position / length while playing; the stored call duration otherwise ("—" if unknown).
+  String _playbackLabel(RecordingModel? r, bool isPlaying) {
+    if (r == null) return '—';
+    final total = r.playbackDuration ?? (r.duration.inSeconds > 0 ? r.duration : null);
+    if (isPlaying) return '${_fmt(r.playbackPosition)} / ${total != null ? _fmt(total) : '—'}';
+    return r.duration.inSeconds > 0 ? r.durationFormatted : '—';
+  }
+
   @override
   void dispose() {
     for (var ctrl in _commentCtrls.values) {
@@ -212,7 +222,7 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
         'contactName': r.clientName,
         'phoneNumber': r.clientPhone,
         'timeStr': '$dateStr · ${r.duration.inMinutes}m ${r.duration.inSeconds % 60}s',
-        'quote': r.note.isNotEmpty ? '"${r.note}"' : '"Real voice call recorded on SIM hardware."',
+        'quote': r.note.isNotEmpty ? '"${r.note}"' : '',
         'isPlaying': r.isPlaying,
         'progress': r.progress,
       });
@@ -415,7 +425,7 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              isPlaying ? '${(progress * (origRec != null && origRec.duration.inSeconds > 0 ? origRec.duration.inSeconds : 60)).toInt()}s / ${origRec?.durationFormatted ?? '0m 45s'}' : (origRec?.durationFormatted ?? '0m 45s'),
+                              _playbackLabel(origRec, isPlaying),
                               style: AppTheme.mono(size: 9.5, color: isPlaying ? AppTheme.greenDark : AppTheme.muted),
                             ),
                             Text(
@@ -442,11 +452,13 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                         const SizedBox(height: 10),
 
                         // Quote Block
-                        Text(
-                          quote,
-                          style: AppTheme.italicSerif(size: 12.5, color: AppTheme.ink900),
-                        ),
-                        const SizedBox(height: 12),
+                        if (quote.isNotEmpty) ...[
+                          Text(
+                            quote,
+                            style: AppTheme.italicSerif(size: 12.5, color: AppTheme.ink900),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
 
                         // CALL QUALITY Section
                         Container(

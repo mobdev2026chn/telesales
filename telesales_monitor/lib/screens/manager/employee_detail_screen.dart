@@ -66,7 +66,7 @@ class EmployeeDetailScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'CALLER · ${employee.phone.isNotEmpty ? employee.phone : tele.verifiedTrackingNumber}',
+                  'CALLER · ${employee.phone.isNotEmpty ? employee.phone : '—'}',
                   style: AppTheme.label(size: 9, color: AppTheme.limeYellow, letterSpacing: 0.18),
                 ),
                 const SizedBox(height: 6),

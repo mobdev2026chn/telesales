@@ -10,10 +10,13 @@ class RecordingModel {
   final Duration duration;
   final String note;
   final String audioUrl;
+  final String fileName;
   String filePath;
   final String? audioData;
   bool isPlaying;
   double progress;
+  Duration playbackPosition = Duration.zero;
+  Duration? playbackDuration; // real length reported by the player
   int rating;
   String comment;
   String commentedBy;
@@ -29,6 +32,7 @@ class RecordingModel {
     required this.duration,
     required this.note,
     this.audioUrl = '',
+    this.fileName = '',
     this.filePath = '',
     this.audioData,
     this.isPlaying = false,
@@ -41,12 +45,7 @@ class RecordingModel {
   });
 
   factory RecordingModel.fromJson(Map<String, dynamic> json) {
-    int durationSec = 0;
-    if (json['durationSeconds'] is int) {
-      durationSec = json['durationSeconds'] as int;
-    } else if (json['duration'] is int) {
-      durationSec = json['duration'] as int;
-    }
+    final durationSec = ((json['durationSeconds'] ?? json['duration']) as num?)?.toInt() ?? 0;
 
     DateTime parsedDate = DateTime.now();
     if (json['createdAt'] != null) {
@@ -63,7 +62,7 @@ class RecordingModel {
       note: json['transcript']?.toString() ?? json['note']?.toString() ?? '',
       audioUrl: json['audioUrl']?.toString() ?? '',
       audioData: json['audioData']?.toString() ?? '',
-      rating: (json['rating'] is int) ? json['rating'] as int : (json['rating'] is double) ? (json['rating'] as double).toInt() : 0,
+      rating: (json['rating'] is num) ? (json['rating'] as num).toInt() : 0,
       comment: json['comment']?.toString() ?? '',
       commentedBy: json['commentedBy']?.toString() ?? '',
       commentedByRole: json['commentedByRole']?.toString() ?? '',

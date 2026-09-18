@@ -36,10 +36,25 @@ class _CallerHistoryScreenState extends State<CallerHistoryScreen> {
     final totalBreakMins = tele.totalBreakMinutes;
 
     // On-Duty Calculation
-    final onDutyDiff = DateTime.now().difference(tele.dutyStartTime);
+    final dutyStart = tele.dutyStartTime;
+    final onDutyDiff = dutyStart != null ? DateTime.now().difference(dutyStart) : Duration.zero;
     final dutyH = onDutyDiff.inHours;
     final dutyM = onDutyDiff.inMinutes % 60;
-    final dutyStr = dutyH > 0 ? '${dutyH}H ${dutyM.toString().padLeft(2, '0')}M' : '${dutyM}M';
+    final dutyStr = dutyStart == null ? '—' : (dutyH > 0 ? '${dutyH}H ${dutyM.toString().padLeft(2, '0')}M' : '${dutyM}M');
+
+    // Real split of the duty time: talk (device call log), breaks (logged), everything else
+    final dutySecs = onDutyDiff.inSeconds;
+    final breakSecs = totalBreakMins * 60;
+    final talkSecs = dutySecs > 0 ? totalSeconds.clamp(0, dutySecs) : totalSeconds;
+    final otherSecs = (dutySecs - talkSecs - breakSecs).clamp(0, 1 << 31);
+    final otherDur = Duration(seconds: otherSecs);
+    final otherStr = dutyStart == null
+        ? '—'
+        : (otherDur.inHours > 0 ? '${otherDur.inHours}H ${(otherDur.inMinutes % 60).toString().padLeft(2, '0')}M' : '${otherDur.inMinutes}M');
+    final connected = logs.where((c) => c.duration.inSeconds > 0).length;
+    final avgTalk = connected == 0 ? null : Duration(seconds: totalSeconds ~/ connected);
+    final avgTalkStr = avgTalk == null ? '—' : (avgTalk.inMinutes > 0 ? '${avgTalk.inMinutes}m ${avgTalk.inSeconds % 60}s' : '${avgTalk.inSeconds}s');
+    int flexOf(int secs) => secs <= 0 ? 0 : (secs * 1000 ~/ (dutySecs > 0 ? dutySecs : (talkSecs + breakSecs).clamp(1, 1 << 31))).clamp(1, 1000);
 
     // Date header
     final dateHeader = DateFormat('d MMM').format(DateTime.now()).toUpperCase();
@@ -97,26 +112,14 @@ class _CallerHistoryScreenState extends State<CallerHistoryScreen> {
                         ),
                         child: Row(
                           children: [
-                            // Talk
-                            Expanded(
-                              flex: 35,
-                              child: Container(color: AppTheme.greenDark),
-                            ),
-                            // Wrap-up
-                            Expanded(
-                              flex: 15,
-                              child: Container(color: AppTheme.limeYellow),
-                            ),
-                            // Break
-                            Expanded(
-                              flex: 12,
-                              child: Container(color: AppTheme.greenGrass),
-                            ),
-                            // Idle
-                            Expanded(
-                              flex: 38,
-                              child: Container(color: const Color(0xFF2A3622)),
-                            ),
+                            if (flexOf(talkSecs) > 0)
+                              Expanded(flex: flexOf(talkSecs), child: Container(color: AppTheme.greenDark)),
+                            if (flexOf(breakSecs) > 0)
+                              Expanded(flex: flexOf(breakSecs), child: Container(color: AppTheme.greenGrass)),
+                            if (flexOf(otherSecs) > 0)
+                              Expanded(flex: flexOf(otherSecs), child: Container(color: const Color(0xFF2A3622))),
+                            if (flexOf(talkSecs) + flexOf(breakSecs) + flexOf(otherSecs) == 0)
+                              const Expanded(child: SizedBox()),
                           ],
                         ),
                       ),
@@ -134,8 +137,8 @@ class _CallerHistoryScreenState extends State<CallerHistoryScreen> {
                         ),
                         Expanded(
                           child: _LegendItem(
-                            color: AppTheme.limeYellow,
-                            label: 'WRAP-UP · 28M',
+                            color: const Color(0xFF5A6650),
+                            label: 'OTHER · $otherStr',
                           ),
                         ),
                       ],
@@ -149,12 +152,7 @@ class _CallerHistoryScreenState extends State<CallerHistoryScreen> {
                             label: 'BREAK · ${totalBreakMins}M',
                           ),
                         ),
-                        Expanded(
-                          child: _LegendItem(
-                            color: const Color(0xFF5A6650),
-                            label: 'IDLE · 2H 32M',
-                          ),
-                        ),
+                        const Expanded(child: SizedBox()),
                       ],
                     ),
                   ],
@@ -179,7 +177,7 @@ class _CallerHistoryScreenState extends State<CallerHistoryScreen> {
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            totalCalls > 0 ? '$totalCalls' : '24',
+                            '$totalCalls',
                             style: AppTheme.headline(size: 32, color: AppTheme.ink900),
                           ),
                         ],
@@ -196,12 +194,12 @@ class _CallerHistoryScreenState extends State<CallerHistoryScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'AVG WRAP-UP',
+                            'AVG TALK',
                             style: AppTheme.label(size: 8.5, color: AppTheme.muted, letterSpacing: 0.12),
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            '42s',
+                            avgTalkStr,
                             style: AppTheme.headline(size: 32, color: AppTheme.ink900),
                           ),
                         ],
@@ -223,7 +221,7 @@ class _CallerHistoryScreenState extends State<CallerHistoryScreen> {
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            convertedCount > 0 ? '$convertedCount' : '2',
+                            '$convertedCount',
                             style: AppTheme.headline(size: 32, color: AppTheme.ink900),
                           ),
                         ],
@@ -265,23 +263,8 @@ class _CallerHistoryScreenState extends State<CallerHistoryScreen> {
                               ],
                             ),
                           ))
-                    else ...[
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('Tea break', style: AppTheme.body(size: 13, color: AppTheme.ink900)),
-                          Text('11:15 - 11:25 · 10M', style: AppTheme.mono(size: 11.5, color: AppTheme.muted)),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('Lunch', style: AppTheme.body(size: 13, color: AppTheme.ink900)),
-                          Text('1:05 - 1:19 · 14M', style: AppTheme.mono(size: 11.5, color: AppTheme.muted)),
-                        ],
-                      ),
-                    ],
+                    else
+                      Text('No breaks taken yet.', style: AppTheme.body(size: 12, color: AppTheme.muted)),
 
                     const SizedBox(height: 10),
                     // Dashed Divider
@@ -300,7 +283,7 @@ class _CallerHistoryScreenState extends State<CallerHistoryScreen> {
                           style: AppTheme.mono(size: 10.5, color: AppTheme.ink900, weight: FontWeight.w700),
                         ),
                         Text(
-                          '${totalBreakMins > 0 ? totalBreakMins : 24}M / 45M ALLOWED',
+                          '${totalBreakMins}M / 45M ALLOWED',
                           style: AppTheme.mono(size: 11, color: AppTheme.orangePill, weight: FontWeight.w700),
                         ),
                       ],
@@ -310,33 +293,6 @@ class _CallerHistoryScreenState extends State<CallerHistoryScreen> {
               ),
               const SizedBox(height: 14),
 
-              // Card 3: IDLE ALERT (Lime Neo-Card)
-              NeoCard(
-                backgroundColor: AppTheme.limeYellow,
-                shadowColor: AppTheme.ink900,
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text.rich(
-                        TextSpan(
-                          children: [
-                            TextSpan(
-                              text: 'Longest idle gap: 38 min ',
-                              style: AppTheme.bodyBold(size: 12.5, color: AppTheme.ink900),
-                            ),
-                            TextSpan(
-                              text: '(2:10–2:48 PM) — manager can see this in the daily digest.',
-                              style: AppTheme.body(size: 12, color: AppTheme.ink900),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
               const SizedBox(height: 20),
             ],
           ),

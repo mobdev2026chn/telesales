@@ -4,6 +4,17 @@ import 'package:provider/provider.dart';
 import 'theme/app_theme.dart';
 import 'providers/tele_provider.dart';
 import 'screens/splash_screen.dart';
+import 'screens/login_screen.dart';
+
+/// Root navigator, used to return to the login screen when the server ends the session.
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+
+void _returnToLogin() {
+  appNavigatorKey.currentState?.pushAndRemoveUntil(
+    MaterialPageRoute(builder: (_) => const LoginScreen()),
+    (route) => false,
+  );
+}
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,9 +36,10 @@ class TelesalesApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => TeleProvider()),
+        ChangeNotifierProvider(create: (_) => TeleProvider()..onSessionExpired = _returnToLogin),
       ],
       child: MaterialApp(
+        navigatorKey: appNavigatorKey,
         title: 'Ask EVA Telesales',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(

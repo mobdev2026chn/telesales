@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -17,78 +16,35 @@ class LogOutcomeScreen extends StatefulWidget {
 }
 
 class _LogOutcomeScreenState extends State<LogOutcomeScreen> {
-  LeadStatus _selectedStatus = LeadStatus.interested;
-  final TextEditingController _notesCtrl = TextEditingController(text: 'Wants pricing deck before demo...');
-  bool _sendWhatsAppBrochure = true;
-  String _selectedCallbackStr = 'TOMORROW · 10 AM';
-  DateTime? _selectedCallbackTime;
+  LeadStatus? _selectedStatus; // nothing is pre-selected: the caller must choose
+  final TextEditingController _notesCtrl = TextEditingController();
+  bool _sendWhatsAppBrochure = false; // opt-in
+  DateTime? _selectedCallbackTime; // optional
+  bool _saving = false;
 
-  int _countdownSeconds = 15;
-  Timer? _countdownTimer;
-  bool _isCountdownPaused = false;
+  static const Set<LeadStatus> _closedStatuses = {LeadStatus.notInterested, LeadStatus.lost, LeadStatus.won};
 
-  @override
-  void initState() {
-    super.initState();
-    _selectedCallbackTime = DateTime.now().add(const Duration(days: 1)).copyWith(hour: 10, minute: 0);
-    _startCountdown();
-  }
+  bool get _callbackAllowed => _selectedStatus == null || !_closedStatuses.contains(_selectedStatus);
 
-  void _startCountdown() {
-    _countdownTimer?.cancel();
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) return;
-      if (!_isCountdownPaused) {
-        if (_countdownSeconds > 0) {
-          setState(() => _countdownSeconds--);
-        } else {
-          timer.cancel();
-          _triggerNextCallAutomatically();
-        }
-      }
+  void _selectStatus(LeadStatus s) {
+    setState(() {
+      _selectedStatus = s;
+      if (_closedStatuses.contains(s)) _selectedCallbackTime = null;
     });
-  }
-
-  void _togglePauseCountdown() {
-    setState(() => _isCountdownPaused = !_isCountdownPaused);
-  }
-
-  Future<void> _triggerNextCallAutomatically() async {
-    final tele = Provider.of<TeleProvider>(context, listen: false);
-    final navigator = Navigator.of(context);
-    await tele.saveCallOutcomeAndNext(
-      status: _selectedStatus,
-      note: _notesCtrl.text,
-      sendBrochure: _sendWhatsAppBrochure,
-      callbackTime: _selectedCallbackTime,
-    );
-
-    if (mounted) {
-      if (tele.activeCallLead != null) {
-        navigator.pushReplacement(
-          MaterialPageRoute(
-            builder: (_) => CallSessionScreen(lead: tele.activeCallLead),
-          ),
-        );
-      } else {
-        navigator.pop();
-      }
-    }
   }
 
   @override
   void dispose() {
-    _countdownTimer?.cancel();
     _notesCtrl.dispose();
     super.dispose();
   }
 
-  void _pickCallbackDateTime() async {
+  Future<void> _pickCallbackDateTime() async {
     final now = DateTime.now();
     final pickedDate = await showDatePicker(
       context: context,
       initialDate: now.add(const Duration(days: 1)),
-      firstDate: now,
+      firstDate: DateTime(now.year, now.month, now.day),
       lastDate: now.add(const Duration(days: 60)),
       builder: (c, child) => Theme(
         data: Theme.of(c).copyWith(
@@ -103,55 +59,93 @@ class _LogOutcomeScreenState extends State<LogOutcomeScreen> {
       ),
     );
 
-    if (pickedDate != null && mounted) {
-      final pickedTime = await showTimePicker(
-        context: context,
-        initialTime: const TimeOfDay(hour: 10, minute: 0),
-        builder: (c, child) => Theme(
-          data: Theme.of(c).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: AppTheme.ink900,
-              onPrimary: AppTheme.limeYellow,
-              surface: AppTheme.paper,
-              onSurface: AppTheme.ink900,
-            ),
+    if (pickedDate == null || !mounted) return;
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: const TimeOfDay(hour: 10, minute: 0),
+      builder: (c, child) => Theme(
+        data: Theme.of(c).copyWith(
+          colorScheme: const ColorScheme.light(
+            primary: AppTheme.ink900,
+            onPrimary: AppTheme.limeYellow,
+            surface: AppTheme.paper,
+            onSurface: AppTheme.ink900,
           ),
-          child: child!,
+        ),
+        child: child!,
+      ),
+    );
+    if (pickedTime == null || !mounted) return;
+    final full = DateTime(pickedDate.year, pickedDate.month, pickedDate.day, pickedTime.hour, pickedTime.minute);
+    if (!full.isAfter(DateTime.now())) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppTheme.ink900,
+          content: Text('Pick a callback time in the future.', style: AppTheme.bodyBold(size: 12, color: AppTheme.limeYellow)),
         ),
       );
+      return;
+    }
+    setState(() => _selectedCallbackTime = full);
+  }
 
-      if (pickedTime != null) {
-        final fullDateTime = DateTime(
-          pickedDate.year,
-          pickedDate.month,
-          pickedDate.day,
-          pickedTime.hour,
-          pickedTime.minute,
-        );
-        setState(() {
-          _selectedCallbackTime = fullDateTime;
-          _selectedCallbackStr = DateFormat('d MMM · h:mm a').format(fullDateTime).toUpperCase();
-        });
-      }
+  /// Saves the outcome. [dialNext] dials the next lead (explicit user action only).
+  Future<void> _save(TeleProvider tele, {bool dialNext = false, bool takeBreak = false}) async {
+    final status = _selectedStatus;
+    if (status == null || _saving) return;
+    setState(() => _saving = true);
+    final navigator = Navigator.of(context);
+    await tele.saveCallOutcomeAndNext(
+      status: status,
+      note: _notesCtrl.text.trim(),
+      sendBrochure: _sendWhatsAppBrochure,
+      callbackTime: _callbackAllowed ? _selectedCallbackTime : null,
+      takeBreak: takeBreak,
+      dialNext: dialNext,
+    );
+    if (!mounted) return;
+    if (dialNext && tele.activeCallLead != null) {
+      navigator.pushReplacement(MaterialPageRoute(builder: (_) => CallSessionScreen(lead: tele.activeCallLead)));
+    } else {
+      navigator.pop();
     }
   }
+
+  void _skip(TeleProvider tele) {
+    // Moves on without saving anything and without dialing.
+    tele.skipSessionLead();
+    final next = tele.activeCallLead;
+    if (next != null) {
+      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => CallSessionScreen(lead: next)));
+    } else {
+      Navigator.of(context).pop();
+    }
+  }
+
+  String _hm(DateTime? t) => t == null ? '—' : DateFormat('h:mm a').format(t).toUpperCase();
 
   @override
   Widget build(BuildContext context) {
     final tele = Provider.of<TeleProvider>(context);
-    final lead = widget.lead ?? tele.activeCallLead ?? (tele.sessionQueue.isNotEmpty ? tele.sessionQueue[tele.sessionIndex.clamp(0, tele.sessionQueue.length - 1)] : LeadModel(
-      id: 'demo',
-      name: 'Ganesh Enterprises',
-      phone: '+91 98400 11223',
-      status: LeadStatus.interested,
-      attempts: 1,
-      dateAdded: DateTime.now(),
-      lastCallDate: DateTime.now(),
-      note: '',
-    ));
+    final lead = widget.lead ?? tele.activeCallLead;
+
+    if (lead == null) {
+      return Scaffold(
+        backgroundColor: AppTheme.paper,
+        appBar: AppBar(backgroundColor: AppTheme.paper, elevation: 0),
+        body: Center(
+          child: Text('No call to log.', style: AppTheme.body(size: 14, color: AppTheme.muted)),
+        ),
+      );
+    }
 
     final nextLead = tele.nextSessionLead;
     final remainingCount = tele.remainingSessionCount;
+    final startedAt = tele.sessionCallStartedAt;
+    final endedAt = tele.sessionCallEndedAt;
+    final deviceCall = tele.latestDeviceCallFor(lead.phone, since: startedAt);
+    final talk = deviceCall != null && deviceCall.duration.inSeconds > 0 ? deviceCall.durationFormatted.toUpperCase() : '—';
+    final canSave = _selectedStatus != null && !_saving;
 
     return Scaffold(
       backgroundColor: AppTheme.paper,
@@ -161,41 +155,36 @@ class _LogOutcomeScreenState extends State<LogOutcomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Subtitle
               Text(
-                'CALL ENDED · 3M 12S TALK',
+                'CALL ENDED · TALK $talk',
                 style: AppTheme.mono(size: 11, color: AppTheme.greenDark, weight: FontWeight.w700),
               ),
               const SizedBox(height: 4),
-
-              // Main Title
               Text(
                 'LOG THE OUTCOME.',
                 style: AppTheme.headline(size: 32, color: AppTheme.ink900),
               ),
               const SizedBox(height: 4),
-
-              // Contact Details
               Text(
                 '${lead.name} · ${lead.phone}',
                 style: AppTheme.mono(size: 12, color: AppTheme.ink700),
               ),
               const SizedBox(height: 14),
 
-              // Time Badges Strip
+              // Real times: dialed / closed from the session, talk time from the device call log
               Wrap(
                 spacing: 6,
                 runSpacing: 6,
                 children: [
-                  _TimeBadge(label: 'START 11:42', isDark: true),
-                  _TimeBadge(label: 'END 11:45', isDark: true),
-                  _TimeBadge(label: 'TALK 3M 12S', isDark: true),
-                  _TimeBadge(label: 'WRAP-UP 00:18', isLime: true),
+                  _TimeBadge(label: 'DIALED ${_hm(startedAt)}', isDark: true),
+                  _TimeBadge(label: 'CLOSED ${_hm(endedAt)}', isDark: true),
+                  _TimeBadge(label: 'TALK $talk', isLime: true),
                 ],
               ),
               const SizedBox(height: 16),
 
-              // 2x2 Outcome Grid
+              Text('OUTCOME', style: AppTheme.label(size: 9.5, color: AppTheme.muted, letterSpacing: 0.14)),
+              const SizedBox(height: 8),
               Row(
                 children: [
                   Expanded(
@@ -204,7 +193,7 @@ class _LogOutcomeScreenState extends State<LogOutcomeScreen> {
                       isSelected: _selectedStatus == LeadStatus.followUp,
                       activeBg: AppTheme.limeYellow,
                       activeFg: AppTheme.ink900,
-                      onTap: () => setState(() => _selectedStatus = LeadStatus.followUp),
+                      onTap: () => _selectStatus(LeadStatus.followUp),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -214,7 +203,7 @@ class _LogOutcomeScreenState extends State<LogOutcomeScreen> {
                       isSelected: _selectedStatus == LeadStatus.bookDemo,
                       activeBg: AppTheme.greenNeon,
                       activeFg: AppTheme.ink900,
-                      onTap: () => setState(() => _selectedStatus = LeadStatus.bookDemo),
+                      onTap: () => _selectStatus(LeadStatus.bookDemo),
                     ),
                   ),
                 ],
@@ -228,7 +217,7 @@ class _LogOutcomeScreenState extends State<LogOutcomeScreen> {
                       isSelected: _selectedStatus == LeadStatus.demoReschedule,
                       activeBg: AppTheme.paper,
                       activeFg: AppTheme.ink900,
-                      onTap: () => setState(() => _selectedStatus = LeadStatus.demoReschedule),
+                      onTap: () => _selectStatus(LeadStatus.demoReschedule),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -238,7 +227,31 @@ class _LogOutcomeScreenState extends State<LogOutcomeScreen> {
                       isSelected: _selectedStatus == LeadStatus.demoDone,
                       activeBg: AppTheme.ink900,
                       activeFg: AppTheme.limeYellow,
-                      onTap: () => setState(() => _selectedStatus = LeadStatus.demoDone),
+                      onTap: () => _selectStatus(LeadStatus.demoDone),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: _OutcomeButton(
+                      label: 'NOT PICKED UP',
+                      isSelected: _selectedStatus == LeadStatus.notPickup,
+                      activeBg: AppTheme.orangePill,
+                      activeFg: AppTheme.ink900,
+                      onTap: () => _selectStatus(LeadStatus.notPickup),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _OutcomeButton(
+                      label: 'BUSY',
+                      isSelected: _selectedStatus == LeadStatus.busyOnCall,
+                      activeBg: AppTheme.orangePill,
+                      activeFg: AppTheme.ink900,
+                      onTap: () => _selectStatus(LeadStatus.busyOnCall),
                     ),
                   ),
                 ],
@@ -252,7 +265,7 @@ class _LogOutcomeScreenState extends State<LogOutcomeScreen> {
                       isSelected: _selectedStatus == LeadStatus.interested,
                       activeBg: AppTheme.greenNeon,
                       activeFg: AppTheme.ink900,
-                      onTap: () => setState(() => _selectedStatus = LeadStatus.interested),
+                      onTap: () => _selectStatus(LeadStatus.interested),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -262,14 +275,14 @@ class _LogOutcomeScreenState extends State<LogOutcomeScreen> {
                       isSelected: _selectedStatus == LeadStatus.notInterested,
                       activeBg: AppTheme.white,
                       activeFg: AppTheme.ink900,
-                      onTap: () => setState(() => _selectedStatus = LeadStatus.notInterested),
+                      onTap: () => _selectStatus(LeadStatus.notInterested),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 14),
 
-              // Notes Input Field
+              // Notes (empty by default)
               Container(
                 decoration: BoxDecoration(
                   color: AppTheme.white,
@@ -282,7 +295,7 @@ class _LogOutcomeScreenState extends State<LogOutcomeScreen> {
                   maxLines: 2,
                   style: AppTheme.body(size: 13, color: AppTheme.ink900),
                   decoration: const InputDecoration(
-                    hintText: 'Add call notes, client response...',
+                    hintText: 'Add call notes, client response... (optional)',
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   ),
@@ -290,7 +303,7 @@ class _LogOutcomeScreenState extends State<LogOutcomeScreen> {
               ),
               const SizedBox(height: 12),
 
-              // WhatsApp Brochure Toggle Row
+              // WhatsApp brochure: opt-in
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
@@ -302,9 +315,11 @@ class _LogOutcomeScreenState extends State<LogOutcomeScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      'WHATSAPP BROCHURE',
-                      style: AppTheme.label(size: 10.5, color: AppTheme.ink900, letterSpacing: 0.12),
+                    Expanded(
+                      child: Text(
+                        'SEND WHATSAPP BROCHURE',
+                        style: AppTheme.label(size: 10.5, color: AppTheme.ink900, letterSpacing: 0.12),
+                      ),
                     ),
                     Switch(
                       value: _sendWhatsAppBrochure,
@@ -318,50 +333,60 @@ class _LogOutcomeScreenState extends State<LogOutcomeScreen> {
               ),
               const SizedBox(height: 12),
 
-              // Callback Schedule Row
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  color: AppTheme.white,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppTheme.ink900, width: 1.5),
-                  boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'CALLBACK',
-                      style: AppTheme.label(size: 10.5, color: AppTheme.ink900, letterSpacing: 0.12),
-                    ),
-                    GestureDetector(
-                      onTap: _pickCallbackDateTime,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: AppTheme.limeYellow,
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(color: AppTheme.ink900, width: 1.2),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              _selectedCallbackStr,
-                              style: AppTheme.mono(size: 10.5, color: AppTheme.ink900, weight: FontWeight.w700),
-                            ),
-                            const SizedBox(width: 4),
-                            const Icon(Icons.arrow_drop_down, size: 16, color: AppTheme.ink900),
-                          ],
+              // Optional callback
+              if (_callbackAllowed)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppTheme.ink900, width: 1.5),
+                    boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'CALLBACK',
+                          style: AppTheme.label(size: 10.5, color: AppTheme.ink900, letterSpacing: 0.12),
                         ),
                       ),
-                    ),
-                  ],
+                      if (_selectedCallbackTime != null)
+                        IconButton(
+                          tooltip: 'Remove callback',
+                          icon: const Icon(Icons.close, size: 18, color: AppTheme.ink900),
+                          onPressed: () => setState(() => _selectedCallbackTime = null),
+                        ),
+                      GestureDetector(
+                        onTap: _pickCallbackDateTime,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: _selectedCallbackTime != null ? AppTheme.limeYellow : AppTheme.paper,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: AppTheme.ink900, width: 1.2),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                _selectedCallbackTime != null
+                                    ? DateFormat('d MMM · h:mm a').format(_selectedCallbackTime!).toUpperCase()
+                                    : 'NONE · SET',
+                                style: AppTheme.mono(size: 10.5, color: AppTheme.ink900, weight: FontWeight.w700),
+                              ),
+                              const SizedBox(width: 4),
+                              const Icon(Icons.arrow_drop_down, size: 16, color: AppTheme.ink900),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
               const SizedBox(height: 18),
 
-              // Next Up Strip with Countdown Ticker & Controls
+              // Next in queue (no auto-dial: the caller decides)
               if (nextLead != null)
                 Container(
                   width: double.infinity,
@@ -371,155 +396,119 @@ class _LogOutcomeScreenState extends State<LogOutcomeScreen> {
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(color: AppTheme.ink900, width: 1.5),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Row(
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: _isCountdownPaused ? AppTheme.orangePill : AppTheme.greenNeon,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  _isCountdownPaused ? 'PAUSED' : 'AUTO-DIAL IN ${_countdownSeconds}S',
-                                  style: AppTheme.label(size: 8, color: AppTheme.ink900),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                'NEXT IN QUEUE',
-                                style: AppTheme.mono(size: 8.5, color: AppTheme.lightMuted),
-                              ),
-                            ],
-                          ),
-                          Row(
-                            children: [
-                              GestureDetector(
-                                onTap: _togglePauseCountdown,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.ink800,
-                                    borderRadius: BorderRadius.circular(999),
-                                    border: Border.all(color: AppTheme.lightMuted, width: 0.8),
-                                  ),
-                                  child: Text(
-                                    _isCountdownPaused ? '▶ RESUME' : '⏸ STOP',
-                                    style: AppTheme.mono(size: 8.5, color: AppTheme.limeYellow, weight: FontWeight.w700),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              GestureDetector(
-                                onTap: () {
-                                  _countdownTimer?.cancel();
-                                  tele.saveCallOutcomeAndNext(
-                                    status: _selectedStatus,
-                                    note: _notesCtrl.text,
-                                    sendBrochure: _sendWhatsAppBrochure,
-                                    callbackTime: _selectedCallbackTime,
-                                  );
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.ink800,
-                                    borderRadius: BorderRadius.circular(999),
-                                    border: Border.all(color: AppTheme.greenGrass, width: 0.8),
-                                  ),
-                                  child: Text(
-                                    'SKIP →',
-                                    style: AppTheme.mono(size: 8.5, color: AppTheme.greenGrass, weight: FontWeight.w700),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('NEXT IN QUEUE', style: AppTheme.mono(size: 8.5, color: AppTheme.lightMuted)),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${nextLead.name} · ${nextLead.phone}',
+                              style: AppTheme.bodyBold(size: 12.5, color: AppTheme.white),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        '${nextLead.name} · ${nextLead.phone}',
-                        style: AppTheme.bodyBold(size: 12.5, color: AppTheme.white),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: () => _skip(tele),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: AppTheme.ink800,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: AppTheme.greenGrass, width: 0.8),
+                          ),
+                          child: Text(
+                            'SKIP (DON\'T SAVE) →',
+                            style: AppTheme.mono(size: 8.5, color: AppTheme.greenGrass, weight: FontWeight.w700),
+                          ),
+                        ),
                       ),
                     ],
                   ),
                 ),
               const SizedBox(height: 12),
 
-              // Main Save & Dial Next Button
-              GestureDetector(
-                onTap: () async {
-                  final navigator = Navigator.of(context);
-                  await tele.saveCallOutcomeAndNext(
-                    status: _selectedStatus,
-                    note: _notesCtrl.text,
-                    sendBrochure: _sendWhatsAppBrochure,
-                    callbackTime: _selectedCallbackTime,
-                  );
+              if (_selectedStatus == null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text('Choose an outcome to save.', style: AppTheme.body(size: 11, color: AppTheme.muted)),
+                ),
 
-                  if (tele.activeCallLead != null) {
-                    navigator.pushReplacement(
-                      MaterialPageRoute(
-                        builder: (_) => CallSessionScreen(lead: tele.activeCallLead),
+              // Save & dial next (explicit action)
+              Opacity(
+                opacity: canSave ? 1 : 0.4,
+                child: GestureDetector(
+                  onTap: canSave ? () => _save(tele, dialNext: remainingCount > 0) : null,
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    decoration: BoxDecoration(
+                      color: AppTheme.ink900,
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: AppTheme.ink900, width: 1.5),
+                      boxShadow: AppTheme.neoShadow(color: AppTheme.ink900, offset: 4),
+                    ),
+                    child: Center(
+                      child: Text(
+                        remainingCount > 0 ? 'SAVE & DIAL NEXT · $remainingCount LEFT →' : 'SAVE & FINISH SESSION →',
+                        style: AppTheme.label(size: 11.5, color: AppTheme.limeYellow, letterSpacing: 0.15),
                       ),
-                    );
-                  } else {
-                    navigator.pop();
-                  }
-                },
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  decoration: BoxDecoration(
-                    color: AppTheme.ink900,
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: AppTheme.ink900, width: 1.5),
-                    boxShadow: AppTheme.neoShadow(color: AppTheme.ink900, offset: 4),
-                  ),
-                  child: Center(
-                    child: Text(
-                      remainingCount > 0 ? 'SAVE & DIAL NEXT · $remainingCount LEFT →' : 'SAVE & FINISH SESSION →',
-                      style: AppTheme.label(size: 11.5, color: AppTheme.limeYellow, letterSpacing: 0.15),
                     ),
                   ),
                 ),
               ),
               const SizedBox(height: 10),
 
-              // Secondary: Save & Take a Break Button
-              GestureDetector(
-                onTap: () async {
-                  final navigator = Navigator.of(context);
-                  await tele.saveCallOutcomeAndNext(
-                    status: _selectedStatus,
-                    note: _notesCtrl.text,
-                    sendBrochure: _sendWhatsAppBrochure,
-                    callbackTime: _selectedCallbackTime,
-                    takeBreak: true,
-                  );
-                  navigator.pop();
-                },
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  decoration: BoxDecoration(
-                    color: AppTheme.white,
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: AppTheme.ink900, width: 1.5),
-                    boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+              if (remainingCount > 0) ...[
+                Opacity(
+                  opacity: canSave ? 1 : 0.4,
+                  child: GestureDetector(
+                    onTap: canSave ? () => _save(tele, dialNext: false) : null,
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      decoration: BoxDecoration(
+                        color: AppTheme.white,
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: AppTheme.ink900, width: 1.5),
+                        boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+                      ),
+                      child: Center(
+                        child: Text(
+                          'SAVE & STOP SESSION',
+                          style: AppTheme.label(size: 10.5, color: AppTheme.ink900, letterSpacing: 0.12),
+                        ),
+                      ),
+                    ),
                   ),
-                  child: Center(
-                    child: Text(
-                      'SAVE & TAKE A BREAK',
-                      style: AppTheme.label(size: 10.5, color: AppTheme.ink900, letterSpacing: 0.12),
+                ),
+                const SizedBox(height: 10),
+              ],
+
+              Opacity(
+                opacity: canSave ? 1 : 0.4,
+                child: GestureDetector(
+                  onTap: canSave ? () => _save(tele, takeBreak: true) : null,
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      color: AppTheme.white,
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: AppTheme.ink900, width: 1.5),
+                      boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+                    ),
+                    child: Center(
+                      child: Text(
+                        'SAVE & TAKE A BREAK',
+                        style: AppTheme.label(size: 10.5, color: AppTheme.ink900, letterSpacing: 0.12),
+                      ),
                     ),
                   ),
                 ),

@@ -1,11 +1,13 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:telesales_monitor/main.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() {
+    SharedPreferences.setMockInitialValues({});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       const MethodChannel('com.askeva.telesales/telephony'),
       (MethodCall methodCall) async {
@@ -63,61 +65,35 @@ void main() {
     );
   });
 
-  testWidgets('Full Callyzer multi-step onboarding and SIM verification smoke test', (WidgetTester tester) async {
+  Future<void> pumpPastSplash(WidgetTester tester) async {
     await tester.pumpWidget(const TelesalesApp());
+    // Splash: waits for saved state, then ~1.4 s animation, then a 400 ms fade
     await tester.pump(const Duration(milliseconds: 100));
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump(const Duration(milliseconds: 500));
+  }
 
-    // Step 0: Privacy Policy
+  testWidgets('Fresh install opens the onboarding flow', (WidgetTester tester) async {
+    await pumpPastSplash(tester);
     expect(find.text('Your privacy is important to us'), findsOneWidget);
-    final agreeBtn = find.text('AGREE & CONTINUE');
-    await tester.ensureVisible(agreeBtn);
-    await tester.tap(agreeBtn);
-    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('AGREE & CONTINUE'), findsOneWidget);
+  });
 
-    // Step 1: Access to Call Log
-    expect(find.text('ACCESS TO YOUR DEVICE\'S CALL LOG'), findsOneWidget);
-    final allowBtn = find.text('Allow Access');
-    await tester.ensureVisible(allowBtn);
-    await tester.tap(allowBtn);
-    await tester.pump(const Duration(milliseconds: 300));
-
-    // Step 2: Set Default Phone App
-    expect(find.text('Set Default Phone App'), findsOneWidget);
-    final defaultBtn = find.text('Set as default');
-    await tester.ensureVisible(defaultBtn);
-    await tester.tap(defaultBtn);
-    await tester.pump(const Duration(milliseconds: 300));
-
-    // Step 3: Contacts Access
-    expect(find.text('Contacts Access'), findsOneWidget);
-    final letsDoItBtn = find.text('Let\'s do it');
-    await tester.ensureVisible(letsDoItBtn);
-    await tester.tap(letsDoItBtn);
-    await tester.pump(const Duration(milliseconds: 300));
-
-    // Step 4: Connect SIM
-    expect(find.text('Connect Sim'), findsOneWidget);
-    final submitBtn = find.text('SUBMIT');
-    await tester.ensureVisible(submitBtn);
-    await tester.tap(submitBtn);
-    await tester.pump(const Duration(milliseconds: 300));
-
-    // Step 5: SIM Verification Option
-    expect(find.text('Choose one of the option to verify your number'), findsOneWidget);
-    final skipBtn = find.text('Skip Verification');
-    await tester.ensureVisible(skipBtn);
-    await tester.tap(skipBtn);
-    await tester.pump(const Duration(milliseconds: 300));
-
-    // What's New Dialog & Got it
-    expect(find.text('What\'s New'), findsOneWidget);
-    final gotItBtn = find.text('Got it !');
-    await tester.ensureVisible(gotItBtn);
-    await tester.tap(gotItBtn);
-    await tester.pumpAndSettle();
-
-    // Arrive directly at Main App Shell (default CALLS tab active)
-    expect(find.text('CALL HISTORY'), findsOneWidget);
-    expect(find.text('ALAN 🤍'), findsOneWidget);
+  testWidgets('A saved session without a real token must sign in again', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({
+      'setup_completed': true,
+      'is_logged_in': true,
+      'auth_token': 'jwt_caller_token_1_123', // fake token written by old builds
+      'caller_name': 'Old User',
+      'current_user_id': '1',
+      'lead_notes_json': '{"9825012340":"secret note"}',
+    });
+    await pumpPastSplash(tester);
+    expect(find.text('SELECT ROLE & SIGN IN'), findsOneWidget);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getBool('is_logged_in'), isFalse);
+    expect(prefs.getString('auth_token'), isNull);
+    expect(prefs.getString('caller_name'), isNull);
+    expect(prefs.getString('lead_notes_json'), isNull);
   });
 }

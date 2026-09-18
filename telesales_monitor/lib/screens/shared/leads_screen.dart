@@ -65,18 +65,8 @@ class _LeadsScreenState extends State<LeadsScreen> {
     List<LeadModel> baseLeads = List<LeadModel>.from(tele.leads);
 
     if (!isManager) {
-      // Caller view: ONLY their leads should be displayed
-      final myName = tele.callerName.trim().toLowerCase();
-      final myId = tele.currentUserId.trim().toLowerCase();
-      final myPhone = tele.verifiedTrackingNumber.trim();
-
-      baseLeads = baseLeads.where((l) {
-        final ass = l.assignedTo.trim().toLowerCase();
-        final matchesName = myName.isNotEmpty && (ass == myName || ass.contains(myName) || myName.contains(ass));
-        final matchesId = myId.isNotEmpty && ass == myId;
-        final matchesPhone = myPhone.isNotEmpty && l.assignedTo == myPhone;
-        return matchesName || matchesId || matchesPhone;
-      }).toList();
+      // Caller view: ONLY their leads (assignedCallerId == my id; exact name for legacy leads)
+      baseLeads = baseLeads.where(tele.isLeadAssignedToMe).toList();
     } else {
       // Manager view: filter by selected team member if chosen
       if (_selectedTeamMember != 'ALL') {
@@ -302,6 +292,15 @@ class _LeadsScreenState extends State<LeadsScreen> {
                     GestureDetector(
                       onTap: () {
                         tele.startCallSession(leads: filtered);
+                        if (tele.activeCallLead == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              backgroundColor: AppTheme.ink900,
+                              content: Text('No leads to dial in this list.', style: AppTheme.bodyBold(size: 12, color: AppTheme.limeYellow)),
+                            ),
+                          );
+                          return;
+                        }
                         CallSessionScreen.push(context);
                       },
                       child: Container(
@@ -541,7 +540,7 @@ class _LeadsScreenState extends State<LeadsScreen> {
               GestureDetector(
                 onTap: () {
                   tele.startCallSession(leads: [lead]);
-                  CallSessionScreen.push(context, lead: lead);
+                  if (tele.activeCallLead != null) CallSessionScreen.push(context, lead: lead);
                 },
                 child: Container(
                   width: 52,

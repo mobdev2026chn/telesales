@@ -3,6 +3,7 @@ class EmployeeModel {
   final String name;
   final String phone;
   final String role;
+  final String team;
   final int totalCalls;
   final int connectedCalls;
   final Duration totalTalkTime;
@@ -16,16 +17,19 @@ class EmployeeModel {
   final String? photoBase64;
   final String? reportingManagerId;
   final int workSimSlot;
+  final int dailyTarget;
 
   EmployeeModel({
     required this.id,
     required this.name,
     required this.phone,
     this.role = 'caller',
+    this.team = '',
     this.avatarUrl,
     this.photoBase64,
     this.reportingManagerId,
     this.workSimSlot = 1,
+    this.dailyTarget = 40,
     required this.totalCalls,
     required this.connectedCalls,
     required this.totalTalkTime,
