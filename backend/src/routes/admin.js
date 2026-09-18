@@ -1,526 +1,161 @@
+// Mounted at /api/admin (dashboard + leaderboard are also reachable via /api/dashboard/stats and
+// /api/employees/leaderboard). Recordings, leads, photo and notifications live in their own routers.
 const express = require('express');
 const router = express.Router();
 const CallLog = require('../models/CallLog');
 const Employee = require('../models/Employee');
 const Lead = require('../models/Lead');
-const Recording = require('../models/Recording');
-const Notification = require('../models/Notification');
+const { hashPassword } = require('../middleware/auth');
+const { getPeriodRange, aggregateCallStats, findCallerStats, buildDedupKey } = require('../services/callStats');
+const { resolveScope, callLogQueryFor, leadQueryFor, MANAGER_ROLES } = require('../services/scope');
+const { escapeRegex, last10, byIdQuery, phoneRegex, serverError, parseLimit, parseDate } = require('../utils/common');
 
-// 0. RESET / PURGE ALL TEST DATA (Retains ONLY Admin account)
-router.all('/purge-all-data', async (req, res) => {
-  try {
-    const callRes = await CallLog.deleteMany({});
-    const leadRes = await Lead.deleteMany({});
-    const recRes = await Recording.deleteMany({});
-    const notifRes = await Notification.deleteMany({});
-    const empRes = await Employee.deleteMany({});
+const DEFAULT_TEAM = 'Telesales Team';
+const ROLES = ['caller', 'jr_manager', 'manager', 'admin'];
+const and = (...conds) => {
+  const list = conds.filter(c => c && Object.keys(c).length > 0);
+  if (list.length === 0) return {};
+  return list.length === 1 ? list[0] : { $and: list };
+};
 
-    const cleanAdmin = await Employee.create({
-      id: 'admin_1',
-      name: 'Admin',
-      email: 'admin@askeva.com',
-      phone: '+91 98250 00000',
-      password: 'admin123',
-      role: 'admin',
-      team: 'Management',
-      dailyTarget: 150,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-
-    res.json({
-      success: true,
-      message: 'All test data purged successfully. Only clean Admin account remains.',
-      deleted: {
-        calls: callRes.deletedCount,
-        leads: leadRes.deletedCount,
-        recordings: recRes.deletedCount,
-        notifications: notifRes.deletedCount,
-        employees: empRes.deletedCount,
-      },
-      admin: {
-        email: cleanAdmin.email,
-        name: cleanAdmin.name,
-        role: cleanAdmin.role,
-      },
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// Helper: Build query filters for Team-wise, Manager-wise, and Caller/User-wise telemetry
-async function buildTelemetryQuery(queryParams) {
-  const { team, managerId, callerPhone, callerId, callerName, userId, loggedInRole, loggedInTeam, loggedInUserId, userRole } = queryParams;
-  let employeeQuery = {};
-  let callLogQuery = {};
-
-  const effectiveRole = (loggedInRole || userRole || '').toLowerCase();
-  const isAdmin = effectiveRole === 'admin';
-  const isManager = effectiveRole === 'manager';
-  const isCaller = effectiveRole === 'caller';
-
-  // 1. If Caller is requesting data, strictly scope to that caller
-  if (isCaller) {
-    const targetUser = loggedInUserId || userId || callerId || callerPhone || callerName;
-    if (targetUser) {
-      const isMongoId = /^[0-9a-fA-F]{24}$/.test(targetUser);
-      const escapedTarget = targetUser.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const filters = [
-        { id: targetUser },
-        ...(isMongoId ? [{ _id: targetUser }] : []),
-        { name: new RegExp(`^${escapedTarget}$`, 'i') },
-        { phone: targetUser },
-      ];
-      const cleanPhone = targetUser.replace(/[^0-9]/g, '');
-      if (cleanPhone.length >= 10) {
-        const last10 = cleanPhone.substring(cleanPhone.length - 10);
-        filters.push({ phone: new RegExp(last10 + '$') });
-      }
-
-      const callerEmp = await Employee.findOne({ $or: filters });
-      if (callerEmp) {
-        const cleanEmpPhone = (callerEmp.phone || '').replace(/[^0-9]/g, '');
-        const last10 = cleanEmpPhone.length >= 10 ? cleanEmpPhone.substring(cleanEmpPhone.length - 10) : cleanEmpPhone;
-        const escapedEmpName = callerEmp.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-        employeeQuery = {
-          $or: [
-            { id: callerEmp.id },
-            { _id: callerEmp._id },
-            { phone: callerEmp.phone },
-            { name: callerEmp.name }
-          ]
-        };
-        callLogQuery = {
-          $or: [
-            { callerId: callerEmp.id },
-            { callerPhone: callerEmp.phone },
-            ...(last10 ? [{ callerPhone: new RegExp(last10 + '$') }] : []),
-            { callerName: new RegExp(`^${escapedEmpName}$`, 'i') }
-          ]
-        };
-      } else {
-        const cleanPhoneStr = (targetUser || '').replace(/[^0-9]/g, '');
-        const last10 = cleanPhoneStr.length >= 10 ? cleanPhoneStr.substring(cleanPhoneStr.length - 10) : cleanPhoneStr;
-        callLogQuery = {
-          $or: [
-            ...(last10 ? [{ callerPhone: new RegExp(last10 + '$') }] : []),
-            { callerName: new RegExp(`^${escapedTarget}$`, 'i') },
-            { callerId: targetUser }
-          ]
-        };
-      }
-      return { employeeQuery, callLogQuery };
-    }
-  }
-
-  // 2. Caller / User Specific Filter (within Manager/Admin scope)
-  const targetUser = userId || callerId || callerPhone || callerName;
-  if (targetUser && targetUser !== 'ALL' && targetUser !== 'ALL USERS') {
-    const isMongoId = /^[0-9a-fA-F]{24}$/.test(targetUser);
-    const escapedTarget = targetUser.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const filters = [
-      { id: targetUser },
-      ...(isMongoId ? [{ _id: targetUser }] : []),
-      { name: new RegExp(`^${escapedTarget}$`, 'i') },
-      { phone: targetUser },
-    ];
-    const cleanPhone = targetUser.replace(/[^0-9]/g, '');
-    if (cleanPhone.length >= 10) {
-      const last10 = cleanPhone.substring(cleanPhone.length - 10);
-      filters.push({ phone: new RegExp(last10 + '$') });
-    }
-
-    const callerEmp = await Employee.findOne({ $or: filters });
-    if (callerEmp) {
-      const cleanEmpPhone = (callerEmp.phone || '').replace(/[^0-9]/g, '');
-      const last10 = cleanEmpPhone.length >= 10 ? cleanEmpPhone.substring(cleanEmpPhone.length - 10) : cleanEmpPhone;
-      const escapedEmpName = callerEmp.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-      employeeQuery = {
-        $or: [
-          { id: callerEmp.id },
-          { _id: callerEmp._id },
-          { phone: callerEmp.phone },
-          { name: callerEmp.name }
-        ]
-      };
-      callLogQuery = {
-        $or: [
-          { callerId: callerEmp.id },
-          { callerPhone: callerEmp.phone },
-          ...(last10 ? [{ callerPhone: new RegExp(last10 + '$') }] : []),
-          { callerName: new RegExp(`^${escapedEmpName}$`, 'i') }
-        ]
-      };
-    } else {
-      const cleanPhoneStr = (targetUser || '').replace(/[^0-9]/g, '');
-      const last10 = cleanPhoneStr.length >= 10 ? cleanPhoneStr.substring(cleanPhoneStr.length - 10) : cleanPhoneStr;
-      callLogQuery = {
-        $or: [
-          ...(last10 ? [{ callerPhone: new RegExp(last10 + '$') }] : []),
-          { callerName: new RegExp(`^${escapedTarget}$`, 'i') },
-          { callerId: targetUser }
-        ]
-      };
-    }
-    return { employeeQuery, callLogQuery };
-  }
-
-  // 3. Manager Automatic Team Scoping: If user is Manager, lock to manager's team/subordinates
-  let effectiveTeam = team;
-  let effectiveManagerId = managerId;
-
-  if (isManager && !isAdmin) {
-    if (!effectiveTeam || effectiveTeam === 'ALL' || effectiveTeam === 'ALL TEAMS') {
-      effectiveTeam = loggedInTeam;
-    }
-    if (!effectiveManagerId || effectiveManagerId === 'ALL' || effectiveManagerId === 'ALL MANAGERS') {
-      effectiveManagerId = loggedInUserId;
-    }
-  }
-
-  // 4. Team-wise View
-  if (effectiveTeam && effectiveTeam !== 'ALL' && effectiveTeam !== 'ALL TEAMS') {
-    const escapedTeam = effectiveTeam.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const teamCallers = await Employee.find({ team: new RegExp(`^${escapedTeam}$`, 'i') });
-    const phones = teamCallers.map(c => c.phone).filter(Boolean);
-    const names = teamCallers.map(c => c.name).filter(Boolean);
-    const ids = teamCallers.map(c => c.id).filter(Boolean);
-
-    const callConditions = [];
-    if (ids.length > 0) callConditions.push({ callerId: { $in: ids } });
-    phones.forEach(p => {
-      callConditions.push({ callerPhone: p });
-      const clean = p.replace(/[^0-9]/g, '');
-      if (clean.length >= 10) {
-        const last10 = clean.substring(clean.length - 10);
-        callConditions.push({ callerPhone: new RegExp(last10 + '$') });
-      }
-    });
-    names.forEach(n => {
-      const esc = n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      callConditions.push({ callerName: new RegExp(`^${esc}$`, 'i') });
-    });
-
-    employeeQuery = { team: new RegExp(`^${escapedTeam}$`, 'i') };
-    callLogQuery = callConditions.length > 0 ? { $or: callConditions } : { _id: null };
-    return { employeeQuery, callLogQuery };
-  }
-
-  // 5. Manager Assignment View
-  if (effectiveManagerId && effectiveManagerId !== 'ALL' && effectiveManagerId !== 'ALL MANAGERS') {
-    const isMongoId = /^[0-9a-fA-F]{24}$/.test(effectiveManagerId);
-    const selectedMgr = await Employee.findOne({ 
-      $or: [
-        { id: effectiveManagerId }, 
-        ...(isMongoId ? [{ _id: effectiveManagerId }] : []),
-        { name: new RegExp(`^${effectiveManagerId}$`, 'i') }
-      ] 
-    });
-    if (selectedMgr) {
-      const assignedCallers = await Employee.find({ 
-        $or: [
-          { managerId: selectedMgr.id }, 
-          { managerName: selectedMgr.name }, 
-          { team: selectedMgr.team }
-        ] 
-      });
-      const phones = assignedCallers.map(c => c.phone).filter(Boolean);
-      const names = assignedCallers.map(c => c.name).filter(Boolean);
-      const ids = assignedCallers.map(c => c.id).filter(Boolean);
-
-      employeeQuery = { 
-        $or: [
-          { managerId: selectedMgr.id }, 
-          { managerName: selectedMgr.name }, 
-          { team: selectedMgr.team }
-        ] 
-      };
-      callLogQuery = {
-        $or: [
-          { callerId: { $in: ids } },
-          { callerPhone: { $in: phones } },
-          { callerName: { $in: names.map(n => new RegExp(`^${n}$`, 'i')) } }
-        ]
-      };
-    }
-  }
-
-  // 4. Date & Period Filter (Today / Week / Month / Custom Date)
-  const { period, timeFilter, date, startDate, endDate } = queryParams;
-  let dateCondition = null;
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-  const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-
-  if (startDate && endDate) {
-    const s = new Date(startDate);
-    const e = new Date(endDate);
-    if (!isNaN(s.getTime()) && !isNaN(e.getTime())) {
-      const sStart = new Date(s.getFullYear(), s.getMonth(), s.getDate(), 0, 0, 0, 0);
-      const eEnd = new Date(e.getFullYear(), e.getMonth(), e.getDate(), 23, 59, 59, 999);
-      dateCondition = { $gte: sStart, $lte: eEnd };
-    }
-  } else if (date) {
-    const d = new Date(date);
-    if (!isNaN(d.getTime())) {
-      const dStart = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
-      const dEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
-      dateCondition = { $gte: dStart, $lte: dEnd };
-    }
-  } else if (period === 'today' || timeFilter === '0' || timeFilter === 'today' || timeFilter === 0) {
-    dateCondition = { $gte: todayStart, $lte: todayEnd };
-  } else if (period === 'week' || timeFilter === '1' || timeFilter === 'week' || timeFilter === 1) {
-    const dayOfWeek = now.getDay();
-    const distanceToMonday = (dayOfWeek + 6) % 7;
-    const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - distanceToMonday, 0, 0, 0, 0);
-    dateCondition = { $gte: weekStart, $lte: todayEnd };
-  } else if (period === 'month' || timeFilter === '2' || timeFilter === 'month' || timeFilter === 2) {
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-    dateCondition = { $gte: monthStart, $lte: todayEnd };
-  }
-
-  if (Object.keys(callLogQuery).length === 0) {
-    const allEmployees = await Employee.find({ role: { $ne: 'admin' } });
-    if (allEmployees.length > 0) {
-      const names = allEmployees.map(c => c.name).filter(Boolean);
-      const phones = allEmployees.map(c => c.phone).filter(Boolean);
-      const cleanPhones = phones.map(p => p.replace(/[^0-9]/g, '').slice(-10)).filter(Boolean);
-      callLogQuery = {
-        $or: [
-          { callerName: { $in: names.map(n => new RegExp(`^${n}$`, 'i')) } },
-          { callerPhone: { $in: phones } },
-          ...(cleanPhones.map(cp => ({ callerPhone: new RegExp(cp + '$') })))
-        ]
-      };
-    }
-  }
-
-  if (dateCondition) {
-    if (Object.keys(callLogQuery).length === 0) {
-      callLogQuery = { timestamp: dateCondition };
-    } else {
-      callLogQuery = { $and: [callLogQuery, { timestamp: dateCondition }] };
-    }
-  }
-
-  return { employeeQuery, callLogQuery };
+// Scope (from the token) + period (IST) for call logs
+async function telemetry(req) {
+  const scope = await resolveScope(req, req.query);
+  const scopeQuery = callLogQueryFor(scope);
+  const range = getPeriodRange(req.query);
+  return { scope, range, callLogQuery: and(scopeQuery, range ? { timestamp: range } : null) };
 }
 
-// 1. GET /api/admin/dashboard - Real dynamically aggregated team telemetry from MongoDB
+function memberStats(emp, stats) {
+  const found = findCallerStats(stats.byCaller, emp) || {};
+  const n = (k) => Math.round(found[k] || 0);
+  return {
+    totalCalls: n('totalCalls'),
+    connectedCalls: n('connectedCalls'),
+    incomingCalls: n('incoming'),
+    outgoingCalls: n('outgoing'),
+    missedCalls: n('missed'),
+    rejectedCalls: n('rejected'),
+    neverAttendedCalls: n('neverAttended'),
+    talkTimeSeconds: n('talkSeconds'),
+  };
+}
+
+const fmtHM = (sec) => `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60).toString().padStart(2, '0')}m`;
+
+// 1. GET /api/admin/dashboard
 router.get('/dashboard', async (req, res) => {
   try {
-    const managersList = await Employee.find({ role: { $in: ['manager', 'admin'] } }).select('id name email phone role team');
-    const distinctTeams = await Employee.distinct('team');
-    const validTeams = distinctTeams.filter(t => t && !['BD TEAM - AE', 'BDE', 'Telesales Mumbai'].includes(t));
-    const teamsList = ['ALL TEAMS', ...(validTeams.length > 0 ? validTeams : ['Telesales Team', 'Management'])];
+    const { scope, range, callLogQuery } = await telemetry(req);
+    const isMgr = MANAGER_ROLES.includes(scope.role) && !!req.user;
 
-    const { employeeQuery, callLogQuery } = await buildTelemetryQuery(req.query);
+    const stats = await aggregateCallStats(callLogQuery);
+    const { totalCalls, connectedCalls, incoming, outgoing, missed, rejected, neverAttended, talkSeconds } = stats;
 
-    // Fetch matching calls and deduplicate them in-memory to prevent double-counting
-    const rawCalls = await CallLog.find(callLogQuery).sort({ timestamp: -1 }).limit(1000);
-    const dedupedCalls = [];
-    const seen = new Set();
-
-    for (const c of rawCalls) {
-      const cleanTarget = (c.phoneNumber || '').replace(/[^0-9]/g, '').slice(-10);
-      const cleanCaller = (c.callerPhone || '').replace(/[^0-9]/g, '').slice(-10);
-      const callTs = new Date(c.timestamp || c.createdAt || Date.now()).getTime();
-      const timeBucket = Math.floor(callTs / 90000); // 90-second bucket
-      const dir = (c.type === 'incoming' || c.type === 'inbound') ? 'IN' : 'OUT';
-      const dedupKey = `${cleanCaller}_${cleanTarget}_${dir}_${c.durationSeconds || 0}_${timeBucket}`;
-
-      if (seen.has(dedupKey)) continue;
-      seen.add(dedupKey);
-      dedupedCalls.push(c);
-    }
-
-    const totalCalls = dedupedCalls.length;
-    const connectedCalls = dedupedCalls.filter(c => (c.durationSeconds || 0) > 0).length;
-    const incoming = dedupedCalls.filter(c => c.type === 'incoming' || c.type === 'inbound').length;
-    const outgoing = dedupedCalls.filter(c => c.type === 'outgoing' || c.type === 'outbound').length;
-    const missed = dedupedCalls.filter(c => c.type === 'missed').length;
-    const rejected = dedupedCalls.filter(c => c.type === 'rejected' || c.type === 'neverAttended').length;
-    const neverAttended = dedupedCalls.filter(c => c.type === 'rejected' || c.type === 'neverAttended' || (c.durationSeconds || 0) === 0).length;
-
-    const totalSeconds = dedupedCalls.reduce((acc, c) => acc + (c.durationSeconds || 0), 0);
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const talkTimeFormatted = `${hours}h ${minutes.toString().padStart(2, '0')}m`;
-
-    const avgDurationSec = connectedCalls > 0 ? Math.round(totalSeconds / connectedCalls) : 0;
+    const avgDurationSec = connectedCalls > 0 ? Math.round(talkSeconds / connectedCalls) : 0;
     const avgH = Math.floor(avgDurationSec / 3600);
     const avgM = Math.floor((avgDurationSec % 3600) / 60);
     const avgS = avgDurationSec % 60;
-    const avgDurationFormatted = avgH > 0 
-      ? `${avgH}h ${avgM.toString().padStart(2, '0')}m` 
+    const avgDurationFormatted = avgH > 0
+      ? `${avgH}h ${avgM.toString().padStart(2, '0')}m`
       : `${avgM}m ${avgS.toString().padStart(2, '0')}s`;
 
-    const distinctClients = new Set(dedupedCalls.map(c => (c.phoneNumber || '').replace(/[^0-9]/g, '').slice(-10)).filter(Boolean)).size;
-    const distinctCallers = new Set(dedupedCalls.map(c => (c.callerPhone || '').replace(/[^0-9]/g, '').slice(-10)).filter(Boolean)).size;
-
-    // Aggregate Hourly Distribution from real call timestamps in IST (UTC+05:30)
-    const hourlyCallsMap = {};
-    for (let h = 8; h <= 21; h++) {
-      hourlyCallsMap[h] = 0;
-    }
-
-    dedupedCalls.forEach(c => {
-      if (c.timestamp) {
-        const d = new Date(c.timestamp);
-        const utcMs = d.getTime() + (d.getTimezoneOffset() * 60000);
-        const istDate = new Date(utcMs + (330 * 60000));
-        const hour = istDate.getHours();
-        if (hourlyCallsMap[hour] !== undefined) {
-          hourlyCallsMap[hour]++;
-        }
-      }
-    });
-
+    // Hourly distribution in India time (8 AM – 9 PM)
     const hourLabels = [
-      { h: 8, label: '8A' },
-      { h: 9, label: '9A' },
-      { h: 10, label: '10A' },
-      { h: 11, label: '11A' },
-      { h: 12, label: '12P' },
-      { h: 13, label: '1P' },
-      { h: 14, label: '2P' },
-      { h: 15, label: '3P' },
-      { h: 16, label: '4P' },
-      { h: 17, label: '5P' },
-      { h: 18, label: '6P' },
-      { h: 19, label: '7P' },
-      { h: 20, label: '8P' },
-      { h: 21, label: '9P' },
+      { h: 8, label: '8A' }, { h: 9, label: '9A' }, { h: 10, label: '10A' }, { h: 11, label: '11A' },
+      { h: 12, label: '12P' }, { h: 13, label: '1P' }, { h: 14, label: '2P' }, { h: 15, label: '3P' },
+      { h: 16, label: '4P' }, { h: 17, label: '5P' }, { h: 18, label: '6P' }, { h: 19, label: '7P' },
+      { h: 20, label: '8P' }, { h: 21, label: '9P' },
     ];
+    const hourlyCalls = hourLabels.map(hl => ({ hour: hl.label, hourOfDay: hl.h, calls: stats.hourly[hl.h] || 0, isPeak: false }));
+    const maxHourlyCalls = Math.max(0, ...hourlyCalls.map(h => h.calls));
+    hourlyCalls.forEach(item => { item.isPeak = item.calls > 0 && item.calls === maxHourlyCalls; });
 
-    let maxHourlyCalls = 0;
-    const hourlyCalls = hourLabels.map(hl => {
-      const c = hourlyCallsMap[hl.h] || 0;
-      if (c > maxHourlyCalls) maxHourlyCalls = c;
-      return { hour: hl.label, calls: c, isPeak: false };
-    });
-
-    hourlyCalls.forEach(item => {
-      if (item.calls > 0 && item.calls === maxHourlyCalls) {
-        item.isPeak = true;
-      }
-    });
-
-    // Top talk time caller dynamically computed from actual database calls
-    const topCallerAgg = await CallLog.aggregate([
-      { $match: callLogQuery },
-      {
-        $group: {
-          _id: { callerName: '$callerName', callerPhone: '$callerPhone' },
-          talkSeconds: { $sum: '$durationSeconds' },
-          totalCalls: { $sum: 1 }
-        }
-      },
-      { $sort: { talkSeconds: -1 } },
-      { $limit: 1 }
-    ]);
-
-    let topPerformer = { name: 'NO CALLERS / CALLS LOGGED YET', duration: '0h 00m' };
-    if (topCallerAgg.length > 0) {
-      const top = topCallerAgg[0];
-      const topH = Math.floor(top.talkSeconds / 3600);
-      const topM = Math.floor((top.talkSeconds % 3600) / 60);
-      topPerformer = {
-        name: (top._id.callerName || top._id.callerPhone || 'CALLER').toUpperCase(),
-        duration: `${topH}H ${topM}M`,
-      };
-    }
-
-    // Registered Team Members from Employee collection under current filter
-    const registeredEmployees = await Employee.find(employeeQuery).sort({ createdAt: -1 });
-    
-    // Aggregate CallLog stats per caller
-    const callerStatsAgg = await CallLog.aggregate([
-      { $match: callLogQuery },
-      {
-        $group: {
-          _id: { callerPhone: '$callerPhone', callerName: '$callerName' },
-          totalCalls: { $sum: 1 },
-          connectedCalls: { $sum: { $cond: [{ $gt: ['$durationSeconds', 0] }, 1, 0] } },
-          talkSeconds: { $sum: '$durationSeconds' }
-        }
-      }
-    ]);
-
+    // Registered members in scope; their numbers come from the same aggregation so they add up to the totals
+    const registeredEmployees = [...scope.employees].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
     const teamMemberStats = registeredEmployees.map(emp => {
-      const cleanEmpPhone = (emp.phone || '').replace(/[^0-9]/g, '');
-      const last10 = cleanEmpPhone.length >= 10 ? cleanEmpPhone.substring(cleanEmpPhone.length - 10) : cleanEmpPhone;
-
-      const found = callerStatsAgg.find(c => {
-        const cPhone = (c._id.callerPhone || '').replace(/[^0-9]/g, '');
-        const cLast10 = cPhone.length >= 10 ? cPhone.substring(cPhone.length - 10) : cPhone;
-        const phoneMatch = (c._id.callerPhone && c._id.callerPhone === emp.phone) || (last10 && cLast10 === last10);
-        const nameMatch = c._id.callerName && c._id.callerName.toLowerCase() === emp.name.toLowerCase();
-        return phoneMatch || nameMatch;
-      });
-      const calls = found ? found.totalCalls : (emp.totalCalls || 0);
-      const connected = found ? found.connectedCalls : (emp.connectedCalls || 0);
-      const talkSec = found ? found.talkSeconds : (emp.talkTimeSeconds || 0);
-      const talkH = Math.floor(talkSec / 3600);
-      const talkM = Math.floor((talkSec % 3600) / 60);
-
+      const m = memberStats(emp, stats);
+      const target = emp.dailyTarget || 40;
       return {
         id: emp.id,
         name: emp.name,
-        email: emp.email,
+        email: emp.email || '',
         phone: emp.phone,
         role: emp.role || 'caller',
-        team: emp.team || 'Telesales Team',
-        managerId: emp.managerId,
-        managerName: emp.managerName,
-        dailyTarget: emp.dailyTarget || 100,
-        totalCalls: calls,
-        connectedCalls: connected,
-        talkTimeFormatted: `${talkH}h ${talkM.toString().padStart(2, '0')}m`,
-        progressPercent: Math.min(Math.round((calls / (emp.dailyTarget || 100)) * 100), 100)
+        team: emp.team || DEFAULT_TEAM,
+        managerId: emp.managerId || '',
+        managerName: emp.managerName || '',
+        dailyTarget: target,
+        ...m,
+        talkTimeFormatted: fmtHM(m.talkTimeSeconds),
+        progressPercent: Math.min(Math.round((m.totalCalls / target) * 100), 100),
       };
     });
 
-    const teamDailyTarget = registeredEmployees.reduce((sum, emp) => sum + (emp.dailyTarget || 100), 0);
+    let topPerformer = { name: 'NO CALLERS / CALLS LOGGED YET', duration: '0h 00m' };
+    const top = [...teamMemberStats].filter(m => m.totalCalls > 0).sort((a, b) => b.talkTimeSeconds - a.talkTimeSeconds)[0];
+    if (top) {
+      topPerformer = {
+        name: (top.name || top.phone || 'CALLER').toUpperCase(),
+        duration: `${Math.floor(top.talkTimeSeconds / 3600)}H ${Math.floor((top.talkTimeSeconds % 3600) / 60)}M`,
+      };
+    }
 
-    // Salestrail R&D Metrics
+    const teamDailyTarget = registeredEmployees.reduce((sum, emp) => sum + (emp.dailyTarget || 40), 0);
+
+    // Ratios: numerator uses the same scope and period as the denominator
     const connectRatioPercent = totalCalls > 0 ? +((connectedCalls / totalCalls) * 100).toFixed(1) : 0;
-    const interestedCount = await Lead.countDocuments({ status: { $in: ['interested', 'won'] } });
+    const leadScope = scope.all ? {} : leadQueryFor(scope);
+    const interestedCount = await Lead.countDocuments(and(
+      leadScope,
+      { status: { $in: ['interested', 'won'] } },
+      range ? { lastCallDate: range } : null,
+    ));
     const conversionRatioPercent = connectedCalls > 0 ? +((interestedCount / connectedCalls) * 100).toFixed(1) : 0;
     const totalIO = incoming + outgoing;
     const inboundPercent = totalIO > 0 ? +((incoming / totalIO) * 100).toFixed(1) : 0;
     const outboundPercent = totalIO > 0 ? +((outgoing / totalIO) * 100).toFixed(1) : 0;
 
-    // Caller Live Status tracking
+    // Live status: a call in the last 15 minutes
     const fifteenMinsAgo = new Date(Date.now() - 15 * 60 * 1000);
-    const activeCallers = await CallLog.distinct('callerPhone', { timestamp: { $gte: fifteenMinsAgo } });
-
+    const recent = await CallLog.find(and(callLogQueryFor(scope), { timestamp: { $gte: fifteenMinsAgo } }))
+      .select('callerId callerPhone').lean();
+    const recentIds = new Set(recent.map(r => r.callerId).filter(Boolean));
+    const recentPhones = new Set(recent.map(r => last10(r.callerPhone)).filter(Boolean));
     const callerLiveStatuses = teamMemberStats.map(emp => {
-      const isRecentlyActive = activeCallers.includes(emp.phone);
+      const active = recentIds.has(emp.id) || (last10(emp.phone) && recentPhones.has(last10(emp.phone)));
       return {
         id: emp.id,
         name: emp.name,
         phone: emp.phone,
         managerName: emp.managerName,
-        status: isRecentlyActive ? 'ON CALL' : (emp.totalCalls > 0 ? 'ONLINE' : 'OFFLINE'),
-        statusColor: isRecentlyActive ? '#FF3B30' : (emp.totalCalls > 0 ? '#34C759' : '#8E8E93'),
+        status: active ? 'ON CALL' : (emp.totalCalls > 0 ? 'ONLINE' : 'OFFLINE'),
+        statusColor: active ? '#FF3B30' : (emp.totalCalls > 0 ? '#34C759' : '#8E8E93'),
         totalCalls: emp.totalCalls,
       };
     });
 
-    const allUsers = await Employee.find().select('id _id name email phone role team managerId managerName dailyTarget').sort({ name: 1 });
+    // Directory data for filters: managers see the people in their scope, callers only themselves
+    const visible = isMgr ? (scope.role === 'admin' ? await Employee.find({}).select('-photoBase64 -avatarUrl').lean() : await resolveScope(req, {}).then(s => s.employees)) : (scope.me ? [scope.me] : []);
+    const allUsers = visible
+      .filter(u => scope.role === 'admin' || u.role !== 'admin')
+      .map(u => ({ id: u.id, _id: u._id, name: u.name, email: u.email || '', phone: u.phone, role: u.role, team: u.team || DEFAULT_TEAM, managerId: u.managerId || '', managerName: u.managerName || '', dailyTarget: u.dailyTarget || 40 }))
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    const managersList = allUsers.filter(u => MANAGER_ROLES.includes(u.role))
+      .map(u => ({ id: u.id, name: u.name, email: u.email, phone: u.phone, role: u.role, team: u.team }));
+    const teamNames = [...new Set(allUsers.map(u => (u.team || '').trim()).filter(Boolean))].sort();
+    const teams = ['ALL TEAMS', ...(teamNames.length ? teamNames : [DEFAULT_TEAM])];
 
     res.json({
       success: true,
       data: {
         totalCalls,
         connectedCalls,
-        talkTimeFormatted,
+        talkSeconds,
+        talkTimeFormatted: fmtHM(talkSeconds),
+        avgDurationSeconds: avgDurationSec,
         avgDurationFormatted,
-        uniqueClients: distinctClients.length,
+        uniqueClients: stats.uniqueClients,
         teamCount: registeredEmployees.length,
         teamDailyTarget,
         incoming,
@@ -537,632 +172,283 @@ router.get('/dashboard', async (req, res) => {
         hourlyCalls,
         teamMembers: teamMemberStats,
         managersList,
-        teams: teamsList,
+        teams,
         allUsers,
       }
     });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err, 'admin.dashboard');
   }
 });
 
-// GET /api/admin/calls - Dedicated Live Calls Details Feed
+// GET /api/admin/calls — managers. ?from=&to=&callerId=&limit=(1000, max 5000)&before=&type=&search=
 router.get('/calls', async (req, res) => {
   try {
     const { type, search } = req.query;
-    const { callLogQuery } = await buildTelemetryQuery(req.query);
-    
-    let conditions = [];
+    const { scope, callLogQuery } = await telemetry(req);
 
-    const employees = await Employee.find().select('id name phone');
-    const validCallerNames = employees.map(e => e.name).filter(Boolean);
-    const validCallerPhones = employees.map(e => e.phone).filter(Boolean);
-    const validCleanPhones = validCallerPhones.map(p => p.replace(/[^0-9]/g, '').slice(-10)).filter(Boolean);
-
-    if (validCallerNames.length > 0 || validCallerPhones.length > 0) {
-      conditions.push({
-        $or: [
-          { callerName: { $in: validCallerNames.map(n => new RegExp(`^${n}$`, 'i')) } },
-          { callerPhone: { $in: validCallerPhones } },
-          ...(validCleanPhones.map(cp => ({ callerPhone: new RegExp(cp + '$') })))
-        ]
-      });
-    }
-
-    if (callLogQuery && Object.keys(callLogQuery).length > 0) {
-      conditions.push(callLogQuery);
-    }
+    const conditions = [callLogQuery];
+    const from = parseDate(req.query.from);
+    const to = parseDate(req.query.to);
+    if (from || to) conditions.push({ timestamp: { ...(from ? { $gte: from } : {}), ...(to ? { $lte: to } : {}) } });
 
     if (type && type !== 'all') {
-      if (type === 'inbound') conditions.push({ type: { $in: ['incoming', 'inbound'] } });
-      else if (type === 'outbound') conditions.push({ type: { $in: ['outgoing', 'outbound'] } });
+      if (type === 'inbound') conditions.push({ type: 'incoming' });
+      else if (type === 'outbound') conditions.push({ type: 'outgoing' });
       else if (type === 'missed') conditions.push({ type: { $in: ['missed', 'neverAttended', 'rejected'] } });
     }
-
-    if (search && search.trim()) {
-      const s = search.trim();
-      conditions.push({
-        $or: [
-          { callerName: { $regex: s, $options: 'i' } },
-          { contactName: { $regex: s, $options: 'i' } },
-          { phoneNumber: { $regex: s, $options: 'i' } }
-        ]
-      });
+    if (search && String(search).trim()) {
+      const re = new RegExp(escapeRegex(String(search).trim()), 'i');
+      conditions.push({ $or: [{ callerName: re }, { contactName: re }, { phoneNumber: re }] });
     }
+    const query = and(...conditions);
+    const before = parseDate(req.query.before);
+    const pageQuery = before ? and(query, { timestamp: { $lt: before } }) : query;
+    const limit = parseLimit(req.query.limit, 1000, 5000);
 
-    const query = conditions.length > 0 ? (conditions.length === 1 ? conditions[0] : { $and: conditions }) : {};
-    const rawCalls = await CallLog.find(query).sort({ timestamp: -1 }).limit(200);
+    const [rawCalls, total] = await Promise.all([
+      CallLog.find(pageQuery).sort({ timestamp: -1, _id: -1 }).limit(limit + 1).lean(),
+      CallLog.countDocuments(query),
+    ]);
+    const hasMore = rawCalls.length > limit;
 
-    const phoneMap = {};
-    employees.forEach(e => {
-      if (e.phone) {
-        const clean = e.phone.replace(/[^0-9]/g, '').slice(-10);
-        if (clean) phoneMap[clean] = e.name;
-        phoneMap[e.phone] = e.name;
-      }
-    });
+    const byId = new Map(scope.employees.map(e => [e.id, e]));
+    const byPhone = new Map(scope.employees.filter(e => last10(e.phone)).map(e => [last10(e.phone), e]));
 
-    // Deduplicate calls on read: prevent duplicate logs within 90-second window
-    const dedupedCalls = [];
+    // Collapse legacy duplicate rows (same caller + number + exact timestamp). Quick redials are real calls and are kept.
     const seen = new Set();
-
-    for (const c of rawCalls) {
-      const isConnected = c.durationSeconds > 0;
-      const isOutbound = c.type === 'outgoing' || c.type === 'outbound';
-      const durationStr = `${Math.floor(c.durationSeconds / 60)}m ${c.durationSeconds % 60}s`;
-      const cleanPhone = (c.callerPhone || '').replace(/[^0-9]/g, '').slice(-10);
-      const registeredName = phoneMap[cleanPhone] || phoneMap[c.callerPhone] || c.callerName || 'Caller';
-      const cleanTarget = (c.phoneNumber || '').replace(/[^0-9]/g, '').slice(-10);
-      const callTs = new Date(c.timestamp || c.createdAt || Date.now()).getTime();
-      const timeBucket = Math.floor(callTs / 90000); // 90-second window
-
-      const dedupKey = `${cleanPhone}_${cleanTarget}_${isOutbound ? 'OUT' : 'IN'}_${c.durationSeconds || 0}_${timeBucket}`;
-      if (seen.has(dedupKey)) {
-        continue;
-      }
-      seen.add(dedupKey);
-
-      dedupedCalls.push({
-        id: c._id,
-        callerName: registeredName,
+    const calls = [];
+    for (const c of rawCalls.slice(0, limit)) {
+      const ts = c.timestamp || c.createdAt;
+      const dupKey = buildDedupKey(c.callerPhone, c.phoneNumber, ts);
+      if (seen.has(dupKey)) continue;
+      seen.add(dupKey);
+      const emp = byId.get(c.callerId) || byPhone.get(last10(c.callerPhone));
+      const isOutbound = c.type === 'outgoing';
+      const contact = (c.contactName || '').trim();
+      const durationSeconds = Math.max(0, Math.round(c.durationSeconds || 0));
+      calls.push({
+        id: String(c._id),
+        callerId: emp ? emp.id : (c.callerId || ''),
+        callerName: emp ? emp.name : (c.callerName || ''),
         callerPhone: c.callerPhone || '',
-        contactName: c.contactName || 'Unknown Contact',
+        contactName: contact && !['unknown', 'unknown contact'].includes(contact.toLowerCase()) && contact !== c.phoneNumber ? contact : null,
         phoneNumber: c.phoneNumber,
-        type: isOutbound ? 'OUTBOUND' : (c.type === 'incoming' || c.type === 'inbound' ? 'INBOUND' : 'MISSED'),
-        durationStr,
-        durationSeconds: c.durationSeconds,
-        timestamp: c.timestamp || c.createdAt,
+        type: isOutbound ? 'OUTBOUND' : (c.type === 'incoming' ? 'INBOUND' : 'MISSED'),
+        rawType: c.type,
+        durationSeconds,
+        durationStr: `${Math.floor(durationSeconds / 60)}m ${durationSeconds % 60}s`,
+        timestamp: ts,
         simSlot: c.simSlot || 1,
+        recordingId: c.recordingId || null,
+        recordingUrl: c.recordingId ? `/api/recordings/${c.recordingId}/audio` : (c.recordingUrl || ''),
         note: c.note || '',
-        recordingUrl: c.recordingUrl || '',
       });
     }
 
-    res.json({ success: true, count: dedupedCalls.length, calls: dedupedCalls });
+    res.json({ success: true, count: calls.length, total, hasMore, calls });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err, 'admin.calls');
   }
 });
 
-// 2. GET & POST /api/admin/users - User Management (Add / List Users)
+// ---- Users -------------------------------------------------------------------------------------
+async function findDuplicate({ email, phone }, excludeId = null) {
+  const or = [];
+  if (email) or.push({ email: String(email).toLowerCase().trim() });
+  const pr = last10(phone).length === 10 ? phoneRegex(phone) : null;
+  if (pr) or.push({ phone: pr });
+  if (!or.length) return null;
+  return Employee.findOne({ $or: or, ...(excludeId ? { id: { $ne: excludeId } } : {}) }).lean();
+}
+
+async function managerNameFor(managerId) {
+  if (!managerId) return '';
+  const mgr = await Employee.findOne(byIdQuery(managerId)).lean();
+  return mgr ? mgr.name : '';
+}
+
+// GET /api/admin/users — managers (never returns passwords)
 router.get('/users', async (req, res) => {
   try {
-    let users = await Employee.find().sort({ createdAt: -1 });
-
-    // Seed sample admin if empty
-    if (users.length === 0) {
-      const initialUsers = [
-        {
-          id: 'admin_1',
-          name: 'Admin',
-          email: 'admin@askeva.com',
-          phone: '+91 98250 00000',
-          password: 'admin123',
-          role: 'admin',
-          team: 'Management',
-          dailyTarget: 150,
-        },
-      ];
-      users = await Employee.insertMany(initialUsers);
-    }
-
+    const users = await Employee.find().sort({ createdAt: -1 });
     res.json({ success: true, count: users.length, users });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err, 'admin.users.list');
   }
 });
 
+// POST /api/admin/users — managers; name + phone + password (min 6) required
 router.post('/users', async (req, res) => {
   try {
-    const { name, email, phone, password, role, team, dailyTarget, managerId, managerName } = req.body;
-    if (!name) {
-      return res.status(400).json({ success: false, message: 'Name is required' });
-    }
+    const b = req.body || {};
+    const name = typeof b.name === 'string' ? b.name.trim() : '';
+    const phone = typeof b.phone === 'string' ? b.phone.trim() : String(b.phone || '').trim();
+    const password = typeof b.password === 'string' ? b.password : '';
+    const email = typeof b.email === 'string' && b.email.trim() ? b.email.toLowerCase().trim() : undefined;
+    const role = b.role ? String(b.role).toLowerCase() : 'caller';
 
-    let assignedManagerId = managerId || '';
-    let assignedManagerName = managerName || '';
-
-    if (assignedManagerId && !assignedManagerName) {
-      const mgr = await Employee.findOne({ $or: [{ id: assignedManagerId }, { _id: assignedManagerId.match(/^[0-9a-fA-F]{24}$/) ? assignedManagerId : null }] });
-      if (mgr) assignedManagerName = mgr.name;
+    if (!name) return res.status(400).json({ success: false, message: 'Name is required' });
+    if (last10(phone).length !== 10) return res.status(400).json({ success: false, message: 'A valid 10-digit phone number is required' });
+    if (password.trim().length < 6) return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
+    if (!ROLES.includes(role)) return res.status(400).json({ success: false, message: `role must be one of ${ROLES.join(', ')}` });
+    if (role === 'admin' && req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Only an admin can create an admin.' });
     }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ success: false, message: 'Invalid email' });
+
+    const dup = await findDuplicate({ email, phone });
+    if (dup) return res.status(409).json({ success: false, message: 'A user with this email or phone number already exists' });
+
+    const managerId = b.managerId ? String(b.managerId) : '';
+    const managerName = typeof b.managerName === 'string' && b.managerName ? b.managerName : await managerNameFor(managerId);
+    const dailyTarget = b.dailyTarget !== undefined && b.dailyTarget !== '' ? Math.max(0, Math.round(Number(b.dailyTarget) || 0)) : 40;
 
     const newUser = await Employee.create({
-      id: `user_${Date.now()}`,
+      id: `user_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       name,
-      email: email ? email.toLowerCase().trim() : `${name.toLowerCase().replace(/\s+/g, '')}@askeva.com`,
-      phone: phone || '+91 00000 00000',
-      password: password || 'admin123',
-      role: role || 'caller',
-      team: team || 'Telesales Team',
-      dailyTarget: dailyTarget || 100,
-      managerId: assignedManagerId,
-      managerName: assignedManagerName,
+      ...(email ? { email } : {}),
+      phone,
+      password: await hashPassword(password.trim()),
+      role,
+      team: typeof b.team === 'string' && b.team.trim() ? b.team.trim() : DEFAULT_TEAM,
+      dailyTarget,
+      managerId,
+      managerName,
     });
 
     res.status(201).json({ success: true, user: newUser, message: 'User created successfully' });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    if (err && err.name === 'ValidationError') return res.status(400).json({ success: false, message: 'Invalid user data' });
+    serverError(res, err, 'admin.users.create');
   }
 });
 
+// PUT /api/admin/users/:id — managers; omitted fields are left unchanged
 router.put('/users/:id', async (req, res) => {
   try {
-    const { name, email, phone, password, role, team, dailyTarget, managerId, managerName } = req.body;
-    
-    let assignedManagerId = managerId !== undefined ? managerId : '';
-    let assignedManagerName = managerName !== undefined ? managerName : '';
+    const b = req.body || {};
+    const target = await Employee.findOne(byIdQuery(req.params.id)).lean();
+    if (!target) return res.status(404).json({ success: false, message: 'User not found' });
 
-    if (assignedManagerId && !assignedManagerName) {
-      const mgr = await Employee.findOne({ $or: [{ id: assignedManagerId }, { _id: assignedManagerId.match(/^[0-9a-fA-F]{24}$/) ? assignedManagerId : null }] });
-      if (mgr) assignedManagerName = mgr.name;
+    const isAdmin = req.user.role === 'admin';
+    if (target.role === 'admin' && !isAdmin) {
+      return res.status(403).json({ success: false, message: 'Only an admin can modify an admin account.' });
     }
 
-    const updateData = {
-      name,
-      email,
-      phone,
-      role,
-      team,
-      dailyTarget,
-      managerId: assignedManagerId,
-      managerName: assignedManagerName,
-    };
-
-    if (password && password.trim().length > 0) {
-      updateData.password = password;
+    const set = {};
+    if (b.name !== undefined) {
+      const name = String(b.name).trim();
+      if (!name) return res.status(400).json({ success: false, message: 'Name cannot be empty' });
+      set.name = name;
+    }
+    if (b.email !== undefined) {
+      const email = String(b.email || '').toLowerCase().trim();
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ success: false, message: 'Invalid email' });
+      set.email = email || undefined;
+    }
+    if (b.phone !== undefined) {
+      const phone = String(b.phone || '').trim();
+      if (last10(phone).length !== 10) return res.status(400).json({ success: false, message: 'A valid 10-digit phone number is required' });
+      set.phone = phone;
+    }
+    if (b.role !== undefined) {
+      const role = String(b.role).toLowerCase();
+      if (!ROLES.includes(role)) return res.status(400).json({ success: false, message: `role must be one of ${ROLES.join(', ')}` });
+      if (role === 'admin' && !isAdmin) return res.status(403).json({ success: false, message: 'Only an admin can promote a user to admin.' });
+      set.role = role;
+    }
+    if (b.team !== undefined) set.team = String(b.team || '').trim() || DEFAULT_TEAM;
+    if (b.dailyTarget !== undefined && b.dailyTarget !== '') {
+      const n = Number(b.dailyTarget);
+      if (!Number.isFinite(n) || n < 0) return res.status(400).json({ success: false, message: 'dailyTarget must be a positive number' });
+      set.dailyTarget = Math.round(n);
+    }
+    if (b.managerId !== undefined) {
+      set.managerId = b.managerId ? String(b.managerId) : '';
+      set.managerName = b.managerName !== undefined ? String(b.managerName || '') : await managerNameFor(set.managerId);
+    } else if (b.managerName !== undefined) {
+      set.managerName = String(b.managerName || '');
+    }
+    if (b.password !== undefined && b.password !== null && String(b.password).trim() !== '') {
+      if (String(b.password).trim().length < 6) return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
+      set.password = await hashPassword(String(b.password).trim());
     }
 
-    const paramId = req.params.id;
-    const isMongoId = /^[0-9a-fA-F]{24}$/.test(paramId);
-
-    const updated = await Employee.findOneAndUpdate(
-      {
-        $or: [
-          { id: paramId },
-          ...(isMongoId ? [{ _id: paramId }] : [])
-        ]
-      },
-      { $set: updateData },
-      { new: true }
-    );
-
-    if (!updated) {
-      return res.status(404).json({ success: false, message: 'User not found' });
+    if (set.email || set.phone) {
+      const dup = await findDuplicate({ email: set.email, phone: set.phone }, target.id);
+      if (dup) return res.status(409).json({ success: false, message: 'A user with this email or phone number already exists' });
     }
+
+    const unset = {};
+    if ('email' in set && set.email === undefined) { delete set.email; unset.email = 1; }
+    const update = { ...(Object.keys(set).length ? { $set: set } : {}), ...(Object.keys(unset).length ? { $unset: unset } : {}) };
+    const updated = Object.keys(update).length
+      ? await Employee.findOneAndUpdate({ _id: target._id }, update, { new: true, runValidators: true })
+      : await Employee.findById(target._id);
 
     res.json({ success: true, user: updated, message: 'User updated successfully' });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    if (err && err.name === 'ValidationError') return res.status(400).json({ success: false, message: 'Invalid user data' });
+    serverError(res, err, 'admin.users.update');
   }
 });
 
+// DELETE /api/admin/users/:id — admin only (ROUTE_RULES)
 router.delete('/users/:id', async (req, res) => {
   try {
     const paramId = req.params.id;
-    const isMongoId = /^[0-9a-fA-F]{24}$/.test(paramId);
-
-    const deleted = await Employee.findOneAndDelete({
-      $or: [
-        { id: paramId },
-        ...(isMongoId ? [{ _id: paramId }] : [])
-      ]
-    });
-
-    if (!deleted) {
-      return res.status(404).json({ success: false, message: 'User not found' });
+    const target = await Employee.findOne(byIdQuery(paramId)).lean();
+    if (!target) return res.status(404).json({ success: false, message: 'User not found' });
+    if (req.user && target.id === req.user.id) {
+      return res.status(400).json({ success: false, message: 'You cannot delete your own account.' });
     }
-
+    if (target.role === 'admin' && (await Employee.countDocuments({ role: 'admin' })) <= 1) {
+      return res.status(400).json({ success: false, message: 'The last admin account cannot be deleted.' });
+    }
+    await Employee.deleteOne({ _id: target._id });
     res.json({ success: true, message: 'User deleted successfully' });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err, 'admin.users.delete');
   }
 });
 
-// 3. GET /api/admin/leaderboard - Dynamic CALLERS ONLY rankings from MongoDB
+// GET /api/admin/leaderboard — callers in scope, real per-caller counts for the period
 router.get('/leaderboard', async (req, res) => {
   try {
-    const { employeeQuery, callLogQuery } = await buildTelemetryQuery(req.query);
-    const callerEmployees = await Employee.find({ ...employeeQuery, role: 'caller' });
-    const nonCallers = await Employee.find({ role: { $ne: 'caller' } });
-    const nonCallerPhones = nonCallers.map(e => e.phone);
-    const nonCallerNames = nonCallers.map(e => e.name.toLowerCase());
+    const { scope, callLogQuery } = await telemetry(req);
+    const callers = scope.employees.filter(e => (e.role || 'caller') === 'caller');
+    const stats = await aggregateCallStats(callLogQuery);
+    const photos = callers.length
+      ? await Employee.find({ id: { $in: callers.map(c => c.id) } }).select('id photoBase64 avatarUrl').lean()
+      : [];
+    const photoById = new Map(photos.map(p => [p.id, p]));
 
-    const liveLeaderboard = await CallLog.aggregate([
-      { $match: callLogQuery },
-      {
-        $group: {
-          _id: { callerName: '$callerName', callerPhone: '$callerPhone' },
-          totalCalls: { $sum: 1 },
-          connectedCalls: {
-            $sum: { $cond: [{ $gt: ['$durationSeconds', 0] }, 1, 0] }
-          },
-          talkTimeSeconds: { $sum: '$durationSeconds' },
-        }
-      }
-    ]);
-
-    let employeesList = [];
-
-    if (callerEmployees.length > 0) {
-      employeesList = callerEmployees.map(emp => {
-        const found = liveLeaderboard.find(item =>
-          (item._id.callerPhone && item._id.callerPhone === emp.phone) ||
-          (item._id.callerName && item._id.callerName.toLowerCase() === emp.name.toLowerCase())
-        );
-        const calls = found ? found.totalCalls : 0;
-        const connected = found ? found.connectedCalls : 0;
-        const talkSec = found ? found.talkTimeSeconds : 0;
-        const hours = Math.floor(talkSec / 3600);
-        const mins = Math.floor((talkSec % 3600) / 60);
-
-        return {
-          id: emp.id,
-          name: emp.name,
-          phone: emp.phone,
-          role: 'caller',
-          team: emp.team || 'Telesales',
-          avatarUrl: emp.avatarUrl || '',
-          photoBase64: emp.photoBase64 || '',
-          totalCalls: calls,
-          connectedCalls: connected,
-          talkTimeSeconds: talkSec,
-          talkTimeFormatted: `${hours}h ${mins.toString().padStart(2, '0')}m`,
-          dailyTarget: emp.dailyTarget || 100,
-        };
-      });
-    } else {
-      employeesList = [];
-    }
-
-    // Sort by talk time, then total calls
-    employeesList.sort((a, b) => b.talkTimeSeconds - a.talkTimeSeconds || b.totalCalls - a.totalCalls);
-
-    // Assign rank
-    employeesList.forEach((emp, i) => emp.rank = i + 1);
-
-    res.json({ success: true, count: employeesList.length, employees: employeesList });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// Update Profile Photo Endpoint (POST /api/admin/users/photo & /api/users/photo)
-router.all(['/users/photo', '/users/:id/photo'], async (req, res) => {
-  try {
-    const rawId = req.params.id || req.body.id || req.body.userId;
-    const { photoBase64, avatarUrl } = req.body;
-    if (!rawId) {
-      return res.status(400).json({ success: false, message: 'User ID is required' });
-    }
-    const isMongoId = /^[0-9a-fA-F]{24}$/.test(rawId);
-    const updated = await Employee.findOneAndUpdate(
-      {
-        $or: [
-          { id: rawId },
-          ...(isMongoId ? [{ _id: rawId }] : [])
-        ]
-      },
-      { $set: { photoBase64: photoBase64 || '', avatarUrl: avatarUrl || '' } },
-      { new: true }
-    );
-    if (!updated) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
-    res.json({ success: true, message: 'Profile photo updated successfully', user: updated });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// 4. GET & POST /api/admin/recordings - Real live audio recordings in MongoDB
-router.get('/recordings', async (req, res) => {
-  try {
-    const { type, search } = req.query;
-    const { employeeQuery } = await buildTelemetryQuery(req.query);
-    let conditions = [];
-
-    const allRegisteredEmployees = await Employee.find({ ...employeeQuery });
-    const names = allRegisteredEmployees.map(c => c.name).filter(Boolean);
-    const phones = allRegisteredEmployees.map(c => c.phone).filter(Boolean);
-    const cleanPhones = phones.map(p => p.replace(/[^0-9]/g, '').slice(-10)).filter(Boolean);
-
-    if (names.length > 0 || phones.length > 0) {
-      conditions.push({
-        $or: [
-          { callerName: { $in: names.map(n => new RegExp(`^${n}$`, 'i')) } },
-          { phoneNumber: { $in: phones } },
-          ...(cleanPhones.map(cp => ({ phoneNumber: new RegExp(cp + '$') })))
-        ]
-      });
-    } else {
-      // No registered employees match -> return empty
-      return res.json({
-        success: true,
-        storage: { usedGB: 0.05, totalGB: 5.0, freeGB: 4.95, count: 0 },
-        recordings: []
-      });
-    }
-
-    if (type && type !== 'all') {
-      if (type === 'inbound') conditions.push({ type: { $in: ['incoming', 'inbound'] } });
-      else if (type === 'outbound') conditions.push({ type: { $in: ['outgoing', 'outbound'] } });
-    }
-
-    if (search && search.trim()) {
-      const s = search.trim();
-      conditions.push({
-        $or: [
-          { callerName: { $regex: s, $options: 'i' } },
-          { contactName: { $regex: s, $options: 'i' } },
-          { phoneNumber: { $regex: s, $options: 'i' } }
-        ]
-      });
-    }
-
-    const query = conditions.length > 0 ? (conditions.length === 1 ? conditions[0] : { $and: conditions }) : {};
-    const recordings = await Recording.find(query).sort({ createdAt: -1 });
-    const totalStorageBytes = recordings.reduce((acc, r) => acc + (r.storageSizeBytes || 450000), 0);
-    const usedGB = +(totalStorageBytes / (1024 * 1024 * 1024)).toFixed(2);
-
-    res.json({
-      success: true,
-      storage: {
-        usedGB: Math.max(usedGB, 0.05),
-        totalGB: 5.0,
-        freeGB: +(5.0 - Math.max(usedGB, 0.05)).toFixed(2),
-        count: recordings.length,
-      },
-      recordings,
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-router.post('/recordings', async (req, res) => {
-  try {
-    const { callerName, contactName, phoneNumber, durationSeconds, transcript, dateStr, timeStr, fileName } = req.body;
-
-    const rec = await Recording.create({
-      id: Date.now().toString(),
-      callerName: callerName || 'Caller',
-      contactName: contactName || 'Client',
-      phoneNumber: phoneNumber || '',
-      durationSeconds: durationSeconds || 0,
-      transcript: transcript || '“Call auto-recorded successfully”',
-      dateStr: dateStr || 'Today',
-      timeStr: timeStr || 'Now',
+    const employees = callers.map(emp => {
+      const m = memberStats(emp, stats);
+      const photo = photoById.get(emp.id) || {};
+      return {
+        id: emp.id,
+        name: emp.name,
+        phone: emp.phone,
+        role: 'caller',
+        team: emp.team || DEFAULT_TEAM,
+        managerId: emp.managerId || '',
+        managerName: emp.managerName || '',
+        dailyTarget: emp.dailyTarget || 40,
+        ...m,
+        talkTimeFormatted: fmtHM(m.talkTimeSeconds),
+        avatarUrl: photo.avatarUrl || '',
+        photoBase64: photo.photoBase64 || '',
+      };
     });
 
-    res.json({ success: true, recording: rec });
+    employees.sort((a, b) => b.talkTimeSeconds - a.talkTimeSeconds || b.totalCalls - a.totalCalls || (a.name || '').localeCompare(b.name || ''));
+    employees.forEach((emp, i) => { emp.rank = i + 1; });
+
+    res.json({ success: true, count: employees.length, employees });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-router.delete('/recordings/:id', async (req, res) => {
-  try {
-    const recId = req.params.id;
-    const isMongoId = /^[0-9a-fA-F]{24}$/.test(recId);
-    const deleted = await Recording.findOneAndDelete({
-      $or: [
-        { id: recId },
-        ...(isMongoId ? [{ _id: recId }] : [])
-      ]
-    });
-    if (!deleted) {
-      return res.status(404).json({ success: false, message: 'Recording not found' });
-    }
-    res.json({ success: true, message: 'Recording deleted successfully' });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// 5. GET /api/admin/leads - Real live CRM pipeline leads from MongoDB
-router.get('/leads', async (req, res) => {
-  try {
-    const { search } = req.query;
-    const { employeeQuery } = await buildTelemetryQuery(req.query);
-    let conditions = [];
-
-    if (employeeQuery && Object.keys(employeeQuery).length > 0) {
-      const teamCallers = await Employee.find({ ...employeeQuery });
-      const names = teamCallers.map(c => c.name).filter(Boolean);
-      const phones = teamCallers.map(c => c.phone).filter(Boolean);
-      if (names.length > 0 || phones.length > 0) {
-        conditions.push({
-          $or: [
-            { assignedCaller: { $in: names.map(n => new RegExp(`^${n}$`, 'i')) } },
-            { phone: { $in: phones } }
-          ]
-        });
-      }
-    }
-
-    if (search && search.trim()) {
-      const s = search.trim();
-      conditions.push({
-        $or: [
-          { name: { $regex: s, $options: 'i' } },
-          { phone: { $regex: s, $options: 'i' } },
-          { assignedCaller: { $regex: s, $options: 'i' } }
-        ]
-      });
-    }
-
-    const query = conditions.length > 0 ? (conditions.length === 1 ? conditions[0] : { $and: conditions }) : {};
-    const leads = await Lead.find(query).sort({ updatedAt: -1 });
-    const won = leads.filter(l => l.status === 'won').length;
-    const interested = leads.filter(l => l.status === 'interested').length;
-    const followUp = leads.filter(l => l.status === 'followUp').length;
-    const other = leads.length - (won + interested + followUp);
-
-    res.json({
-      success: true,
-      pipeline: {
-        total: leads.length,
-        won,
-        interested,
-        followUp,
-        other: Math.max(other, 0),
-      },
-      leads,
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// Update lead status in CRM pipeline (POST & PUT)
-router.all(['/leads/:id/status', '/leads/status'], async (req, res) => {
-  try {
-    const rawId = req.params.id || req.body.id || req.body.phone || '';
-    const { status, notes, note, name, phone, callerName } = req.body;
-    const finalPhone = phone || (rawId.replace(/[^0-9]/g, '').length >= 6 ? rawId : '');
-    const cleanPhone = finalPhone.replace(/[^0-9]/g, '');
-    const last10 = cleanPhone.length >= 10 ? cleanPhone.substring(cleanPhone.length - 10) : cleanPhone;
-
-    const isMongoId = /^[0-9a-fA-F]{24}$/.test(rawId);
-    const orClauses = [];
-    if (isMongoId) orClauses.push({ _id: rawId });
-    if (rawId) orClauses.push({ id: rawId });
-    if (last10) {
-      orClauses.push(
-        { phone: finalPhone },
-        { phone: new RegExp(last10 + '$') },
-        { phone: new RegExp('^' + last10) }
-      );
-    }
-
-    const query = orClauses.length > 0 ? { $or: orClauses } : { id: Date.now().toString() };
-
-    const updateObj = {
-      updatedAt: new Date(),
-      ...(status ? { status } : {}),
-      ...(notes || note ? { notes: notes || note } : {}),
-      ...(name ? { name } : {}),
-      ...(finalPhone ? { phone: finalPhone } : {}),
-      ...(callerName ? { assignedCaller: callerName } : {})
-    };
-
-    let lead = await Lead.findOneAndUpdate(
-      query,
-      {
-        $set: updateObj,
-        $setOnInsert: {
-          id: req.body.id || Date.now().toString(),
-          createdAt: new Date()
-        }
-      },
-      { new: true, upsert: true }
-    );
-
-    res.json({ success: true, lead });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// POST /api/admin/recordings/:id/comment - Save rating & comment for recording (Admin & Manager Only)
-router.post('/recordings/:id/comment', async (req, res) => {
-  try {
-    const { rating, comment, commentedBy, commentedByRole } = req.body;
-    const recId = req.params.id;
-
-    const role = (commentedByRole || '').toLowerCase();
-    if (role !== 'admin' && role !== 'manager') {
-      return res.status(403).json({
-        success: false,
-        message: 'Unauthorized: Only Admin and Manager roles are permitted to submit call quality ratings and comments.'
-      });
-    }
-
-    const isMongoId = /^[0-9a-fA-F]{24}$/.test(recId);
-    const updated = await Recording.findOneAndUpdate(
-      {
-        $or: [
-          { id: recId },
-          ...(isMongoId ? [{ _id: recId }] : [])
-        ]
-      },
-      {
-        $set: {
-          rating: typeof rating === 'number' ? rating : 0,
-          comment: comment || '',
-          commentedBy: commentedBy || 'Admin',
-          commentedByRole: commentedByRole || 'admin',
-          commentedAt: new Date(),
-        }
-      },
-      { new: true }
-    );
-
-    if (!updated) {
-      return res.status(404).json({ success: false, message: 'Recording not found' });
-    }
-
-    // Create persistent Notification for the respective caller
-    try {
-      const callerName = updated.callerName || '';
-      const callerEmp = await Employee.findOne({
-        $or: [
-          { name: new RegExp(`^${callerName}$`, 'i') },
-          ...(updated.callerPhone ? [{ phone: updated.callerPhone }] : [])
-        ]
-      });
-
-      const recipientPhone = callerEmp ? callerEmp.phone : (updated.callerPhone || '');
-      const starsStr = typeof rating === 'number' && rating > 0 ? `${rating} ⭐` : '';
-      const author = commentedBy || 'Admin';
-      const roleStr = (commentedByRole || 'admin').toUpperCase();
-
-      await Notification.create({
-        id: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-        recipientPhone: recipientPhone,
-        recipientName: callerName,
-        senderName: author,
-        senderRole: commentedByRole || 'admin',
-        recordingId: updated.id || recId,
-        contactName: updated.contactName || 'Client',
-        title: `Feedback from ${author} (${roleStr})`,
-        message: `${author} reviewed your call with ${updated.contactName || 'Client'} ${starsStr ? `(${starsStr})` : ''}: "${comment || 'Good call'}"`,
-        comment: comment || '',
-        rating: typeof rating === 'number' ? rating : 0,
-        isRead: false,
-      });
-    } catch (notifErr) {
-      console.error('Error creating notification:', notifErr);
-    }
-
-    res.json({
-      success: true,
-      recording: updated,
-      message: 'Call quality rating and comment saved successfully'
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err, 'admin.leaderboard');
   }
 });
 

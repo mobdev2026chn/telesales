@@ -1,32 +1,39 @@
 const Employee = require('../models/Employee');
+const { hashPassword } = require('../middleware/auth');
 
+// Creates the first admin account ONLY when no admin exists. Never modifies existing users.
+// Credentials come from the environment: ADMIN_PASSCODE (required, min 8 chars), ADMIN_EMAIL, ADMIN_NAME, ADMIN_PHONE.
 const seedAdminUsers = async () => {
   try {
-    const adminUser = {
-      id: 'admin_1',
-      name: 'Admin',
-      email: 'admin@askeva.com',
-      phone: '+91 98250 00000',
-      password: 'admin123',
+    if (await Employee.exists({ role: 'admin' })) return;
+
+    const passcode = process.env.ADMIN_PASSCODE || '';
+    if (passcode.trim().length < 8) {
+      console.error('No admin account exists and ADMIN_PASSCODE is missing or shorter than 8 characters. Set it in backend/.env to create the first admin.');
+      return;
+    }
+    const email = (process.env.ADMIN_EMAIL || 'admin@askeva.com').toLowerCase().trim();
+    if (await Employee.exists({ email })) {
+      console.error(`No admin account exists, but ${email} belongs to a non-admin user. Not touching it; promote a user to admin manually.`);
+      return;
+    }
+
+    const id = (await Employee.exists({ id: 'admin_1' })) ? `admin_${Date.now()}` : 'admin_1';
+    const admin = new Employee({
+      id,
+      name: process.env.ADMIN_NAME || 'Admin',
+      email,
+      phone: process.env.ADMIN_PHONE || '',
+      password: await hashPassword(passcode.trim()),
       role: 'admin',
       team: 'Management',
-      totalCalls: 0,
-      connectedCalls: 0,
-      talkTimeSeconds: 0,
-      dailyTarget: 150,
-      managerId: '',
-      managerName: '',
-    };
-
-    // Upsert Admin user and ensure only admin exists if fresh
-    await Employee.findOneAndUpdate(
-      { $or: [{ id: adminUser.id }, { email: adminUser.email }, { role: 'admin' }] },
-      { $set: adminUser },
-      { upsert: true, new: true }
-    );
-    console.log(`✅ Default Admin user synced to DB: ${adminUser.name} (${adminUser.email})`);
+      dailyTarget: 0,
+    });
+    // phone is optional for the bootstrap admin (it signs in by email)
+    await admin.save({ validateBeforeSave: false });
+    console.log(`Created the first admin account (${email}).`);
   } catch (err) {
-    console.error('⚠️ Error seeding admin user:', err.message);
+    console.error('Error seeding admin user:', err.message);
   }
 };
 

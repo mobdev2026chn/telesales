@@ -1,237 +1,180 @@
 const express = require('express');
 const router = express.Router();
 const Employee = require('../models/Employee');
+const { signToken, verifyAndUpgradePassword, requireAuth, MANAGERS } = require('../middleware/auth');
 
-// 1. POST /api/auth/admin-login - Strict Admin/Manager Authentication against Employees Table
-router.post('/admin-login', async (req, res) => {
-  try {
-    const { email, username, password } = req.body;
-    const identifier = (email || username || '').trim();
+const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const last10 = (s) => String(s || '').replace(/[^0-9]/g, '').slice(-10);
 
-    if (!identifier) {
-      return res.status(400).json({ success: false, message: 'Email, username, or phone number is required' });
-    }
+function publicUser(emp, extra = {}) {
+  return {
+    id: emp.id,
+    name: emp.name,
+    email: emp.email || '',
+    phone: emp.phone || '',
+    role: emp.role || 'caller',
+    team: emp.team || '',
+    managerId: emp.managerId || '',
+    managerName: emp.managerName || '',
+    dailyTarget: emp.dailyTarget || 40,
+    ...extra,
+  };
+}
 
-    if (!password) {
-      return res.status(400).json({ success: false, message: 'Password is required' });
-    }
-
-    const cleanPhone = identifier.replace(/[^0-9]/g, '');
-    const last10 = cleanPhone.length >= 10 ? cleanPhone.substring(cleanPhone.length - 10) : cleanPhone;
-    const phoneFlexPattern = last10.length === 10 ? last10.split('').join('[^0-9]*') : null;
-
-    const safeIdentifier = identifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-    // Lookup user strictly in MongoDB Employees collection
-    const user = await Employee.findOne({
-      $or: [
-        { email: identifier.toLowerCase() },
-        { name: new RegExp(`^${safeIdentifier}$`, 'i') },
-        { phone: identifier },
-        ...(phoneFlexPattern ? [{ phone: new RegExp(phoneFlexPattern) }] : []),
-        { id: identifier }
-      ]
-    });
-
-    if (!user) {
-      return res.status(401).json({ success: false, message: `Account '${identifier}' is not registered in DB employees table.` });
-    }
-
-    // Enforce Role Basis: Account must have admin or manager role
-    const userRole = (user.role || 'admin').toLowerCase();
-    if (userRole !== 'admin' && userRole !== 'manager' && userRole !== 'jr_manager') {
-      return res.status(401).json({
-        success: false,
-        message: `Access denied. Account '${identifier}' is registered as '${userRole.toUpperCase()}', not Admin/Manager.`
-      });
-    }
-
-    // Validate password strictly against user.password in DB
-    const dbPassword = (user.password && user.password.trim().length > 0) ? user.password.trim() : 'admin123';
-    if (!password || (password.trim() !== dbPassword && password.trim() !== 'admin123' && password.trim() !== '123456')) {
-      return res.status(401).json({ success: false, message: 'Invalid password. Please check your credentials.' });
-    }
-
-    return res.json({
-      success: true,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email || identifier,
-        phone: user.phone,
-        role: user.role,
-        team: user.team || 'Management',
-        token: `jwt_token_${user.id}_${Date.now()}`,
-      },
-      message: 'Authentication successful',
-    });
-  } catch (err) {
-    console.error('Error in admin-login:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+// Finds an employee by email, exact name, id or phone (any formatting of the last 10 digits)
+async function findByIdentifier(identifiers) {
+  const or = [];
+  for (const raw of identifiers) {
+    const term = (raw || '').toString().trim();
+    if (!term) continue;
+    or.push({ email: term.toLowerCase() }, { id: term }, { phone: term }, { name: new RegExp(`^${escapeRegex(term)}$`, 'i') });
+    const digits = last10(term);
+    if (digits.length === 10) or.push({ phone: new RegExp(digits.split('').join('[^0-9]*') + '$') });
   }
-});
+  if (or.length === 0) return null;
+  return Employee.findOne({ $or: or }).select('+password');
+}
 
-// 2. POST /api/auth/caller-verify - Strict Caller Verification against Employees Table
-router.post('/caller-verify', async (req, res) => {
-  const { phoneNumber, email, username, password, simSlot } = req.body;
-  const rawIdentifier = (phoneNumber || email || username || '').trim();
-
-  if (!rawIdentifier) {
-    return res.status(400).json({ success: false, message: 'Phone number, email, or username is required' });
+async function login(req, res, { allowedRoles, wrongRoleMessage }) {
+  const { email, username, phoneNumber, identifier, password, simSlot } = req.body || {};
+  const ids = [identifier, email, username, phoneNumber];
+  if (!ids.some(v => v && String(v).trim())) {
+    return res.status(400).json({ success: false, message: 'Email or mobile number is required' });
   }
-
-  if (!password || !password.trim()) {
+  if (!password || !String(password).trim()) {
     return res.status(400).json({ success: false, message: 'Password is required' });
   }
 
+  const emp = await findByIdentifier(ids);
+  // Same message for unknown account and wrong password, so accounts can't be enumerated
+  if (!emp || !(await verifyAndUpgradePassword(emp, password))) {
+    return res.status(401).json({ success: false, message: 'Invalid email/mobile number or password.' });
+  }
+
+  const role = (emp.role || 'caller').toLowerCase();
+  if (allowedRoles && !allowedRoles.includes(role)) {
+    return res.status(403).json({ success: false, message: wrongRoleMessage(role) });
+  }
+
+  const token = signToken(emp);
+  return res.json({
+    success: true,
+    token,
+    // `user.token` kept for clients that read it from the user object
+    user: publicUser(emp, { token, ...(simSlot ? { simSlot } : {}) }),
+    message: 'Authentication successful',
+  });
+}
+
+// POST /api/auth/login — unified login for web and app
+router.post('/login', async (req, res) => {
   try {
-    const searchTerms = [phoneNumber, email, username, rawIdentifier]
-      .filter(t => typeof t === 'string' && t.trim().length > 0)
-      .map(t => t.trim());
-    let orConditions = [];
-
-    for (const term of searchTerms) {
-      const cleanPhone = term.replace(/[^0-9]/g, '');
-      const last10 = cleanPhone.length >= 10 ? cleanPhone.substring(cleanPhone.length - 10) : cleanPhone;
-      const phoneFlexPattern = last10.length === 10 ? last10.split('').join('[^0-9]*') : null;
-      const safeTerm = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-      orConditions.push(
-        { email: term.toLowerCase() },
-        { phone: term },
-        { name: new RegExp(`^${safeTerm}$`, 'i') },
-        { id: term }
-      );
-      if (phoneFlexPattern) {
-        orConditions.push({ phone: new RegExp(phoneFlexPattern) });
-      }
-    }
-
-    const emp = await Employee.findOne({ $or: orConditions });
-
-    if (!emp) {
-      return res.status(401).json({ success: false, message: `Account '${rawIdentifier}' is not registered in DB employees table. Contact Admin.` });
-    }
-
-    // Enforce Role Basis: Account can be caller, jr_manager, manager, or admin
-    const empRole = (emp.role || 'caller').toLowerCase();
-    if (empRole !== 'caller' && empRole !== 'admin' && empRole !== 'manager' && empRole !== 'jr_manager') {
-      return res.status(401).json({
-        success: false,
-        message: `Access denied. Account '${rawIdentifier}' is registered as '${emp.role.toUpperCase()}'.`
-      });
-    }
-
-    const empDbPassword = (emp.password && emp.password.trim().length > 0) ? emp.password.trim() : '123456';
-    if (!password || (password.trim() !== empDbPassword && password.trim() !== '123456' && password.trim() !== 'admin123')) {
-      return res.status(401).json({ success: false, message: 'Invalid password. Please check your credentials.' });
-    }
-
-    res.json({
-      success: true,
-      user: {
-        id: emp.id,
-        name: emp.name,
-        email: emp.email,
-        phone: emp.phone,
-        simSlot: simSlot || 1,
-        role: emp.role || 'caller',
-        token: `jwt_caller_token_${emp.id}_${Date.now()}`,
-      },
-      message: 'Caller verified successfully',
-    });
+    await login(req, res, { allowedRoles: null });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    console.error('login error:', err.message);
+    res.status(500).json({ success: false, message: 'Login failed. Please try again.' });
   }
 });
 
-// 3. POST /api/auth/link-phone - Link / Update Employee SIM Mobile Number
-router.post('/link-phone', async (req, res) => {
-  const { userId, email, phone } = req.body;
+// POST /api/auth/admin-login — admin web portal and manager app login
+router.post('/admin-login', async (req, res) => {
+  try {
+    await login(req, res, {
+      allowedRoles: MANAGERS,
+      wrongRoleMessage: (role) => `This account is registered as ${role.toUpperCase()}, not Admin/Manager.`,
+    });
+  } catch (err) {
+    console.error('admin-login error:', err.message);
+    res.status(500).json({ success: false, message: 'Login failed. Please try again.' });
+  }
+});
 
-  if (!phone) {
-    return res.status(400).json({ success: false, message: 'Mobile number is required' });
+// POST /api/auth/caller-verify — caller app login (managers may also enter as caller)
+router.post('/caller-verify', async (req, res) => {
+  try {
+    await login(req, res, {
+      allowedRoles: ['caller', ...MANAGERS],
+      wrongRoleMessage: (role) => `Access denied for role ${role.toUpperCase()}.`,
+    });
+  } catch (err) {
+    console.error('caller-verify error:', err.message);
+    res.status(500).json({ success: false, message: 'Login failed. Please try again.' });
+  }
+});
+
+// GET /api/auth/me — validates the session token and returns the current profile
+router.get('/me', requireAuth(), async (req, res) => {
+  try {
+    const emp = await Employee.findOne({ id: req.user.id });
+    if (!emp) return res.status(401).json({ success: false, message: 'Account no longer exists.', code: 'AUTH_REQUIRED' });
+    res.json({ success: true, user: publicUser(emp) });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Could not load profile.' });
+  }
+});
+
+// POST /api/auth/link-phone — link the signed-in user's own SIM number (admins may link anyone)
+router.post('/link-phone', requireAuth({ legacy: true }), async (req, res) => {
+  const { userId, email, phone } = req.body || {};
+  const digits = last10(phone);
+  if (!/^[6-9]\d{9}$/.test(digits)) {
+    return res.status(400).json({ success: false, message: 'Please enter a valid 10-digit mobile number.' });
   }
 
   try {
     let emp = null;
-    if (userId) {
-      emp = await Employee.findOne({ id: userId });
+    if (req.user && req.user.role !== 'admin') {
+      emp = await Employee.findOne({ id: req.user.id });
+    } else {
+      if (userId) emp = await Employee.findOne({ id: userId });
+      if (!emp && email) emp = await Employee.findOne({ email: String(email).toLowerCase() });
+      // Old app builds (no token) may only set a number on an account that has none yet
+      if (emp && req.legacyClient && last10(emp.phone).length === 10) {
+        return res.status(403).json({ success: false, message: 'Please update the app to change a registered number.' });
+      }
     }
-    if (!emp && email) {
-      emp = await Employee.findOne({ email: email.toLowerCase() });
-    }
-
     if (!emp) {
-      return res.status(404).json({ success: false, message: 'Employee account not found in database.' });
+      return res.status(404).json({ success: false, message: 'Employee account not found.' });
     }
 
-    emp.phone = phone;
-    await emp.save();
+    const taken = await Employee.findOne({ id: { $ne: emp.id }, phone: new RegExp(digits.split('').join('[^0-9]*') + '$') });
+    if (taken) {
+      return res.status(409).json({ success: false, message: 'This mobile number is already registered to another user.' });
+    }
 
-    res.json({
-      success: true,
-      user: {
-        id: emp.id,
-        name: emp.name,
-        email: emp.email,
-        phone: emp.phone,
-        role: emp.role || 'caller',
-      },
-      message: 'Mobile number linked successfully',
-    });
+    emp.phone = digits;
+    await emp.save();
+    res.json({ success: true, user: publicUser(emp), message: 'Mobile number linked successfully' });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, message: 'Could not link mobile number.' });
   }
 });
 
-// 4. POST /api/auth/check-phone - Check if mobile number is registered in DB
+// POST /api/auth/check-phone — onboarding: is this mobile number registered?
 router.post('/check-phone', async (req, res) => {
   try {
-    const { phoneNumber, phone } = req.body;
-    const input = (phoneNumber || phone || '').trim();
-    if (!input) {
-      return res.status(400).json({ success: false, message: 'Please enter a mobile number' });
-    }
-
-    const clean = input.replace(/[^0-9]/g, '');
-    const last10 = clean.length >= 10 ? clean.substring(clean.length - 10) : clean;
-
-    if (last10.length !== 10) {
+    const { phoneNumber, phone } = req.body || {};
+    const digits = last10(phoneNumber || phone);
+    if (digits.length !== 10) {
       return res.status(400).json({ success: false, message: 'Please enter a valid 10-digit mobile number' });
     }
 
-    const user = await Employee.findOne({
-      $or: [
-        { phone: last10 },
-        { phone: new RegExp(last10 + '$') },
-        { phone: `+91 ${last10}` },
-        { phone: `+91${last10}` },
-        { phone: `91${last10}` },
-      ]
-    });
-
+    const user = await Employee.findOne({ phone: new RegExp(digits.split('').join('[^0-9]*') + '$') });
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: `Mobile number '${last10}' is not registered in the database. Please contact your manager or admin to add your number.`
+        message: `Mobile number '${digits}' is not registered. Please contact your manager or admin to add your number.`,
       });
     }
 
+    // Only what onboarding needs — no email, team or ids for an unauthenticated caller
     return res.json({
       success: true,
-      user: {
-        id: user.id,
-        name: user.name,
-        phone: user.phone || last10,
-        email: user.email,
-        role: user.role,
-        team: user.team,
-      },
-      message: `Mobile number '${last10}' verified for ${user.name} (${(user.role || 'CALLER').toUpperCase()})!`
+      user: { name: user.name, phone: digits, role: user.role },
+      message: `Mobile number '${digits}' verified for ${user.name}!`,
     });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, message: 'Could not check the number.' });
   }
 });
 

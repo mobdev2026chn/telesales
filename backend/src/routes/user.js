@@ -1,297 +1,134 @@
+// Caller-side endpoints: call sync, contact save, profile photo (absolute paths, one implementation each).
 const express = require('express');
-const router = express.Router();
 const CallLog = require('../models/CallLog');
-const Lead = require('../models/Lead');
 const Recording = require('../models/Recording');
-const Notification = require('../models/Notification');
+const Lead = require('../models/Lead');
 const Employee = require('../models/Employee');
+const { syncCallsForCaller, findLeadsByLast10 } = require('../services/callStats');
+const { findEmployeeByRef } = require('../services/scope');
+const { last10, byIdQuery, phoneRegex, serverError } = require('../utils/common');
 
-// 1. POST /api/user/calls/sync - Sync device call logs
-router.post('/calls/sync', async (req, res) => {
+const router = express.Router();
+
+// The caller a request acts for: always the token's user; legacy app builds by the body fields.
+async function actingEmployee(req, body = req.body || {}) {
+  if (req.user) return Employee.findOne({ id: req.user.id }).lean();
+  for (const ref of [body.callerId, body.callerPhone, body.callerName]) {
+    if (!ref || ref === 'caller_1') continue; // 'caller_1' is a placeholder the old app always sends
+    const emp = await findEmployeeByRef(ref);
+    if (emp) return emp;
+  }
+  return null;
+}
+
+// POST /api/calls/sync, /api/user/calls/sync — store device call logs for the signed-in caller
+router.post(['/api/calls/sync', '/api/user/calls/sync'], async (req, res) => {
   try {
-    const { callerId, callerName, callerPhone, calls } = req.body;
+    const { calls } = req.body || {};
     if (!Array.isArray(calls)) {
       return res.status(400).json({ success: false, message: 'Calls array is required' });
     }
-
-    const cleanCallerPhone = (callerPhone || '').replace(/[^0-9]/g, '').slice(-10);
-    const callerEmp = await Employee.findOne({
-      $or: [
-        ...(callerId ? [{ id: callerId }] : []),
-        ...(callerPhone ? [{ phone: callerPhone }] : []),
-        ...(cleanCallerPhone.length >= 8 ? [{ phone: new RegExp(cleanCallerPhone + '$') }] : []),
-        ...(callerName ? [{ name: new RegExp(`^${callerName.trim()}$`, 'i') }] : [])
-      ]
-    });
-
+    if (calls.length > 5000) {
+      return res.status(400).json({ success: false, message: 'At most 5000 calls per sync' });
+    }
+    const callerEmp = await actingEmployee(req);
     if (!callerEmp || callerEmp.role === 'admin') {
-      return res.json({ success: true, syncedCount: 0, message: 'Caller not registered in system' });
+      return res.json({ success: true, count: 0, syncedCount: 0, message: 'Caller not registered in system' });
     }
-
-    const inserted = [];
-    for (const call of calls) {
-      const cleanPhone = (call.phoneNumber || '').replace(/[^0-9]/g, '').slice(-10);
-      const callTime = call.timestamp ? new Date(call.timestamp) : new Date();
-      const startTime = new Date(callTime.getTime() - 90000);
-      const endTime = new Date(callTime.getTime() + 90000);
-
-      // Strict duplicate detection
-      const existing = await CallLog.findOne({
-        $or: [
-          {
-            ...(cleanPhone.length >= 8 ? { phoneNumber: new RegExp(cleanPhone + '$') } : { phoneNumber: call.phoneNumber }),
-            timestamp: { $gte: startTime, $lte: endTime }
-          },
-          {
-            ...(cleanPhone.length >= 8 ? { phoneNumber: new RegExp(cleanPhone + '$') } : { phoneNumber: call.phoneNumber }),
-            durationSeconds: call.durationSeconds || 0,
-            type: call.type || 'outgoing',
-            timestamp: { $gte: new Date(callTime.getTime() - 300000), $lte: new Date(callTime.getTime() + 300000) }
-          }
-        ]
-      });
-
-      if (!existing) {
-        const log = await CallLog.create({
-          callerId: callerEmp.id || callerEmp._id?.toString() || callerId || 'caller_1',
-          callerName: callerEmp.name || callerName || 'Caller Agent',
-          callerPhone: callerEmp.phone || callerPhone || '+91 98250 00000',
-          contactName: call.contactName || 'Unknown',
-          phoneNumber: call.phoneNumber,
-          type: call.type || 'outgoing',
-          timestamp: callTime,
-          durationSeconds: call.durationSeconds || 0,
-          simSlot: call.simSlot || 1,
-          note: call.note || '',
-        });
-        inserted.push(log);
-      }
-    }
-
+    const insertedCount = await syncCallsForCaller(callerEmp, calls);
     res.json({
       success: true,
-      syncedCount: inserted.length,
-      message: `Successfully synchronized ${inserted.length} call logs with MongoDB`,
+      count: insertedCount,
+      syncedCount: insertedCount,
+      message: `Synced ${insertedCount} new call logs`,
     });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err, 'calls.sync');
   }
 });
 
-// 2. POST /api/user/recordings/upload - Save auto-recorded call audio
-router.post('/recordings/upload', async (req, res) => {
+// POST /api/user/contacts/save — save a contact name for a number (lead, call logs, recordings)
+router.post(['/api/user/contacts/save', '/api/user/leads/save-contact'], async (req, res) => {
   try {
-    const { callerName, contactName, phoneNumber, durationSeconds, transcript, dateStr, timeStr } = req.body;
-
-    const rec = await Recording.create({
-      id: Date.now().toString(),
-      callerName: callerName || 'Caller Agent',
-      contactName: contactName || 'Client',
-      phoneNumber: phoneNumber || '',
-      durationSeconds: durationSeconds || 0,
-      transcript: transcript || '“Call auto-recorded successfully”',
-      dateStr: dateStr || 'Today',
-      timeStr: timeStr || 'Now',
-    });
-
-    res.json({ success: true, recording: rec });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// 3. GET /api/user/leads - Caller's assigned leads
-router.get('/leads', async (req, res) => {
-  try {
-    const leads = await Lead.find().sort({ updatedAt: -1 });
-    res.json({ success: true, count: leads.length, leads });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// 4. PUT /api/user/leads/:id/status - Update lead pipeline status & notes
-router.put('/leads/:id/status', async (req, res) => {
-  try {
-    const { status, notes, attempts } = req.body;
-    const updateData = {};
-    if (status) updateData.status = status;
-    if (notes !== undefined) updateData.notes = notes;
-    if (attempts !== undefined) updateData.attempts = attempts;
-    updateData.lastCallDate = new Date();
-
-    const lead = await Lead.findOneAndUpdate(
-      { id: req.params.id },
-      { $set: updateData },
-      { new: true }
-    );
-
-    res.json({ success: true, lead });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// 5. GET /api/user/notifications - Fetch notifications for caller
-router.get('/notifications', async (req, res) => {
-  try {
-    const { phone, name } = req.query;
-    let query = {};
-    if (phone || name) {
-      const orClauses = [];
-      if (phone && phone.trim()) {
-        const cleanPhone = phone.replace(/[^0-9]/g, '');
-        const last10 = cleanPhone.length >= 10 ? cleanPhone.substring(cleanPhone.length - 10) : cleanPhone;
-        orClauses.push(
-          { recipientPhone: phone },
-          { recipientPhone: new RegExp(last10 + '$') },
-          { recipientPhone: new RegExp('^' + last10) }
-        );
-      }
-      if (name && name.trim()) {
-        const cleanName = name.trim().split(' ')[0];
-        orClauses.push(
-          { recipientName: new RegExp(`^${name.trim()}$`, 'i') },
-          { recipientName: new RegExp(cleanName, 'i') }
-        );
-      }
-      query = { $or: orClauses };
+    const { phoneNumber, notes } = req.body || {};
+    const name = typeof req.body.name === 'string' ? req.body.name.trim().slice(0, 120) : '';
+    const num = last10(phoneNumber);
+    if (num.length !== 10 || !name) {
+      return res.status(400).json({ success: false, message: 'A valid 10-digit phoneNumber and a name are required' });
     }
+    const me = await actingEmployee(req);
+    const re = phoneRegex(phoneNumber);
 
-    const notifications = await Notification.find(query).sort({ createdAt: -1 }).limit(50);
-    const unreadCount = await Notification.countDocuments({ ...query, isRead: false });
-
-    res.json({
-      success: true,
-      unreadCount,
-      notifications,
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// 6. POST /api/user/notifications/:id/read - Mark notification as read
-router.post('/notifications/:id/read', async (req, res) => {
-  try {
-    const notif = await Notification.findOneAndUpdate(
-      { id: req.params.id },
-      { $set: { isRead: true } },
-      { new: true }
-    );
-    res.json({ success: true, notification: notif });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// 7. POST /api/user/notifications/read-all - Mark all notifications as read
-router.post('/notifications/read-all', async (req, res) => {
-  try {
-    const { phone, name } = req.body;
-    let query = {};
-    if (phone || name) {
-      const orClauses = [];
-      if (phone) {
-        const cleanPhone = phone.replace(/[^0-9]/g, '');
-        const last10 = cleanPhone.length >= 10 ? cleanPhone.substring(cleanPhone.length - 10) : cleanPhone;
-        orClauses.push({ recipientPhone: phone }, { recipientPhone: new RegExp(last10 + '$') });
-      }
-      if (name) {
-        orClauses.push({ recipientName: new RegExp(`^${name}$`, 'i') });
-      }
-      query = { $or: orClauses };
-    }
-
-    await Notification.updateMany(query, { $set: { isRead: true } });
-    res.json({ success: true, message: 'All notifications marked as read' });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// 8. POST /api/user/contacts/save - Save or update contact name across leads, call logs, and recordings
-router.post(['/contacts/save', '/leads/save-contact'], async (req, res) => {
-  try {
-    const { phoneNumber, name, notes } = req.body;
-    if (!phoneNumber || !name) {
-      return res.status(400).json({ success: false, message: 'phoneNumber and name are required' });
-    }
-
-    const cleanPhone = phoneNumber.replace(/[^0-9]/g, '').slice(-10);
-    const phoneRegex = new RegExp(cleanPhone + '$');
-
-    // 1. Update/Create in Lead collection
-    let lead = await Lead.findOne({ phone: phoneRegex });
+    let lead = (await findLeadsByLast10([num])).get(num);
     if (lead) {
-      lead.name = name.trim();
-      if (notes) lead.notes = notes;
-      await lead.save();
+      const set = { name };
+      if (typeof notes === 'string' && notes.trim()) set.notes = notes.trim().slice(0, 2000);
+      lead = await Lead.findByIdAndUpdate(lead._id, { $set: set }, { new: true, runValidators: true }).lean();
     } else {
-      lead = await Lead.create({
-        id: `lead_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        name: name.trim(),
-        phone: phoneNumber,
-        status: 'interested',
-        attempts: 1,
-        notes: notes || 'Contact saved by agent',
-        lastCallDate: new Date(),
-        dateAdded: new Date()
-      });
+      lead = await Lead.findOneAndUpdate(
+        { phoneLast10: num },
+        {
+          $setOnInsert: {
+            id: `lead_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+            name,
+            phone: String(phoneNumber).trim().slice(0, 40),
+            status: 'new',
+            attempts: 0,
+            assignedCallerId: me ? me.id : '',
+            assignedCaller: me ? me.name : 'Unassigned',
+            notes: typeof notes === 'string' ? notes.trim().slice(0, 2000) : '',
+            source: 'contact',
+            batchName: '',
+            dateAdded: new Date(),
+          }
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      ).lean();
     }
 
-    // 2. Update all matching CallLogs with the new Contact Name
-    await CallLog.updateMany(
-      { phoneNumber: phoneRegex },
-      { $set: { contactName: name.trim() } }
-    );
-
-    // 3. Update all matching Recordings with the new Contact Name
-    await Recording.updateMany(
-      { phoneNumber: phoneRegex },
-      { $set: { contactName: name.trim() } }
-    );
+    // The saved name applies to this number everywhere (the number is always a full 10 digits here)
+    await CallLog.updateMany({ phoneNumber: re }, { $set: { contactName: name } });
+    await Recording.updateMany({ phoneNumber: re }, { $set: { contactName: name } });
 
     res.json({ success: true, lead, message: `Contact "${name}" saved successfully!` });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err, 'contacts.save');
   }
 });
 
-// 10. POST /api/user/photo - Update Profile Photo Base64
-router.post('/photo', async (req, res) => {
+// Profile photo for the signed-in user; an admin may pass userId (or use /admin/users/:id/photo).
+router.post(['/api/users/photo', '/api/user/photo', '/api/admin/users/photo', '/api/admin/users/:id/photo'], async (req, res) => {
   try {
-    const { id, userId, name, phone, email, photoBase64 } = req.body;
-    const query = [];
-    if (id) query.push({ id });
-    if (userId) query.push({ id: userId });
-    if (phone) query.push({ phone });
-    if (email) query.push({ email: email.toLowerCase() });
-    if (name) query.push({ name: new RegExp(`^${name}$`, 'i') });
-
-    if (query.length === 0) {
-      return res.status(400).json({ success: false, message: 'User identifier is required' });
-    }
-
-    const emp = await Employee.findOne({ $or: query });
-    if (!emp) {
-      return res.status(404).json({ success: false, message: 'Employee not found' });
-    }
-
-    emp.photoBase64 = photoBase64 || '';
-    await emp.save();
-
-    res.json({
-      success: true,
-      message: 'Profile photo updated successfully',
-      employee: {
-        id: emp.id,
-        name: emp.name,
-        photoBase64: emp.photoBase64,
+    const b = req.body || {};
+    const photoBase64 = typeof b.photoBase64 === 'string' ? b.photoBase64 : '';
+    let emp = null;
+    if (req.user) {
+      const requested = req.params.id || b.userId || b.id;
+      if (requested && requested !== req.user.id) {
+        if (req.user.role !== 'admin') {
+          return res.status(403).json({ success: false, message: 'You can only change your own photo.' });
+        }
+        emp = await Employee.findOne(byIdQuery(requested));
+      } else {
+        emp = await Employee.findOne({ id: req.user.id });
       }
-    });
+    } else {
+      // Legacy app builds: identified by the fields they send
+      const refs = [b.id, b.userId, b.phone, b.email ? String(b.email).toLowerCase() : null, b.name].filter(Boolean);
+      for (const ref of refs) {
+        const found = ref.includes && ref.includes('@') ? await Employee.findOne({ email: ref }).lean() : await findEmployeeByRef(ref);
+        if (found) { emp = await Employee.findById(found._id); break; }
+      }
+    }
+    if (!emp) return res.status(404).json({ success: false, message: 'User not found' });
+
+    const set = { photoBase64 };
+    if (typeof b.avatarUrl === 'string') set.avatarUrl = b.avatarUrl.slice(0, 500);
+    await Employee.updateOne({ _id: emp._id }, { $set: set });
+    const summary = { id: emp.id, name: emp.name, photoBase64 };
+    res.json({ success: true, message: 'Profile photo updated successfully', user: summary, employee: summary });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err, 'users.photo');
   }
 });
 
