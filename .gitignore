@@ -25,3 +25,9 @@ android/.kotlin/
 **/*.iml
 .DS_Store
 Thumbs.db
+# Secrets and local data
+.env
+**/.env
+!.env.example
+node_modules/
+backend/uploads/recordings/*.wav
