@@ -8,6 +8,7 @@ import '../../providers/tele_provider.dart';
 import '../../models/call_log_model.dart';
 import '../login_screen.dart';
 import '../main_shell.dart';
+import '../setup/call_recording_setup_screen.dart';
 
 class CallyzerSetupFlow extends StatefulWidget {
   const CallyzerSetupFlow({super.key});
@@ -301,8 +302,10 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
       case 3:
         return _buildContactsStep(tele);
       case 4:
-        return _buildConnectSimStep(tele);
+        return _buildCallRecordingStep();
       case 5:
+        return _buildConnectSimStep(tele);
+      case 6:
         return _buildSimVerificationStep(tele);
       default:
         return _buildPrivacyStep();
@@ -681,7 +684,50 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
     );
   }
 
-  // ================= STEP 4: CONNECT SIM =================
+  // ================= STEP 4: CALL RECORDING SETUP =================
+  Widget _buildCallRecordingStep() {
+    return SingleChildScrollView(
+      key: const ValueKey('step_4_call_recording'),
+      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back, color: AppTheme.ink900),
+                onPressed: _prevStep,
+              ),
+              const SizedBox(width: 4),
+              Expanded(child: Text('Call recording setup', style: AppTheme.headline(size: 22))),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text('Why we need this:', style: AppTheme.bodyBold(size: 13)),
+          const SizedBox(height: 6),
+          Text(
+            'Your manager reviews work-call recordings. AskEVA reads the recordings your phone\'s dialer '
+            'saves (audio files) and uploads only those of work calls. Personal-SIM calls are never uploaded.',
+            style: AppTheme.body(size: 12.5, color: AppTheme.ink700),
+          ),
+          const SizedBox(height: 14),
+          const CallRecordingSetupPanel(),
+          const SizedBox(height: 24),
+          NeoButton.accent(
+            gradient: null,
+            backgroundColor: AppTheme.greenNeon,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            onTap: _nextStep,
+            child: Center(
+              child: Text('Continue', style: AppTheme.headline(size: 16, color: AppTheme.ink900)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ================= STEP 5: CONNECT SIM =================
   Widget _buildConnectSimStep(TeleProvider tele) {
     final sims = tele.detectedSims;
 
@@ -960,7 +1006,7 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
     );
   }
 
-  // ================= STEP 5: SIM NUMBER VERIFICATION =================
+  // ================= STEP 6: SIM NUMBER VERIFICATION =================
   Widget _buildSimVerificationStep(TeleProvider tele) {
     final phone = _phoneController.text.isNotEmpty ? '+91 ${_phoneController.text}' : 'this SIM';
 

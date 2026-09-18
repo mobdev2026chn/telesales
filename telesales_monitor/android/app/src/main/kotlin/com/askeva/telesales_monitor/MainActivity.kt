@@ -1,20 +1,11 @@
 package com.askeva.telesales_monitor
 
 import android.Manifest
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.database.ContentObserver
-import android.media.AudioFormat
-import android.media.AudioManager
-import android.media.AudioRecord
-import android.media.MediaMetadataRetriever
 import android.media.MediaPlayer
-import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
@@ -29,71 +20,49 @@ import android.telephony.TelephonyManager
 import android.util.Base64
 import android.widget.Toast
 import androidx.core.app.ActivityCompat
-import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
-import java.io.FileInputStream
-import java.io.FileOutputStream
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import kotlin.random.Random
 
+/**
+ * Method-channel plumbing for Flutter. Call tracking / recording / uploads live in
+ * [CallMonitorService] + [RecordingUploader] so they keep working without this Activity.
+ */
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.askeva.telesales/telephony"
     // Safety cap on rows read per call-log query (the query itself is already limited to the work session)
     private val MAX_CALL_LOGS = 5000
     private val PERMISSION_REQ_CODE = 2001
-    private val NOTIF_CHANNEL_ID = "telesales_call_recording_channel"
-    private val NOTIF_ID = 9001
+    private val MEDIA_PERMISSION_REQ_CODE = 2002
     private val CALL_LOG_DEBOUNCE_MS = 1500L
 
     private var pendingPermissionResult: MethodChannel.Result? = null
+    private var pendingMediaPermissionResult: MethodChannel.Result? = null
     private var methodChannel: MethodChannel? = null
+    private var eventListener: ((String, Map<String, Any?>) -> Unit)? = null
 
-    // Heavy work (call-log queries, WAV finalisation, contact lookups) runs here, never on the UI thread
+    // Heavy work (call-log queries, contact lookups, queue file IO) runs here, never on the UI thread
     private val ioExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val contactNameCache = ConcurrentHashMap<String, String>()
 
-    private var telephonyReceiver: BroadcastReceiver? = null
     private var callLogObserver: ContentObserver? = null
     private val callLogChanged = Runnable {
         methodChannel?.invokeMethod("onCallStateChanged", mapOf("state" to "LOG_UPDATED"))
     }
-    private var mediaRecorder: MediaRecorder? = null
     private var mediaPlayer: MediaPlayer? = null
     private var isPlayerPrepared = false
     private var currentTempPlaybackFile: File? = null
-    private var pcmAudioRecord: AudioRecord? = null
-    @Volatile private var isPcmRecording = false
-    private var pcmRecordThread: Thread? = null
-    private var isRecording = false
-    private var currentRecordingFile: File? = null
-    // Off until Flutter pushes the saved preference for a signed-in caller
-    private var autoRecordEnabled = false
-
-    // Current call (from the PHONE_STATE broadcasts / our own dialing)
-    private var incomingNumber: String = ""
-    private var isIncomingCall: Boolean = false
-    private var ringingAtMs: Long = 0L
-    private var callNumber: String = ""
-    private var callStartedAtMs: Long = 0L
-    private var callSimSlot: Int = 0 // 1-based, 0 = unknown
-    private var lastDialedNumber: String = ""
-    private var lastDialedAtMs: Long = 0L
-    private var lastDialedSlot: Int = 0 // 1-based
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        createNotificationChannel()
         ioExecutor.execute { cleanupStaleTempFiles() }
 
         methodChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
@@ -129,35 +98,93 @@ class MainActivity : FlutterActivity() {
                     makeDirectCall(phone, slot)
                     result.success(true)
                 }
-                "setAutoRecord" -> {
-                    val enabled = call.argument<Boolean>("enabled") ?: false
-                    autoRecordEnabled = enabled
+                // ---- Call monitor (foreground service) ----
+                "startCallMonitor" -> {
+                    val baseUrl = call.argument<String>("baseUrl") ?: ""
+                    CallMonitorStore.setBaseUrl(this, baseUrl)
+                    CallMonitorStore.cancelNotification(this, CallMonitorStore.NOTIF_ID_LOGIN)
+                    result.success(CallMonitorService.start(this))
+                }
+                "stopCallMonitor" -> {
+                    // The upload worker is left alone: it only sends a signed-in user's own recordings
+                    CallMonitorService.stop(this)
+                    CallMonitorStore.cancelNotification(this, CallMonitorStore.NOTIF_ID_RESUME)
                     result.success(true)
                 }
-                "isAutoRecordEnabled" -> {
-                    result.success(autoRecordEnabled)
+                "retryUploads" -> {
+                    RecordingUploader.schedule(this)
+                    result.success(true)
+                }
+                "getPendingUploadCount" -> {
+                    val userId = call.argument<String>("userId") ?: ""
+                    ioExecutor.execute {
+                        val n = try { RecordingQueue.countFor(this, userId) } catch (_: Exception) { 0 }
+                        mainHandler.post { result.success(n) }
+                    }
+                }
+                "enqueueLegacyUploads" -> {
+                    // Recordings the old Dart uploader had not sent yet: hand them to the native queue
+                    val items = call.argument<List<Map<String, Any?>>>("items") ?: emptyList()
+                    ioExecutor.execute {
+                        var added = 0
+                        for (m in items) {
+                            val path = m["filePath"] as? String ?: continue
+                            if (!File(path).exists()) continue
+                            RecordingQueue.add(this, QueuedRecording(
+                                id = QueuedRecording.newId(),
+                                userId = m["userId"] as? String ?: continue,
+                                source = "own",
+                                path = path,
+                                uri = "",
+                                fileName = (m["fileName"] as? String)?.ifEmpty { null } ?: File(path).name,
+                                callStartedAtMs = (m["callStartedAtMs"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+                                phoneNumber = m["phoneNumber"] as? String ?: "",
+                                contactName = m["contactName"] as? String ?: "",
+                                type = m["type"] as? String ?: "OUTGOING",
+                                simSlot = (m["simSlot"] as? Number)?.toInt() ?: 0,
+                                durationSeconds = (m["durationSeconds"] as? Number)?.toInt() ?: 1,
+                            ))
+                            added++
+                        }
+                        if (added > 0) RecordingUploader.schedule(this)
+                        mainHandler.post { result.success(added) }
+                    }
                 }
                 "isRecordingActive" -> {
-                    result.success(isRecording)
+                    result.success(false)
                 }
-                "startTestRecording" -> {
-                    if (!isRecording) {
-                        callNumber = ""
-                        callStartedAtMs = System.currentTimeMillis()
-                        callSimSlot = 0
-                        startCallRecording()
-                        result.success(true)
-                    } else {
-                        result.success(false)
+                // ---- Call recording setup screen ----
+                "getRecordingSetupStatus" -> {
+                    val userId = call.argument<String>("userId") ?: ""
+                    ioExecutor.execute {
+                        val status = HashMap<String, Any?>(DeviceSetupHelper.deviceInfo())
+                        status["serviceRunning"] = CallMonitorService.isRunning
+                        status["micPermission"] = CallMonitorStore.hasPermission(this, Manifest.permission.RECORD_AUDIO)
+                        status["mediaPermission"] = CallMonitorStore.hasMediaPermission(this)
+                        status["batteryOptimizationIgnored"] = DeviceSetupHelper.isIgnoringBatteryOptimizations(this)
+                        status["nativeRecorderDetected"] = CallMonitorStore.nativeRecorderDetected(this)
+                        status["accessibilityEnabled"] = CallAccessibilityService.isEnabled(this)
+                        status["lastCaptureStatus"] = CallMonitorStore.lastCaptureStatus(this)
+                        status["lastCaptureAt"] = CallMonitorStore.lastCaptureAt(this)
+                        status["pendingUploads"] = try { RecordingQueue.countFor(this, userId) } catch (_: Exception) { 0 }
+                        mainHandler.post { result.success(status) }
                     }
                 }
-                "stopTestRecording" -> {
-                    if (isRecording) {
-                        stopCallRecording()
-                        result.success(true)
-                    } else {
-                        result.success(false)
-                    }
+                "requestMediaPermission" -> requestMediaPermission(result)
+                "requestIgnoreBatteryOptimizations" -> {
+                    result.success(DeviceSetupHelper.requestIgnoreBatteryOptimizations(this))
+                }
+                "openDialerRecordingSettings" -> {
+                    result.success(DeviceSetupHelper.openDialerRecordingSettings(this))
+                }
+                "openAutostartSettings" -> {
+                    result.success(DeviceSetupHelper.openAutostartSettings(this))
+                }
+                "openAccessibilitySettings" -> {
+                    result.success(DeviceSetupHelper.openAccessibilitySettings(this))
+                }
+                "openAppInfo" -> {
+                    result.success(DeviceSetupHelper.openAppInfo(this))
                 }
                 "playAudio" -> {
                     val path = call.argument<String>("filePath") ?: ""
@@ -183,24 +210,25 @@ class MainActivity : FlutterActivity() {
             }
         }
 
-        registerRealtimeCallListener()
+        // Service / upload events reach Dart while this engine is alive
+        val listener: (String, Map<String, Any?>) -> Unit = { method, args ->
+            try { methodChannel?.invokeMethod(method, args) } catch (_: Exception) {}
+        }
+        eventListener = listener
+        CallMonitorEvents.listener = listener
+
         registerCallLogObserver()
     }
 
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                NOTIF_CHANNEL_ID,
-                "Call Recording Live Status",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "Shows live status and alert when call recording starts"
-                enableVibration(true)
-                vibrationPattern = longArrayOf(0, 150, 100, 150)
-            }
-            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            manager.createNotificationChannel(channel)
+    private fun requestMediaPermission(result: MethodChannel.Result) {
+        val perm = CallMonitorStore.mediaReadPermission()
+        if (CallMonitorStore.hasPermission(this, perm)) {
+            result.success(true)
+            return
         }
+        pendingMediaPermissionResult?.success(false)
+        pendingMediaPermissionResult = result
+        ActivityCompat.requestPermissions(this, arrayOf(perm), MEDIA_PERMISSION_REQ_CODE)
     }
 
     private fun showToast(message: String) {
@@ -211,32 +239,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun invokeOnMain(method: String, args: Any?) {
-        mainHandler.post {
-            try {
-                methodChannel?.invokeMethod(method, args)
-            } catch (_: Exception) {}
-        }
-    }
-
-    private fun showRecordingNotification(isLive: Boolean, text: String) {
-        try {
-            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            if (isLive) {
-                val notif = NotificationCompat.Builder(this, NOTIF_CHANNEL_ID)
-                    .setSmallIcon(android.R.drawable.stat_notify_call_mute)
-                    .setContentTitle("🔴 CALL RECORDING ACTIVE")
-                    .setContentText(text)
-                    .setOngoing(true)
-                    .setPriority(NotificationCompat.PRIORITY_HIGH)
-                    .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                    .build()
-                manager.notify(NOTIF_ID, notif)
-            } else {
-                manager.cancel(NOTIF_ID)
-            }
-        } catch (_: Exception) {}
-    }
 
     private fun registerCallLogObserver() {
         try {
@@ -259,19 +261,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    /** 1-based SIM slot of the subscription named in a PHONE_STATE broadcast, 0 when unknown. */
-    private fun slotFromPhoneStateIntent(intent: Intent): Int {
-        try {
-            var subId = intent.getIntExtra("android.telephony.extra.SUBSCRIPTION_INDEX", -1)
-            if (subId < 0) subId = intent.getIntExtra("subscription", -1)
-            if (subId >= 0 && ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
-                val sm = getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as? SubscriptionManager
-                val info = sm?.getActiveSubscriptionInfo(subId)
-                if (info != null) return info.simSlotIndex + 1
-            }
-        } catch (_: Exception) {}
-        return singleActiveSlotOrUnknown()
-    }
 
     private fun activeSubscriptions(): List<SubscriptionInfo> {
         return try {
@@ -283,347 +272,7 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    /** With exactly one active SIM every call is on it; otherwise we cannot tell. */
-    private fun singleActiveSlotOrUnknown(): Int {
-        val subs = activeSubscriptions()
-        return if (subs.size == 1) subs[0].simSlotIndex + 1 else 0
-    }
 
-    private fun registerRealtimeCallListener() {
-        try {
-            telephonyReceiver = object : BroadcastReceiver() {
-                override fun onReceive(context: Context?, intent: Intent?) {
-                    if (intent == null || TelephonyManager.ACTION_PHONE_STATE_CHANGED != intent.action) return
-                    val stateStr = intent.getStringExtra(TelephonyManager.EXTRA_STATE)
-                    @Suppress("DEPRECATION")
-                    val extraNumber = intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER) ?: ""
-
-                    if (TelephonyManager.EXTRA_STATE_RINGING == stateStr) {
-                        isIncomingCall = true
-                        if (extraNumber.isNotEmpty()) incomingNumber = extraNumber
-                        if (ringingAtMs == 0L) ringingAtMs = System.currentTimeMillis()
-                    } else if (TelephonyManager.EXTRA_STATE_OFFHOOK == stateStr) {
-                        if (!isRecording) {
-                            val now = System.currentTimeMillis()
-                            if (isIncomingCall) {
-                                callNumber = incomingNumber.ifEmpty { extraNumber }
-                                callStartedAtMs = if (ringingAtMs > 0) ringingAtMs else now
-                                callSimSlot = slotFromPhoneStateIntent(intent)
-                            } else {
-                                val recentDial = now - lastDialedAtMs < 120_000L
-                                callNumber = extraNumber.ifEmpty { if (recentDial) lastDialedNumber else "" }
-                                callStartedAtMs = now
-                                val slot = slotFromPhoneStateIntent(intent)
-                                callSimSlot = if (slot > 0) slot else if (recentDial) lastDialedSlot else 0
-                            }
-                            if (autoRecordEnabled) startCallRecording()
-                        } else if (callNumber.isEmpty() && extraNumber.isNotEmpty()) {
-                            callNumber = extraNumber
-                        }
-                    } else if (TelephonyManager.EXTRA_STATE_IDLE == stateStr) {
-                        if (isRecording) {
-                            stopCallRecording()
-                        }
-                        isIncomingCall = false
-                        incomingNumber = ""
-                        ringingAtMs = 0L
-                        mainHandler.removeCallbacks(callLogChanged)
-                        mainHandler.postDelayed(callLogChanged, CALL_LOG_DEBOUNCE_MS)
-                    }
-                }
-            }
-            val filter = IntentFilter(TelephonyManager.ACTION_PHONE_STATE_CHANGED)
-            registerReceiver(telephonyReceiver, filter)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    private fun recordingsDir(): File {
-        // App files dir (not cache): a recording must survive until the server confirms the upload
-        val dir = File(filesDir, "call_recordings")
-        if (!dir.exists()) dir.mkdirs()
-        return dir
-    }
-
-    private fun startCallRecording() {
-        try {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), PERMISSION_REQ_CODE)
-                showToast("⚠️ Please ALLOW Microphone permission to record audio!")
-                return
-            }
-
-            val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            try {
-                audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-                audioManager.isMicrophoneMute = false
-            } catch (_: Exception) {}
-
-            val dir = recordingsDir()
-            // Milliseconds + random suffix: two calls in the same second never share a file name
-            val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date())
-            val suffix = Random.nextInt(0x10000).toString(16).padStart(4, '0')
-            val prefix = if (isIncomingCall) "INC_CALL_REC" else "OUT_CALL_REC"
-            val baseName = "${prefix}_${timeStamp}_$suffix"
-            currentRecordingFile = File(dir, "$baseName.wav")
-
-            var startedSuccessfully = startPcmAudioRecord(currentRecordingFile!!)
-
-            if (!startedSuccessfully) {
-                currentRecordingFile = File(dir, "$baseName.m4a")
-                val audioSources = arrayOf(
-                    MediaRecorder.AudioSource.VOICE_COMMUNICATION,
-                    MediaRecorder.AudioSource.VOICE_RECOGNITION,
-                    MediaRecorder.AudioSource.MIC,
-                    MediaRecorder.AudioSource.DEFAULT,
-                    MediaRecorder.AudioSource.CAMCORDER
-                )
-
-                for (source in audioSources) {
-                    try {
-                        val mr = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                            MediaRecorder(this)
-                        } else {
-                            @Suppress("DEPRECATION")
-                            MediaRecorder()
-                        }
-
-                        mr.setAudioSource(source)
-                        mr.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                        mr.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                        mr.setAudioSamplingRate(16000)
-                        mr.setAudioEncodingBitRate(64000)
-                        mr.setOutputFile(currentRecordingFile?.absolutePath)
-                        mr.prepare()
-                        mr.start()
-                        mediaRecorder = mr
-                        isRecording = true
-                        startedSuccessfully = true
-                        break
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
-                }
-            } else {
-                isRecording = true
-            }
-
-            if (startedSuccessfully) {
-                val notifText = if (isIncomingCall) "🔴 Recording incoming call audio now..." else "🔴 Recording outgoing call audio now..."
-                showRecordingNotification(true, notifText)
-                showToast("🔴 Call recording is ACTIVE!")
-                methodChannel?.invokeMethod("onCallRecordingStatus", mapOf("isRecording" to true, "isIncoming" to isIncomingCall))
-            } else {
-                isRecording = false
-                showToast("⚠️ Unable to lock audio hardware stream for call recording.")
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            isRecording = false
-            showRecordingNotification(false, "")
-        }
-    }
-
-    private fun startPcmAudioRecord(outputWavFile: File): Boolean {
-        try {
-            val sampleRate = 16000
-            val channelConfig = AudioFormat.CHANNEL_IN_MONO
-            val audioFormat = AudioFormat.ENCODING_PCM_16BIT
-            val minBufSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
-            val bufferSize = Math.max(minBufSize, 4096)
-
-            val sources = intArrayOf(
-                MediaRecorder.AudioSource.VOICE_COMMUNICATION,
-                MediaRecorder.AudioSource.VOICE_RECOGNITION,
-                MediaRecorder.AudioSource.MIC,
-                MediaRecorder.AudioSource.DEFAULT,
-                MediaRecorder.AudioSource.CAMCORDER
-            )
-
-            var ar: AudioRecord? = null
-            for (src in sources) {
-                try {
-                    val rec = AudioRecord(src, sampleRate, channelConfig, audioFormat, bufferSize)
-                    if (rec.state == AudioRecord.STATE_INITIALIZED) {
-                        ar = rec
-                        break
-                    }
-                } catch (_: Exception) {}
-            }
-
-            if (ar == null) return false
-
-            pcmAudioRecord = ar
-            isPcmRecording = true
-            ar.startRecording()
-
-            pcmRecordThread = Thread {
-                try {
-                    val pcmTempFile = File(cacheDir, "temp_buffer_${System.currentTimeMillis()}.pcm")
-                    val os = FileOutputStream(pcmTempFile)
-                    val buffer = ShortArray(bufferSize / 2)
-
-                    while (isPcmRecording) {
-                        val read = ar.read(buffer, 0, buffer.size)
-                        if (read > 0) {
-                            val byteBuf = java.nio.ByteBuffer.allocate(read * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN)
-                            for (i in 0 until read) {
-                                // Boost software audio gain 3x so call speech is loud and clear
-                                val sample = buffer[i].toInt()
-                                val amplified = (sample * 3.0f).toInt().coerceIn(-32768, 32767).toShort()
-                                byteBuf.putShort(amplified)
-                            }
-                            os.write(byteBuf.array())
-                        }
-                    }
-                    os.close()
-
-                    writeWavHeader(pcmTempFile, outputWavFile, sampleRate, 1, 16)
-                    pcmTempFile.delete()
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
-            pcmRecordThread?.start()
-            return true
-        } catch (e: Exception) {
-            e.printStackTrace()
-            return false
-        }
-    }
-
-    /** Blocking (joins the writer thread): call from [ioExecutor] only. */
-    private fun stopPcmAudioRecord(record: AudioRecord?, thread: Thread?) {
-        try {
-            record?.stop()
-            record?.release()
-        } catch (_: Exception) {}
-        try {
-            thread?.join(10000)
-        } catch (_: Exception) {}
-    }
-
-    private fun writeWavHeader(pcmFile: File, wavFile: File, sampleRate: Int, channels: Int, bitDepth: Int) {
-        try {
-            val pcmSize = pcmFile.length().toInt()
-            val totalDataLen = pcmSize + 36
-            val byteRate = sampleRate * channels * bitDepth / 8
-
-            val header = ByteArray(44)
-            header[0] = 'R'.code.toByte(); header[1] = 'I'.code.toByte(); header[2] = 'F'.code.toByte(); header[3] = 'F'.code.toByte()
-            header[4] = (totalDataLen and 0xff).toByte()
-            header[5] = (totalDataLen shr 8 and 0xff).toByte()
-            header[6] = (totalDataLen shr 16 and 0xff).toByte()
-            header[7] = (totalDataLen shr 24 and 0xff).toByte()
-            header[8] = 'W'.code.toByte(); header[9] = 'A'.code.toByte(); header[10] = 'V'.code.toByte(); header[11] = 'E'.code.toByte()
-            header[12] = 'f'.code.toByte(); header[13] = 'm'.code.toByte(); header[14] = 't'.code.toByte(); header[15] = ' '.code.toByte()
-            header[16] = 16; header[17] = 0; header[18] = 0; header[19] = 0
-            header[20] = 1; header[21] = 0
-            header[22] = channels.toByte(); header[23] = 0
-            header[24] = (sampleRate and 0xff).toByte()
-            header[25] = (sampleRate shr 8 and 0xff).toByte()
-            header[26] = (sampleRate shr 16 and 0xff).toByte()
-            header[27] = (sampleRate shr 24 and 0xff).toByte()
-            header[28] = (byteRate and 0xff).toByte()
-            header[29] = (byteRate shr 8 and 0xff).toByte()
-            header[30] = (byteRate shr 16 and 0xff).toByte()
-            header[31] = (byteRate shr 24 and 0xff).toByte()
-            header[32] = (channels * bitDepth / 8).toByte(); header[33] = 0
-            header[34] = bitDepth.toByte(); header[35] = 0
-            header[36] = 'd'.code.toByte(); header[37] = 'a'.code.toByte(); header[38] = 't'.code.toByte(); header[39] = 'a'.code.toByte()
-            header[40] = (pcmSize and 0xff).toByte()
-            header[41] = (pcmSize shr 8 and 0xff).toByte()
-            header[42] = (pcmSize shr 16 and 0xff).toByte()
-            header[43] = (pcmSize shr 24 and 0xff).toByte()
-
-            val out = FileOutputStream(wavFile)
-            out.write(header)
-            val input = FileInputStream(pcmFile)
-            input.copyTo(out)
-            input.close()
-            out.close()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    /**
-     * Stops the recording. State is reset immediately on the calling (main) thread; finishing the
-     * file (joining the PCM writer, reading the duration) happens on [ioExecutor]. Flutter receives
-     * the file PATH plus the call's number / start time / SIM — it reads and encodes the audio itself.
-     */
-    private fun stopCallRecording() {
-        try {
-            if (!(isRecording || mediaRecorder != null || isPcmRecording)) return
-
-            val wasPcm = isPcmRecording
-            isPcmRecording = false // lets the writer thread finish the loop
-            val record = pcmAudioRecord
-            val thread = pcmRecordThread
-            pcmAudioRecord = null
-            pcmRecordThread = null
-            val recorder = mediaRecorder
-            mediaRecorder = null
-            isRecording = false
-
-            val file = currentRecordingFile
-            currentRecordingFile = null
-            val number = callNumber
-            val startedAt = callStartedAtMs
-            val simSlot = callSimSlot
-            val incoming = isIncomingCall
-
-            try {
-                val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-                audioManager.mode = AudioManager.MODE_NORMAL
-            } catch (_: Exception) {}
-
-            showRecordingNotification(false, "")
-            methodChannel?.invokeMethod("onCallRecordingStatus", mapOf("isRecording" to false))
-
-            ioExecutor.execute {
-                if (wasPcm) stopPcmAudioRecord(record, thread)
-                try { recorder?.stop() } catch (e: Exception) { e.printStackTrace() }
-                try { recorder?.release() } catch (e: Exception) { e.printStackTrace() }
-
-                if (file != null && file.exists() && file.length() > 44) {
-                    var durSec = 0
-                    try {
-                        val mmr = MediaMetadataRetriever()
-                        mmr.setDataSource(file.absolutePath)
-                        val durStr = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-                        val durMs = durStr?.toLongOrNull() ?: 0L
-                        durSec = (durMs / 1000).toInt()
-                        mmr.release()
-                    } catch (_: Exception) {
-                        durSec = 0
-                    }
-                    if (durSec <= 0 && file.name.endsWith(".wav")) {
-                        durSec = ((file.length() - 44) / (16000 * 2)).toInt()
-                    }
-                    showToast("✅ Call audio saved, uploading...")
-                    invokeOnMain("onRecordingSaved", mapOf(
-                        "filePath" to file.absolutePath,
-                        "fileName" to file.name,
-                        "durationSeconds" to durSec.coerceAtLeast(1),
-                        "timestamp" to System.currentTimeMillis(),
-                        "callStartedAtMs" to startedAt,
-                        "phoneNumber" to number,
-                        "simSlot" to simSlot,
-                        "isIncoming" to incoming
-                    ))
-                } else {
-                    try { file?.delete() } catch (_: Exception) {}
-                    showToast("⚠️ Call ended before audio buffer was written")
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            isRecording = false
-            showRecordingNotification(false, "")
-        }
-    }
 
     private fun playRecordedAudio(filePath: String, audioUrl: String, audioData: String, result: MethodChannel.Result) {
         try {
@@ -837,24 +486,20 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        // The call monitor service keeps running without this Activity; only UI plumbing stops here
+        if (CallMonitorEvents.listener === eventListener) CallMonitorEvents.listener = null
+        eventListener = null
         try {
-            if (telephonyReceiver != null) {
-                unregisterReceiver(telephonyReceiver)
-            }
             if (callLogObserver != null) {
                 contentResolver.unregisterContentObserver(callLogObserver!!)
                 callLogObserver = null
             }
             mainHandler.removeCallbacks(callLogChanged)
-            if (isRecording) {
-                stopCallRecording()
-            }
             stopAudioPlayback()
-            showRecordingNotification(false, "")
         } catch (e: Exception) {
             e.printStackTrace()
         }
-        ioExecutor.shutdown() // queued work (e.g. finishing a recording file) still completes
+        ioExecutor.shutdown()
         super.onDestroy()
     }
 
@@ -888,9 +533,7 @@ class MainActivity : FlutterActivity() {
         val clean = phoneNumber.trim()
         if (clean.isEmpty()) return
 
-        lastDialedNumber = clean
-        lastDialedAtMs = System.currentTimeMillis()
-        lastDialedSlot = slotIndex + 1
+        CallMonitorService.noteDialed(clean, slotIndex + 1)
 
         try {
             val hasCallPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED
@@ -1141,6 +784,10 @@ class MainActivity : FlutterActivity() {
             }
             pendingPermissionResult?.success(allGranted)
             pendingPermissionResult = null
+        } else if (requestCode == MEDIA_PERMISSION_REQ_CODE) {
+            val granted = CallMonitorStore.hasMediaPermission(this)
+            pendingMediaPermissionResult?.success(granted)
+            pendingMediaPermissionResult = null
         }
     }
 

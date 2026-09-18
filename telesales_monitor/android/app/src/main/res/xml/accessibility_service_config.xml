@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Minimal service: no window content, no gestures. It only exempts the app from Android's
+     in-call microphone mute so call recording captures audio. -->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeAnnouncement"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:canRetrieveWindowContent="false"
+    android:notificationTimeout="1000"
+    android:description="@string/call_recording_accessibility_description"
+    android:summary="@string/call_recording_accessibility_summary" />

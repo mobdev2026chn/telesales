@@ -1,7 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -15,62 +13,7 @@ import '../models/sim_card_info.dart';
 import '../models/notification_model.dart';
 import '../services/api_parsers.dart';
 import '../services/api_service.dart';
-
-/// Reads a recording file and base64-encodes it. Runs in a background isolate via [compute].
-Future<String> readFileAsBase64(String path) async {
-  final bytes = await File(path).readAsBytes();
-  return base64Encode(bytes);
-}
-
-/// A recording whose upload has not been confirmed by the server yet. Persisted so it is retried
-/// on the next sync / app start (the server de-duplicates by fileName).
-class PendingRecordingUpload {
-  final String userId;
-  final String filePath;
-  final String fileName;
-  final String phoneNumber;
-  final String contactName;
-  final DateTime callStartedAt;
-  final int durationSeconds;
-  final String type;
-  final int simSlot;
-
-  PendingRecordingUpload({
-    required this.userId,
-    required this.filePath,
-    required this.fileName,
-    required this.phoneNumber,
-    required this.contactName,
-    required this.callStartedAt,
-    required this.durationSeconds,
-    required this.type,
-    required this.simSlot,
-  });
-
-  Map<String, dynamic> toMap() => {
-        'userId': userId,
-        'filePath': filePath,
-        'fileName': fileName,
-        'phoneNumber': phoneNumber,
-        'contactName': contactName,
-        'callStartedAt': callStartedAt.toUtc().toIso8601String(),
-        'durationSeconds': durationSeconds,
-        'type': type,
-        'simSlot': simSlot,
-      };
-
-  factory PendingRecordingUpload.fromMap(Map<String, dynamic> m) => PendingRecordingUpload(
-        userId: asString(m['userId']),
-        filePath: asString(m['filePath']),
-        fileName: asString(m['fileName']),
-        phoneNumber: asString(m['phoneNumber']),
-        contactName: asString(m['contactName']),
-        callStartedAt: parseServerDate(m['callStartedAt']) ?? DateTime.now(),
-        durationSeconds: asInt(m['durationSeconds']),
-        type: asString(m['type'], 'OUTGOING'),
-        simSlot: asInt(m['simSlot']),
-      );
-}
+import '../services/call_recording_setup.dart';
 
 enum UserRole { manager, caller }
 enum SimTrackingMode { sim1Only, sim2Only, bothSims }
@@ -185,7 +128,10 @@ class TeleProvider extends ChangeNotifier {
       _startPeriodicSyncTimer();
       if (_isLoggedIn) {
         fetchNotifications();
-        _retryPendingUploads();
+        // (Re)start call tracking while we are allowed to: after a reboot, an update or a kill
+        syncCallMonitor();
+        CallRecordingChannel.retryUploads();
+        _refreshRecordings();
       }
     } else {
       _syncPollingTimer?.cancel();
@@ -218,11 +164,10 @@ class TeleProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Native side boots with auto-record ON; always push the saved preference.
-  /// Recording is only armed for a signed-in caller (or a manager in caller mode).
+  /// Recording is only armed for a signed-in caller (or a manager in caller mode) with
+  /// auto-record on: the native call monitor runs exactly then.
   void _pushAutoRecordToNative() {
-    final enabled = _autoRecordEnabled && _isLoggedIn && _isCallerContext;
-    _telephonyChannel.invokeMethod('setAutoRecord', {'enabled': enabled}).catchError((_) => null);
+    syncCallMonitor();
   }
 
   /// True when the app is acting as a caller: a caller login, or a manager who switched to caller mode.
@@ -244,93 +189,92 @@ class TeleProvider extends ChangeNotifier {
         _callLogDebounce = Timer(const Duration(seconds: 2), () {
           fetchDeviceCallLogs();
         });
-      } else if (call.method == 'onRecordingSaved') {
-        _isCallRecordingActive = false;
-        final map = (call.arguments is Map) ? Map<String, dynamic>.from(call.arguments as Map) : <String, dynamic>{};
-        await _handleRecordingSaved(map);
+      } else if (call.method == 'onRecordingUploaded') {
+        // The native queue uploaded recordings: show them
+        await refreshPendingUploadCount();
+        await _refreshRecordings();
+      } else if (call.method == 'onUploadQueueChanged') {
+        await refreshPendingUploadCount();
+      } else if (call.method == 'onUploadAuthFailed') {
+        // The server rejected the token: /auth/me confirms it and signs out (onAuthRequired)
+        await refreshProfile();
+      } else if (call.method == 'onCallMonitorState') {
+        final running = (call.arguments is Map) && call.arguments['running'] == true;
+        if (running != _callMonitorRunning) {
+          _callMonitorRunning = running;
+          notifyListeners();
+        }
       } else if (call.method == 'onPlaybackCompleted') {
         _onPlaybackFinished();
       }
     });
   }
 
-  // ================= RECORDING UPLOADS =================
+  // ================= CALL MONITOR & RECORDING UPLOADS =================
+  // Recording, built-in recorder detection and uploads are native (CallMonitorService +
+  // RecordingUploader): they keep working when this engine is gone. Dart starts / stops the
+  // service and refreshes the recordings list when native reports finished uploads.
 
-  final List<PendingRecordingUpload> _pendingUploads = [];
-  int get pendingUploadCount => _pendingUploads.where((p) => p.userId == _currentUserId).length;
-  bool _uploadRetryInFlight = false;
+  int _pendingUploadCount = 0;
+  int get pendingUploadCount => _pendingUploadCount;
 
-  Future<void> _deleteLocalFile(String path) async {
-    if (path.isEmpty) return;
-    try {
-      final f = File(path);
-      if (await f.exists()) await f.delete();
-    } catch (_) {}
+  bool _callMonitorRunning = false;
+  bool get callMonitorRunning => _callMonitorRunning;
+
+  bool get _shouldRunCallMonitor => shouldRunCallMonitor(
+        isLoggedIn: _isLoggedIn,
+        isCallerContext: _isCallerContext,
+        autoRecordEnabled: _autoRecordEnabled,
+        authToken: _authToken,
+      );
+
+  /// Starts the call monitor for a signed-in caller (only while in the foreground: Android does
+  /// not allow starting a microphone service from the background), or stops it.
+  Future<void> syncCallMonitor() async {
+    if (!_shouldRunCallMonitor) {
+      if (_callMonitorRunning) {
+        _callMonitorRunning = false;
+        notifyListeners();
+      }
+      await CallRecordingChannel.stopMonitor();
+      return;
+    }
+    if (!_appInForeground) return;
+    // Preferences first: the native side reads the session (token, user, SIM mode) from them
+    await _savePreferences();
+    final started = await CallRecordingChannel.startMonitor(baseUrl: ApiService.baseUrl);
+    if (started != _callMonitorRunning) {
+      _callMonitorRunning = started;
+      notifyListeners();
+    }
+    await refreshPendingUploadCount();
   }
 
-  Future<void> _handleRecordingSaved(Map<String, dynamic> map) async {
-    final filePath = asString(map['filePath']);
-    final fileName = asString(map['fileName']);
-    final durSec = asInt(map['durationSeconds']);
-
-    // Only a signed-in caller (or manager in caller mode) records work calls.
-    if (!_isLoggedIn || !_isCallerContext || _currentUserId.isEmpty) {
-      debugPrint('Recording ignored: not signed in as a caller');
-      await _deleteLocalFile(filePath);
+  Future<void> refreshPendingUploadCount() async {
+    if (!_isLoggedIn || _currentUserId.isEmpty) {
+      _pendingUploadCount = 0;
       return;
     }
-    if (filePath.isEmpty || durSec <= 0) {
-      await _deleteLocalFile(filePath);
-      return;
+    final n = await CallRecordingChannel.pendingUploadCount(_currentUserId);
+    if (n != _pendingUploadCount) {
+      _pendingUploadCount = n;
+      notifyListeners();
     }
+  }
 
-    final gen = _sessionGeneration;
-    final startedMs = asInt(map['callStartedAtMs'], asInt(map['timestamp']));
-    final startedAt = startedMs > 0
-        ? DateTime.fromMillisecondsSinceEpoch(startedMs)
-        : DateTime.now().subtract(Duration(seconds: durSec));
-    var phone = asString(map['phoneNumber']);
-    var simSlot = asInt(map['simSlot']);
-    final isIncoming = map['isIncoming'] == true;
-
-    // The call-log row is written around the time the call ends: refresh, then match by number + time.
-    await fetchDeviceCallLogs();
-    var match = matchCallForRecording(_allDeviceCalls, phone: phone, startedAt: startedAt);
-    if (match == null) {
-      await Future.delayed(const Duration(seconds: 3));
-      if (!_isCurrentSession(gen)) return;
-      await fetchDeviceCallLogs();
-      match = matchCallForRecording(_allDeviceCalls, phone: phone, startedAt: startedAt);
+  /// Recordings the previous (Dart) uploader had queued move to the native queue once.
+  Future<void> _migrateLegacyPendingUploads(SharedPreferences prefs) async {
+    final json = prefs.getString('pending_recording_uploads');
+    if (json == null || json.isEmpty) return;
+    try {
+      final list = jsonDecode(json);
+      final items = list is List ? legacyUploadsForNative(list) : const <Map<String, dynamic>>[];
+      final added = await CallRecordingChannel.enqueueLegacyUploads(items);
+      if (added < 0) return; // channel unavailable: keep them for the next start
+    } catch (e) {
+      debugPrint('Legacy upload migration: $e');
     }
-    if (!_isCurrentSession(gen)) return;
-
-    if (match != null) {
-      if (phone.isEmpty) phone = match.phoneNumber;
-      if (match.simSlot > 0) simSlot = match.simSlot;
-    }
-    if (!_isWorkSim(simSlot)) {
-      debugPrint('Recording ignored: personal SIM call');
-      await _deleteLocalFile(filePath);
-      return;
-    }
-
-    final type = match != null
-        ? (match.type == CallType.outgoing ? 'OUTGOING' : 'INCOMING')
-        : (isIncoming ? 'INCOMING' : 'OUTGOING');
-    final pending = PendingRecordingUpload(
-      userId: _currentUserId,
-      filePath: filePath,
-      fileName: fileName.isNotEmpty ? fileName : filePath.split(RegExp(r'[/\\]')).last,
-      phoneNumber: phone,
-      contactName: match?.contactName ?? (phone.isNotEmpty ? phone : 'Unknown'),
-      callStartedAt: match?.timestamp ?? startedAt,
-      durationSeconds: durSec,
-      type: type,
-      simSlot: simSlot,
-    );
-    _pendingUploads.add(pending);
-    await _savePendingUploads();
-    await _retryPendingUploads();
+    await prefs.remove('pending_recording_uploads');
   }
 
   /// SIM slot 0 means the device could not tell which SIM carried the call: keep it (work data
@@ -344,68 +288,6 @@ class TeleProvider extends ChangeNotifier {
         return simSlot == 2;
       case SimTrackingMode.bothSims:
         return true;
-    }
-  }
-
-  Future<void> _savePendingUploads() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      if (_pendingUploads.isEmpty) {
-        await prefs.remove('pending_recording_uploads');
-      } else {
-        await prefs.setString('pending_recording_uploads', jsonEncode(_pendingUploads.map((p) => p.toMap()).toList()));
-      }
-    } catch (e) {
-      debugPrint('savePendingUploads: $e');
-    }
-  }
-
-  /// Upload every pending recording that belongs to the signed-in user. Failed uploads stay queued.
-  Future<void> _retryPendingUploads() async {
-    if (_uploadRetryInFlight || !_isLoggedIn || _currentUserId.isEmpty) return;
-    _uploadRetryInFlight = true;
-    final gen = _sessionGeneration;
-    var uploadedAny = false;
-    try {
-      for (final p in List<PendingRecordingUpload>.of(_pendingUploads)) {
-        if (!_isCurrentSession(gen)) break;
-        if (p.userId != _currentUserId) continue;
-        if (!await File(p.filePath).exists()) {
-          _pendingUploads.remove(p);
-          continue;
-        }
-        String audio;
-        try {
-          audio = await compute(readFileAsBase64, p.filePath);
-        } catch (e) {
-          debugPrint('Recording read failed: $e');
-          continue;
-        }
-        final ok = await ApiService.saveRecording(
-          callerId: _currentUserId,
-          callerName: _callerName,
-          callerPhone: _verifiedTrackingNumber,
-          contactName: p.contactName,
-          phoneNumber: p.phoneNumber,
-          duration: Duration(seconds: p.durationSeconds),
-          fileName: p.fileName,
-          audioData: audio,
-          callStartedAt: p.callStartedAt,
-          type: p.type,
-          simSlot: p.simSlot,
-        );
-        if (ok) {
-          _pendingUploads.remove(p);
-          await _deleteLocalFile(p.filePath);
-          uploadedAny = true;
-        }
-      }
-      await _savePendingUploads();
-    } finally {
-      _uploadRetryInFlight = false;
-    }
-    if (uploadedAny && _isCurrentSession(gen)) {
-      await _refreshRecordings();
     }
   }
 
@@ -500,17 +382,7 @@ class TeleProvider extends ChangeNotifier {
       _dutyStartTime = dutyMs != null ? DateTime.fromMillisecondsSinceEpoch(dutyMs) : null;
       final syncAckMs = prefs.getInt(_syncAckKey(_currentUserId));
       _lastCallSyncAck = syncAckMs != null ? DateTime.fromMillisecondsSinceEpoch(syncAckMs) : null;
-      final pendingJson = prefs.getString('pending_recording_uploads');
-      if (pendingJson != null && pendingJson.isNotEmpty) {
-        try {
-          final list = jsonDecode(pendingJson);
-          if (list is List) {
-            _pendingUploads
-              ..clear()
-              ..addAll(list.whereType<Map>().map((m) => PendingRecordingUpload.fromMap(Map<String, dynamic>.from(m))));
-          }
-        } catch (_) {}
-      }
+      await _migrateLegacyPendingUploads(prefs);
       final roleStr = prefs.getString('user_role');
       if (roleStr != null) {
         _currentRole = UserRole.values.firstWhere((r) => r.name == roleStr, orElse: () => UserRole.caller);
@@ -590,7 +462,7 @@ class TeleProvider extends ChangeNotifier {
     if (_isLoggedIn) {
       await fetchDeviceCallLogs();
       await fetchBackendData();
-      _retryPendingUploads();
+      CallRecordingChannel.retryUploads();
     }
     _startPeriodicSyncTimer();
   }
@@ -1133,7 +1005,6 @@ class TeleProvider extends ChangeNotifier {
         if (_callLogs.isNotEmpty) {
           _syncCallsToServer();
         }
-        _retryPendingUploads();
       }
     } catch (e) {
       debugPrint('Error fetching device call logs: $e');
@@ -1475,6 +1346,9 @@ class TeleProvider extends ChangeNotifier {
     _stopPlaybackPolling();
     _telephonyChannel.invokeMethod('stopAudio').catchError((_) => null);
 
+    // Stops the call monitor: nothing is recorded or uploaded without a session. Recordings still
+    // queued stay on the device and upload when the same user signs in again.
+    _pendingUploadCount = 0;
     _pushAutoRecordToNative();
     await _savePreferences();
     notifyListeners();
@@ -2260,26 +2134,6 @@ class TeleProvider extends ChangeNotifier {
   // Recordings
   final List<RecordingModel> _recordings = [];
   List<RecordingModel> get recordings => _recordings;
-
-  Future<void> startTestRecording() async {
-    _isCallRecordingActive = true;
-    notifyListeners();
-    try {
-      await _telephonyChannel.invokeMethod('startTestRecording');
-    } catch (e) {
-      debugPrint('startTestRecording channel fallback: $e');
-    }
-  }
-
-  Future<void> stopTestRecording() async {
-    _isCallRecordingActive = false;
-    notifyListeners();
-    try {
-      await _telephonyChannel.invokeMethod('stopTestRecording');
-    } catch (e) {
-      debugPrint('stopTestRecording error: $e');
-    }
-  }
 
   // ---- Playback: real position / duration polled from the native MediaPlayer
   Timer? _playbackPollTimer;

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -8,6 +9,7 @@ import '../../widgets/neo_card.dart';
 import '../../widgets/top_header.dart';
 import '../../providers/tele_provider.dart';
 import '../login_screen.dart';
+import '../setup/call_recording_setup_screen.dart';
 
 class MoreScreen extends StatefulWidget {
   final VoidCallback onNavigateToBoard;
@@ -471,6 +473,39 @@ class _MoreScreenState extends State<MoreScreen> {
                 ),
               ),
               const SizedBox(height: 12),
+
+              // Call recording setup (Android): brand guide, permissions, service status
+              if (Platform.isAndroid) ...[
+                NeoCard(
+                  backgroundColor: AppTheme.white,
+                  shadowColor: AppTheme.ink900,
+                  padding: const EdgeInsets.all(16),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const CallRecordingSetupScreen()),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.settings_voice_outlined, size: 22, color: AppTheme.ink900),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Call recording setup', style: AppTheme.bodyBold(size: 15, color: AppTheme.ink900)),
+                            const SizedBox(height: 2),
+                            Text(
+                              tele.callMonitorRunning ? 'Call tracking active' : 'Turn on your phone\'s call recorder',
+                              style: AppTheme.body(size: 12, color: AppTheme.muted),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right, color: AppTheme.ink900),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
 
               // Card 3: RECORDING STORAGE
               Builder(

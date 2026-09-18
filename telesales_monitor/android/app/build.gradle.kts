@@ -43,3 +43,8 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // Native upload queue for call recordings: retries with backoff even when the app is closed
+    implementation("androidx.work:work-runtime-ktx:2.10.1")
+}

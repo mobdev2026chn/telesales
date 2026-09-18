@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="call_recording_accessibility_label">AskEVA Call Recording</string>
+    <string name="call_recording_accessibility_summary">Lets AskEVA record your work calls</string>
+    <string name="call_recording_accessibility_description">Android mutes the microphone for apps during phone calls. Turning this on lets AskEVA record your work calls for quality review. AskEVA does not read your screen, and does not type or tap anything for you.</string>
+</resources>
