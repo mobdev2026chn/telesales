@@ -82,6 +82,10 @@ class CallMonitorService : Service() {
         private const val MIN_TALK_SECONDS_FOR_MISS = 5
         /** Server marks a user offline after 5 minutes without any request. */
         private const val HEARTBEAT_EVERY_SEC = 120L
+        /** Calls per /calls/sync request from the call monitor. */
+        private const val MAX_PUSH_BATCH = 200
+        /** The dialer writes the call-log row a moment after the call ends. */
+        private const val PUSH_DELAY_MS = 3000L
     }
 
     private data class EndedCall(
@@ -98,6 +102,8 @@ class CallMonitorService : Service() {
 
     /** Post-call work runs one call at a time, off the main thread. */
     private val worker: ExecutorService = Executors.newSingleThreadExecutor()
+    /** Live call sync (separate from [worker], which waits up to ~16 s per call for recordings). */
+    private val pusher: ExecutorService = Executors.newSingleThreadExecutor()
     /** "Still here" pings, so the admin dashboard shows this caller as online while logged in. */
     private var heartbeat: java.util.concurrent.ScheduledExecutorService? = null
     private var receiver: BroadcastReceiver? = null
@@ -148,8 +154,111 @@ class CallMonitorService : Service() {
     private fun startHeartbeat() {
         if (heartbeat != null) return
         heartbeat = Executors.newSingleThreadScheduledExecutor().also {
-            it.scheduleWithFixedDelay({ sendHeartbeat() }, 0, HEARTBEAT_EVERY_SEC, java.util.concurrent.TimeUnit.SECONDS)
+            // Each ping also retries any call that could not be sent yet (no internet at call end)
+            it.scheduleWithFixedDelay({ sendHeartbeat(); schedulePush(0) }, 0, HEARTBEAT_EVERY_SEC, java.util.concurrent.TimeUnit.SECONDS)
         }
+    }
+
+    private fun schedulePush(delayMs: Long) {
+        try {
+            pusher.execute {
+                if (delayMs > 0) try { Thread.sleep(delayMs) } catch (_: InterruptedException) { return@execute }
+                pushRecentCalls()
+            }
+        } catch (_: Exception) {}
+    }
+
+    /**
+     * Sends this session's work-SIM calls from the call log to POST /calls/sync as soon as a call ends,
+     * so the dashboard is live even when the app is closed (the app itself only syncs while open).
+     * Same rows, timestamps and types as the app's own sync (MainActivity.getCallLogs), so the server's
+     * de-duplication (caller + number + exact call-log time) stores every call once whoever sends it first.
+     * Missed / rejected calls are included: they never reach [endCall], but they are in the call log.
+     */
+    private fun pushRecentCalls() {
+        val session = CallMonitorStore.session(this) ?: return
+        if (!session.isCallerContext) return
+        if (session.token == CallMonitorStore.authFailedToken(this)) return
+        if (!CallMonitorStore.hasPermission(this, Manifest.permission.READ_CALL_LOG)) return
+        val loginMs = CallMonitorStore.loginSessionMs(this) ?: return
+        val ack = CallMonitorStore.callPushAck(this, session.userId)
+        // Re-send the last 10 minutes too: a long call is written to the log after shorter later ones
+        val since = maxOf(loginMs - 5000L, ack - 10 * 60_000L)
+        val calls = org.json.JSONArray()
+        var newest = ack
+        try {
+            val projection = arrayOf(
+                CallLog.Calls.NUMBER, CallLog.Calls.CACHED_NAME, CallLog.Calls.TYPE,
+                CallLog.Calls.DATE, CallLog.Calls.DURATION, CallLog.Calls.PHONE_ACCOUNT_ID
+            )
+            contentResolver.query(
+                CallLog.Calls.CONTENT_URI, projection, "${CallLog.Calls.DATE} >= ?",
+                arrayOf(since.toString()), "${CallLog.Calls.DATE} ASC"
+            )?.use { c ->
+                while (c.moveToNext() && calls.length() < MAX_PUSH_BATCH) {
+                    val slot = slotFromAccountId(c.getString(5) ?: "")
+                    if (!CallMonitorStore.isWorkSim(slot, session.simMode)) continue // personal SIM: never leaves the phone
+                    val number = c.getString(0) ?: ""
+                    val date = c.getLong(3)
+                    val type = when (c.getInt(2)) {
+                        CallLog.Calls.OUTGOING_TYPE -> "outgoing"
+                        CallLog.Calls.MISSED_TYPE -> "missed"
+                        CallLog.Calls.REJECTED_TYPE, CallLog.Calls.BLOCKED_TYPE -> "rejected"
+                        else -> "incoming"
+                    }
+                    val cached = c.getString(1)
+                    val name = if (!cached.isNullOrEmpty() && cached != number) cached else (lookupContactName(number) ?: number.ifEmpty { "Unknown" })
+                    calls.put(JSONObject()
+                        .put("contactName", name)
+                        .put("phoneNumber", number)
+                        .put("type", type)
+                        .put("timestamp", isoUtc(date))
+                        .put("durationSeconds", c.getInt(4).coerceAtLeast(0))
+                        .put("simSlot", slot)
+                        .put("note", ""))
+                    if (date > newest) newest = date
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return
+        }
+        if (calls.length() == 0) return
+
+        val body = JSONObject()
+            .put("callerId", session.userId)
+            .put("callerName", session.callerName)
+            .put("callerPhone", session.callerPhone)
+            .put("calls", calls)
+        var conn: java.net.HttpURLConnection? = null
+        try {
+            conn = (java.net.URL("${CallMonitorStore.baseUrl(this)}/calls/sync").openConnection() as java.net.HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = 15_000
+                readTimeout = 30_000
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("Authorization", "Bearer ${session.token}")
+            }
+            conn.outputStream.use { it.write(body.toString().toByteArray()) }
+            val code = conn.responseCode
+            if (code in 200..299) {
+                CallMonitorStore.setCallPushAck(this, session.userId, newest)
+                CallMonitorEvents.emit("onCallsPushed", mapOf("count" to calls.length()))
+                // A full batch means more rows are waiting
+                if (calls.length() >= MAX_PUSH_BATCH) schedulePush(0)
+            }
+        } catch (_: Exception) {
+            // No internet: the next call end or heartbeat (2 min) retries
+        } finally {
+            conn?.disconnect()
+        }
+    }
+
+    private fun isoUtc(ms: Long): String {
+        val f = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+        f.timeZone = java.util.TimeZone.getTimeZone("UTC")
+        return f.format(Date(ms))
     }
 
     /** POST <base>/auth/heartbeat with the session token. Failures are ignored (next ping retries). */
@@ -266,6 +375,11 @@ class CallMonitorService : Service() {
                 }
             }
             TelephonyManager.EXTRA_STATE_IDLE -> {
+                // Every call that ends (answered, missed or rejected) goes to the server right away
+                if (inCall || lastState == TelephonyManager.EXTRA_STATE_RINGING) {
+                    schedulePush(PUSH_DELAY_MS)
+                    schedulePush(PUSH_DELAY_MS * 3) // slow dialers write the row late
+                }
                 if (inCall) endCall(now)
                 inCall = false
                 incoming = false
@@ -553,6 +667,7 @@ class CallMonitorService : Service() {
         if (inCall) endCall(System.currentTimeMillis())
         inCall = false
         worker.shutdown() // queued post-call work still completes
+        pusher.shutdown()
         CallMonitorEvents.emit("onCallMonitorState", mapOf("running" to false))
         super.onDestroy()
     }

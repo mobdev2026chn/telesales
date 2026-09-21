@@ -209,6 +209,17 @@ object CallMonitorStore {
     }
 
     /** The token the server rejected with 401: uploads pause until a new login replaces it. */
+    /** Start of the signed-in work session (calls before it are personal and never sent). Null = unknown. */
+    fun loginSessionMs(ctx: Context): Long? = try {
+        (flutterPrefs(ctx).all["flutter.login_session_timestamp_ms"] as? Number)?.toLong()?.takeIf { it > 0 }
+    } catch (_: Exception) { null }
+
+    /** Newest call-log time the server accepted from the call monitor, per user. */
+    fun callPushAck(ctx: Context, userId: String): Long = prefs(ctx).getLong("call_push_ack_ms_$userId", 0L)
+    fun setCallPushAck(ctx: Context, userId: String, ms: Long) {
+        prefs(ctx).edit().putLong("call_push_ack_ms_$userId", ms).apply()
+    }
+
     fun authFailedToken(ctx: Context): String = prefs(ctx).getString(KEY_AUTH_FAILED_TOKEN, "") ?: ""
     fun setAuthFailedToken(ctx: Context, token: String) {
         prefs(ctx).edit().putString(KEY_AUTH_FAILED_TOKEN, token).apply()

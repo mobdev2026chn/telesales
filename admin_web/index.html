@@ -840,6 +840,29 @@
     }
     .presence-dot.is-online { background: #3DC838; }
     .presence-dot.is-offline { background: #D0453A; }
+
+    /* A user's name anywhere in the portal: opens their details page */
+    .user-link {
+      color: inherit;
+      text-decoration: underline;
+      text-decoration-color: rgba(16, 24, 12, 0.28);
+      text-underline-offset: 3px;
+      cursor: pointer;
+    }
+    .user-link:hover,
+    .user-link:focus-visible { color: var(--green-600); text-decoration-color: currentColor; }
+
+    /* Calls / Connected numbers in the dashboard table: green when > 0, red when 0 */
+    .count-pill {
+      display: inline-block;
+      min-width: 28px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      text-align: center;
+      border: 1px solid currentColor;
+    }
+    .count-pill.is-good { color: #2E9E2B; background: rgba(61, 200, 56, 0.14); }
+    .count-pill.is-bad { color: #D0453A; background: rgba(208, 69, 58, 0.10); }
   </style>
 </head>
 <body>
@@ -1571,6 +1594,29 @@
         </div>
       </div>
 
+      <!-- ================= 9. USER DETAIL (opened by clicking a user's name anywhere · #user/<id>) ================= -->
+      <div id="tab-user" class="tab-view">
+        <div class="section-header">
+          <div class="section-title">
+            <span class="green-square"></span>
+            <span class="section-title-text" id="udTitle">USER DETAILS</span>
+          </div>
+          <div class="pill-group">
+            <button type="button" class="filter-chip" onclick="closeUserDetail()">← BACK</button>
+            <button type="button" class="filter-chip active" data-ud-period="today" onclick="setUserDetailPeriod('today')">TODAY</button>
+            <button type="button" class="filter-chip" data-ud-period="week" onclick="setUserDetailPeriod('week')">WEEK</button>
+            <button type="button" class="filter-chip" data-ud-period="month" onclick="setUserDetailPeriod('month')">MONTH</button>
+            <div style="display: flex; align-items: center; gap: 6px; background: #fff; border: 1.5px solid var(--ink-900); border-radius: 999px; padding: 4px 12px;">
+              <span style="font-family: var(--font-mono); font-size: 10px; color: var(--text-muted);">DATE:</span>
+              <input type="date" id="udDateInput" min="2020-01-01" max="2030-12-31" aria-label="User details date" style="border: none; font-family: var(--font-mono); font-size: 11px; background: transparent; cursor: pointer;" onchange="onUserDetailDate(this.value)" />
+            </div>
+          </div>
+        </div>
+        <div id="udBody">
+          <!-- Populated via JS -->
+        </div>
+      </div>
+
     </main>
   </div>
 
@@ -1880,6 +1926,7 @@
         lastCallRows: [],
         lastRecRows: [],
         lbRows: [],
+        ud: null, udPendingKey: null,   // user details page data (see fetchUserDetail)
       };
     }
 
@@ -1896,6 +1943,12 @@
       callRange: 'today',   // same default period as the dashboard, so the counts match on first view
       callsScopeKey: null,
       callsReq: 0,
+      detailUserId: null,   // user details page (#user/<id>)
+      udPeriod: 'today',
+      udDate: null,
+      udPage: 1,
+      udPrevTab: 'dash',
+      udFromApp: false,     // opened from inside the portal, so BACK can use the browser history
       recFilter: 'ALL',
       recPage: 1,
       authUser: null,     // the real signed-in account (from /auth/me) — never changed by "view as"
@@ -2171,6 +2224,10 @@
 
     function switchNavTab(tabName, el) {
       if (tabName === 'users' && !canSeeUsersTab()) tabName = 'dash';
+      // Leaving a user's page clears #user/<id>, so clicking the same name again opens it again
+      if (tabName !== 'user' && /^#user\//.test(location.hash)) {
+        try { history.replaceState(null, '', location.pathname + location.search); } catch (_) {}
+      }
       Store.tab = tabName;
       document.querySelectorAll('.tab-view').forEach(t => t.classList.remove('active'));
       const target = $(`tab-${tabName}`);
@@ -2197,7 +2254,397 @@
         case 'recs': renderRecordings(!!opts.force); break;
         case 'leads': renderLeadsPipeline(); break;
         case 'profile': renderProfile(); break;
+        case 'user': renderUserDetail(); break;
       }
+    }
+
+    // ==========================================
+    // USER LINKS · USER DETAILS PAGE (#user/<id>)
+    // ==========================================
+    // Finds the registered user behind a name shown anywhere (same order as callBelongsTo: id, phone, name)
+    function findUserRef(ref) {
+      if (!ref) return null;
+      if (ref.id) {
+        const byId = Store.users.find(x => x.id === String(ref.id));
+        if (byId) return byId;
+      }
+      const p = last10(ref.phone);
+      if (p) {
+        const byPhone = Store.users.find(x => last10(x.phone) === p);
+        if (byPhone) return byPhone;
+      }
+      const n = String(ref.name || '').trim().toLowerCase();
+      if (!n || n === '—') return null;
+      return Store.users.find(x => String(x.name || '').trim().toLowerCase() === n) || null;
+    }
+
+    // A user's name as a link to their details page (plain text when the user is unknown or outside the view)
+    function userLink(ref, label) {
+      const text = label !== undefined && label !== null ? label : (ref && ref.name) || '—';
+      const u = findUserRef(ref);
+      if (!u || !visibleUsers().some(v => v.id === u.id)) return esc(text);
+      return `<a href="#user/${encodeURIComponent(u.id)}" class="user-link" title="Open ${esc(u.name)}'s details">${esc(text)}</a>`;
+    }
+
+    function routeFromHash(fromApp = true) {
+      if (!Store.authUser) return;
+      const m = /^#user\/(.+)$/.exec(location.hash || '');
+      if (m) {
+        let id;
+        try { id = decodeURIComponent(m[1]); } catch (_) { id = m[1]; }
+        if (Store.tab !== 'user') {
+          Store.udPrevTab = Store.tab;
+          Store.udFromApp = fromApp;
+        }
+        if (Store.detailUserId !== id) {
+          Store.detailUserId = id;
+          Store.udPage = 1;
+        }
+        switchNavTab('user');
+        try { window.scrollTo(0, 0); const main = document.querySelector('main'); if (main) main.scrollTop = 0; } catch (_) {}
+      } else if (Store.tab === 'user') {
+        switchNavTab(Store.udPrevTab || 'dash');
+      }
+    }
+    window.addEventListener('hashchange', () => routeFromHash(true));
+
+    function closeUserDetail() {
+      if (Store.udFromApp && /^#user\//.test(location.hash)) history.back();
+      else switchNavTab(Store.udPrevTab && Store.udPrevTab !== 'user' ? Store.udPrevTab : 'dash');
+    }
+
+    function setUserDetailPeriod(p) {
+      Store.udPeriod = p;
+      Store.udDate = null;
+      Store.udPage = 1;
+      const d = $('udDateInput');
+      if (d) d.value = '';
+      renderUserDetail();
+    }
+
+    function onUserDetailDate(val) {
+      if (!validPickerDate(val)) return;
+      Store.udDate = val;
+      Store.udPage = 1;
+      renderUserDetail();
+    }
+
+    function changeUserDetailPage(delta) {
+      Store.udPage = Math.max(1, Store.udPage + delta);
+      renderUserDetail();
+    }
+
+    // Same India-time periods as the server's getPeriodRange (today / week from Monday / month / one date)
+    function udRange() {
+      if (Store.udDate) {
+        const s = istMidnight(Store.udDate);
+        return { from: s, to: new Date(s.getTime() + 24 * 3600 * 1000) };
+      }
+      const today = istDateStr(new Date());
+      let from = istMidnight(today);
+      if (Store.udPeriod === 'week') {
+        const [y, m, d] = today.split('-').map(Number);
+        const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+        from = istMidnight(istDaysAgoStr((dow + 6) % 7));
+      } else if (Store.udPeriod === 'month') {
+        from = istMidnight(`${today.slice(0, 8)}01`);
+      }
+      return { from, to: new Date() };
+    }
+
+    function udKey() { return `${Store.detailUserId}|${Store.udDate || Store.udPeriod}`; }
+
+    function udPeriodLabel() {
+      if (Store.udDate) {
+        const d = istMidnight(Store.udDate);
+        return new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric' }).format(d).toUpperCase();
+      }
+      return { today: 'TODAY', week: 'THIS WEEK', month: 'THIS MONTH' }[Store.udPeriod] || 'TODAY';
+    }
+
+    // The user's numbers, calls and recordings, from the same endpoints (and counting) as the other tabs
+    async function fetchUserDetail() {
+      const id = Store.detailUserId;
+      if (!id) return;
+      const key = udKey();
+      if (Store.udPendingKey === key) return;
+      Store.udPendingKey = key;
+      const { from, to } = udRange();
+      const only = `&callerIds=${encodeURIComponent(id)}`;
+      const [dash, calls, recs] = await Promise.allSettled([
+        apiFetch(`/admin/dashboard?${whenParam(Store.udPeriod, Store.udDate)}${only}`),
+        apiFetch(`/admin/calls?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}&limit=1000${only}`),
+        apiFetch(`/admin/recordings?limit=${REC_FETCH_LIMIT}${only}`),
+      ]);
+      if (Store.udPendingKey === key) Store.udPendingKey = null;
+      if (udKey() !== key) return;   // another user or period was picked meanwhile
+      const prev = Store.ud && Store.ud.key === key ? Store.ud : null;
+      const why = (r) => (r.status === 'rejected' ? String((r.reason && r.reason.message) || r.reason || 'Request failed') : null);
+      Store.ud = {
+        key,
+        dash: dash.status === 'fulfilled' ? (dash.value.data || null) : (prev ? prev.dash : null),
+        dashError: why(dash),
+        calls: calls.status === 'fulfilled' ? (calls.value.calls || []).map(mapCall).filter(Boolean).sort((a, b) => b.ts - a.ts) : (prev ? prev.calls : null),
+        callsTotal: calls.status === 'fulfilled' ? Number(calls.value.total) || 0 : (prev ? prev.callsTotal : 0),
+        callsHasMore: calls.status === 'fulfilled' ? !!calls.value.hasMore : (prev ? prev.callsHasMore : false),
+        callsError: why(calls),
+        recs: recs.status === 'fulfilled' ? (recs.value.recordings || []).map(mapRecording).filter(r => r.id) : (prev ? prev.recs : null),
+        recsError: why(recs),
+      };
+      if (Store.tab === 'user') renderUserDetail();
+    }
+
+    function renderUserDetail() {
+      const body = $('udBody');
+      if (!body) return;
+      document.querySelectorAll('[data-ud-period]').forEach(b => {
+        const on = !Store.udDate && b.dataset.udPeriod === Store.udPeriod;
+        b.classList.toggle('active', on);
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+      const dateInput = $('udDateInput');
+      if (dateInput && dateInput.value !== (Store.udDate || '')) dateInput.value = Store.udDate || '';
+
+      const u = Store.users.find(x => x.id === Store.detailUserId);
+      if (!u) {
+        $('udTitle').textContent = 'USER DETAILS';
+        body.innerHTML = `<div class="empty-state">${Store.loaded.users || Store.errors.users ? 'THIS USER WAS NOT FOUND — THEY MAY HAVE BEEN DELETED.' : 'LOADING USER…'}</div>`;
+        return;
+      }
+      if (!visibleUsers().some(v => v.id === u.id)) {
+        $('udTitle').textContent = 'USER DETAILS';
+        body.innerHTML = '<div class="empty-state">THIS USER IS NOT IN YOUR TEAM VIEW.</div>';
+        return;
+      }
+      $('udTitle').textContent = `${String(u.name || 'USER').toUpperCase()} · DETAILS`;
+
+      const key = udKey();
+      const data = Store.ud && Store.ud.key === key ? Store.ud : null;
+      if (!data && Store.udPendingKey !== key) fetchUserDetail();
+
+      const periodTxt = udPeriodLabel();
+      const d = data && data.dash ? data.dash : null;
+      const row = d ? statsFor(d.teamMembers, u) : null;
+      const num = (v) => Math.round(Number(v) || 0);
+      const total = num(d && d.totalCalls);
+      const connected = num(d && d.connectedCalls);
+      const talk = num(d && d.talkSeconds);
+      const incoming = num(d && d.incoming);
+      const outgoing = num(d && d.outgoing);
+      const missed = num(d && d.missed);
+      const rejected = num(d && d.rejected);
+      const unique = num(d && d.uniqueClients);
+      const avg = num(d && d.avgDurationSeconds);
+      const rate = total ? Math.round(connected / total * 100) : 0;
+      const isAgent = u.role !== 'ADMIN';
+      const active = connected > 0;
+      const mgrUser = Store.users.find(x => x.id === u.mgr);
+      const target = Number(u.target) || 0;
+      const todayRow = statsFor(Store.todayMembers, u);
+      const todayCalls = todayRow ? num(todayRow.totalCalls) : 0;
+      const pct = target > 0 ? Math.min(100, Math.round(todayCalls / target * 100)) : 0;
+      const seenAt = (row && row.lastSeenAt) || (todayRow && todayRow.lastSeenAt);
+      const online = !!((row && row.online) || (todayRow && todayRow.online));
+      const photo = safeImage(u.photoBase64);
+      const loadingTxt = data ? '' : 'LOADING…';
+
+      const detailLine = (label, value) => `
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid #E3DFD2;">
+          <span style="font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.12em; color: var(--text-muted);">${label}</span>
+          <span style="font-size: 13px; font-weight: 700; font-family: var(--font-mono); text-align: right; overflow-wrap: anywhere;">${value}</span>
+        </div>`;
+      const kpi = (label, value, sub, bg, color, labelColor) => `
+        <div style="border: 1.5px solid var(--ink-900); border-radius: 16px; padding: 18px 20px; box-shadow: 4px 4px 0 var(--ink-900); background: ${bg}; color: ${color};">
+          <div style="font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.16em; margin-bottom: 8px; color: ${labelColor};">${label}</div>
+          <div class="kpi-num" style="font-family: var(--font-display); font-size: 46px; line-height: 0.95;">${value}</div>
+          <div style="font-size: 12px; margin-top: 8px; font-family: var(--font-mono); color: ${labelColor};">${sub}</div>
+        </div>`;
+
+      // Hour chart: 10 AM – 7 PM India time, same as the dashboard
+      const hourLabel = (h) => h > 12 ? `${h - 12}PM` : (h === 12 ? '12PM' : `${h}AM`);
+      const byHour = new Array(24).fill(0);
+      (d && Array.isArray(d.hourlyAll) ? d.hourlyAll : []).forEach(hc => {
+        const h = Number(hc.hourOfDay);
+        if (h >= 0 && h <= 23) byHour[h] = Number(hc.calls) || 0;
+      });
+      const hours = [];
+      for (let h = 10; h <= 19; h++) hours.push([hourLabel(h), byHour[h], `${hourLabel(h)} – ${hourLabel(h + 1)}`]);
+      const maxH = Math.max(1, ...hours.map(([, c]) => c));
+      const hourBars = hours.map(([lbl, cnt, span]) => {
+        const hPct = Math.round((cnt / maxH) * 80) + 4;
+        const bg = cnt === maxH && cnt > 0 ? '#C8FF4A' : (cnt > 0 ? '#7FD63B' : '#E3DFD2');
+        return `
+          <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end;" title="${cnt} call${cnt === 1 ? '' : 's'} ${esc(span)}">
+            <div style="font-family: var(--font-mono); font-size: 10px; font-weight: 700;">${cnt || ''}</div>
+            <div style="width: 100%; border-radius: 6px 6px 0 0; border: 1.5px solid var(--ink-900); background: ${bg}; height: ${hPct}%; min-height: 4px;"></div>
+            <div style="font-family: var(--font-mono); font-size: 10px; color: #5A6352; white-space: nowrap;">${esc(lbl)}</div>
+          </div>`;
+      }).join('');
+
+      // Call history (this user's calls in the period), 25 per page
+      const { from, to } = udRange();
+      const recs = data && data.recs ? data.recs : [];
+      const recFor = (c) => {
+        if (c.recordingId) return c.recordingId;
+        const p = last10(c.phone);
+        const r = recs.find(x => x.ts && last10(x.phone) === p && Math.abs(x.ts - c.ts) < 3 * 60 * 1000);
+        return r ? r.id : null;
+      };
+      const calls = data && data.calls ? data.calls : [];
+      const pageSize = 25;
+      const totalPages = Math.max(1, Math.ceil(calls.length / pageSize));
+      const page = Math.min(Math.max(1, Store.udPage), totalPages);
+      Store.udPage = page;
+      const pageCalls = calls.slice((page - 1) * pageSize, page * pageSize);
+      let callRows;
+      if (!data) callRows = '<div class="empty-state">LOADING CALLS…</div>';
+      else if (data.callsError && !data.calls) callRows = `<div class="empty-state">COULD NOT LOAD CALLS — ${esc(data.callsError)}</div>`;
+      else if (!calls.length) callRows = `<div class="empty-state">NO CALLS ${esc(periodTxt)}</div>`;
+      else {
+        callRows = pageCalls.map(c => {
+          const outColor = c.out === 'CONNECTED' ? '#2E9E2B' : (c.out === 'MISSED' ? '#D0453A' : '#C88A2E');
+          const dirBg = c.dir === 'IN' ? '#3DC838' : '#10180C';
+          const dirColor = c.dir === 'IN' ? '#10180C' : '#C8FF4A';
+          const recId = recFor(c);
+          return `
+            <div class="table-body-row" style="grid-template-columns: 1.1fr 1.4fr 1.2fr 0.9fr 0.9fr 0.7fr 0.4fr;">
+              <span style="font-family: var(--font-mono); font-size: 11px;">${esc(fmtTs(c.ts))}</span>
+              <span style="${c.client ? 'font-weight: 600;' : 'font-style: italic; color: #5A6352;'}">${esc(c.client || 'Unknown caller')}</span>
+              <span style="font-family: var(--font-mono); font-size: 12px;">${esc(formatPhone(c.phone))}</span>
+              <span style="justify-self: start; padding: 3px 12px; border-radius: 999px; border: 1px solid #10180C; font-family: var(--font-mono); font-size: 10px; font-weight: 700; background: ${dirBg}; color: ${dirColor};">${c.dir === 'IN' ? 'INBOUND' : 'OUTBOUND'}</span>
+              <span style="font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: ${outColor};">${c.out}</span>
+              <span style="font-family: var(--font-mono); font-size: 12px;">${fmtDur(c.dur)}</span>
+              <span>${recId ? `<button type="button" class="icon-btn" data-action="play-log" data-id="${esc(recId)}" aria-label="Play recording of call with ${esc(c.client || formatPhone(c.phone))}" title="Play recording">▶</button>` : '<span style="color: #B9B3A2;">—</span>'}</span>
+            </div>`;
+        }).join('');
+      }
+      const callCountTxt = data ? `${data.callsTotal || calls.length} CALL${(data.callsTotal || calls.length) === 1 ? '' : 'S'} ${periodTxt}` : '';
+      const pager = data && calls.length > pageSize ? `
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 22px; border-top: 1px solid #E3DFD2; font-family: var(--font-mono); font-size: 11px;">
+          <span>PAGE ${page} / ${totalPages}${data.callsHasMore ? ' · SHOWING THE LATEST 1000' : ''}</span>
+          <span style="display: flex; gap: 8px;">
+            <button type="button" class="filter-chip" onclick="changeUserDetailPage(-1)" ${page <= 1 ? 'disabled style="opacity: 0.4;"' : ''}>← PREV</button>
+            <button type="button" class="filter-chip" onclick="changeUserDetailPage(1)" ${page >= totalPages ? 'disabled style="opacity: 0.4;"' : ''}>NEXT →</button>
+          </span>
+        </div>` : '';
+
+      // Recordings in the period
+      const periodRecs = recs.filter(r => r.ts && r.ts >= from && r.ts < to);
+      let recRows;
+      if (!data) recRows = '<div class="empty-state">LOADING RECORDINGS…</div>';
+      else if (data.recsError && !data.recs) recRows = `<div class="empty-state">COULD NOT LOAD RECORDINGS — ${esc(data.recsError)}</div>`;
+      else if (!periodRecs.length) recRows = `<div class="empty-state">NO RECORDINGS ${esc(periodTxt)}</div>`;
+      else {
+        recRows = periodRecs.slice(0, 50).map(r => `
+          <div class="table-body-row" style="grid-template-columns: 1.1fr 1.6fr 1.2fr 0.8fr 0.8fr 0.4fr;">
+            <span style="font-family: var(--font-mono); font-size: 11px;">${esc(fmtTs(r.ts))}</span>
+            <span style="${r.client ? 'font-weight: 600;' : 'font-style: italic; color: #5A6352;'}">${esc(r.client || 'Unknown caller')}</span>
+            <span style="font-family: var(--font-mono); font-size: 12px;">${esc(formatPhone(r.phone))}</span>
+            <span style="font-family: var(--font-mono); font-size: 11px; font-weight: 700;">${r.dir === 'IN' ? 'INBOUND' : (r.dir === 'OUT' ? 'OUTBOUND' : '—')}</span>
+            <span style="font-family: var(--font-mono); font-size: 12px;">${fmtDur(r.dur)}</span>
+            <span><button type="button" class="icon-btn" data-action="play-log" data-id="${esc(r.id)}" aria-label="Play recording with ${esc(r.client || formatPhone(r.phone))}" title="Play recording">▶</button></span>
+          </div>`).join('');
+      }
+
+      // Leads assigned to this user
+      const uName = String(u.name || '').trim().toLowerCase();
+      const myLeads = Store.leads.filter(l => (l.agentId ? l.agentId === u.id : String(l.agent || '').trim().toLowerCase() === uName));
+      const stageCount = (s) => myLeads.filter(l => l.stage === s).length;
+      const stages = [['NEW', '#fff'], ['INTERESTED', '#3DC838'], ['FOLLOW-UP', '#C8FF4A'], ['CONVERTED', '#7FD63B'], ['NOT INTERESTED', '#EFECE3']];
+      const recentLeads = myLeads.slice().sort((a, b) => ((b.lastCallDate || b.updatedAt || b.createdAt || 0) - (a.lastCallDate || a.updatedAt || a.createdAt || 0))).slice(0, 10);
+      const leadRows = !Store.loaded.leads && !Store.errors.leads ? '<div class="empty-state">LOADING LEADS…</div>'
+        : (!myLeads.length ? '<div class="empty-state">NO LEADS ASSIGNED</div>'
+          : recentLeads.map(l => `
+            <div class="table-body-row" style="grid-template-columns: 1.4fr 1.1fr 1fr 1.2fr;">
+              <strong>${esc(l.name)}</strong>
+              <span style="font-family: var(--font-mono); font-size: 12px;">${esc(formatPhone(l.phone))}</span>
+              <span style="font-family: var(--font-mono); font-size: 10px; font-weight: 700;">${esc(leadLabel(l))}</span>
+              <span style="font-family: var(--font-mono); font-size: 11px; color: #5A6352;">${l.lastCallDate ? `${l.attempts || 0}× · LAST ${esc(fmtTs(l.lastCallDate))}` : 'NOT DIALED YET'}</span>
+            </div>`).join(''));
+
+      body.innerHTML = `
+        ${data && data.dashError ? `<div class="empty-state" style="color: var(--danger); margin-bottom: 12px;">COULD NOT LOAD THE NUMBERS — ${esc(data.dashError)}</div>` : ''}
+        <div class="grid-2-col">
+          <div class="neo-card">
+            <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 14px;">
+              <div aria-hidden="true" style="width: 72px; height: 72px; flex-shrink: 0; border-radius: 999px; background: var(--green-500); ${photo ? `background-image: url('${photo}'); background-size: cover; background-position: center;` : ''} border: 2px solid var(--ink-900); box-shadow: 3px 3px 0 var(--ink-900); display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 28px;">${photo ? '' : esc((u.name || '?').trim().charAt(0).toUpperCase())}</div>
+              <div style="min-width: 0;">
+                <div style="font-family: var(--font-display); font-size: 26px; line-height: 1.05; overflow-wrap: anywhere;">${esc(u.name)}</div>
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px;">
+                  <span class="role-badge ${roleBadgeClass(u.role)}">${esc(roleLabel(u.role))}</span>
+                  ${isAgent && data ? `<span style="display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: ${active ? '#2E9E2B' : '#D0453A'};"><span class="presence-dot ${active ? 'is-online' : 'is-offline'}" aria-hidden="true"></span>${active ? `${connected} CONNECTED ${esc(periodTxt)}` : `NO CONNECTED CALLS ${esc(periodTxt)}`}</span>` : ''}
+                </div>
+              </div>
+            </div>
+            ${detailLine('LOGIN EMAIL', esc(u.email || '—'))}
+            ${detailLine('PHONE / SIM', esc(formatPhone(u.phone)))}
+            ${detailLine('REPORTS TO', mgrUser ? `${userLink(mgrUser)} (${esc(roleLabel(mgrUser.role))})` : 'Top Level / Admin')}
+            ${detailLine('TEAM', esc(u.team || '—'))}
+            ${detailLine('APP STATUS', online ? '<span style="color: #2E9E2B;">SIGNED IN</span>' : `<span style="color: #5A6352;">NOT SIGNED IN${seenAt ? ` · LAST ACTIVE ${esc(fmtTs(new Date(seenAt)))}` : ''}</span>`)}
+            ${isAgent ? `
+              <div style="padding: 12px 0 2px;">
+                <div style="display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.12em; color: var(--text-muted); margin-bottom: 8px;">
+                  <span>TODAY VS DAILY TARGET</span><span style="color: var(--ink-900); font-weight: 700;">${target > 0 ? `${todayCalls}/${target} (${pct}%)` : 'NO TARGET'}</span>
+                </div>
+                <div style="height: 12px; background: #E3DFD2; border-radius: 999px; border: 1px solid var(--ink-900); overflow: hidden;">
+                  <div style="height: 100%; background: #7FD63B; width: ${pct}%; transition: width 0.5s ease;"></div>
+                </div>
+              </div>` : ''}
+          </div>
+          <div class="neo-card">
+            <div style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em; margin-bottom: 16px; font-weight: 700;">CALL ACTIVITY BY HOUR · ${esc(periodTxt)}</div>
+            <div style="display: flex; align-items: flex-end; gap: 8px; height: 150px;">${hourBars}</div>
+            <div style="border-top: 1px dashed var(--ink-900); margin-top: 16px; padding-top: 14px; display: flex; flex-direction: column; gap: 8px; font-size: 13px;">
+              <div style="display: flex; justify-content: space-between;"><span>Connect rate</span><strong style="font-family: var(--font-mono);">${loadingTxt || rate + '%'}</strong></div>
+              <div style="display: flex; justify-content: space-between;"><span>Avg connected duration</span><strong style="font-family: var(--font-mono);">${loadingTxt || fmtDur(avg)}</strong></div>
+              <div style="display: flex; justify-content: space-between;"><span>Unique clients reached</span><strong style="font-family: var(--font-mono);">${loadingTxt || unique}</strong></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="kpi-grid">
+          ${kpi(`TOTAL CALLS · ${esc(periodTxt)}`, data ? total : '…', `${fmtTalk(talk)} talk time`, '#10180C', '#EFECE3', '#7FD63B')}
+          ${kpi('CONNECTED', data ? connected : '…', `${rate}% connect rate`, '#3DC838', '#10180C', '#10180C')}
+          ${kpi('INCOMING', data ? incoming : '…', 'Inbound calls received', '#fff', '#10180C', '#5A6352')}
+          ${kpi('OUTGOING', data ? outgoing : '…', 'Outbound calls dialed', '#fff', '#10180C', '#5A6352')}
+        </div>
+        <div class="kpi-grid" style="margin-bottom: 16px;">
+          ${kpi('MISSED CALLS', data ? missed : '…', 'Unanswered inbound calls', '#fff', '#D0453A', '#D0453A')}
+          ${kpi('REJECTED / NO ANSWER', data ? rejected : '…', 'Declined or not picked up', '#fff', '#C88A2E', '#C88A2E')}
+          ${kpi('RECORDINGS', data ? periodRecs.length : '…', 'Calls with a recording', '#EFECE3', '#10180C', '#5A6352')}
+          ${kpi('LEADS ASSIGNED', myLeads.length, `${stageCount('CONVERTED')} converted`, '#EFECE3', '#10180C', '#5A6352')}
+        </div>
+
+        <div class="neo-table-card table-scroll-wrap" style="margin-bottom: 16px;">
+          <div style="padding: 20px 22px 12px; display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em; font-weight: 700;">
+            <span>CALL HISTORY · WHO ${esc(String(u.name || '').toUpperCase())} CALLED</span><span style="color: var(--text-muted);">${esc(callCountTxt)}</span>
+          </div>
+          <div class="table-head-row" style="grid-template-columns: 1.1fr 1.4fr 1.2fr 0.9fr 0.9fr 0.7fr 0.4fr;">
+            <span>TIME</span><span>CLIENT</span><span>PHONE</span><span>DIRECTION</span><span>OUTCOME</span><span>DURATION</span><span>REC</span>
+          </div>
+          ${callRows}
+          ${pager}
+        </div>
+
+        <div class="neo-table-card table-scroll-wrap" style="margin-bottom: 16px;">
+          <div style="padding: 20px 22px 12px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em; font-weight: 700;">CALL RECORDINGS · ${esc(periodTxt)}${periodRecs.length > 50 ? ' · LATEST 50' : ''}</div>
+          <div class="table-head-row" style="grid-template-columns: 1.1fr 1.6fr 1.2fr 0.8fr 0.8fr 0.4fr;">
+            <span>TIME</span><span>CLIENT</span><span>PHONE</span><span>DIRECTION</span><span>DURATION</span><span>PLAY</span>
+          </div>
+          ${recRows}
+        </div>
+
+        <div class="neo-table-card table-scroll-wrap">
+          <div style="padding: 20px 22px 12px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em; font-weight: 700;">ASSIGNED LEADS · ${myLeads.length} TOTAL</div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; padding: 0 22px 14px;">
+            ${stages.map(([s, bg]) => `<span style="background: ${bg}; border: 1px solid #10180C; border-radius: 999px; padding: 4px 12px; font-family: var(--font-mono); font-size: 10px; font-weight: 700;">${s} · ${stageCount(s)}</span>`).join('')}
+          </div>
+          <div class="table-head-row" style="grid-template-columns: 1.4fr 1.1fr 1fr 1.2fr;">
+            <span>LEAD</span><span>PHONE</span><span>STATUS</span><span>DIAL ACTIVITY</span>
+          </div>
+          ${leadRows}
+        </div>
+      `;
     }
 
     // ==========================================
@@ -2219,7 +2666,13 @@
       $('webLoginOverlay').style.display = 'none';
       $('appViewport').style.display = 'flex';
       Store.viewAsId = null;
+      const deepLink = /^#user\//.test(location.hash) ? location.hash : '';
       switchNavTab('dash');
+      // A #user/<id> link opened directly (new tab, bookmark) goes straight to that user's page
+      if (deepLink) {
+        try { history.replaceState(null, '', location.pathname + location.search + deepLink); } catch (_) {}
+        routeFromHash(false);
+      }
       syncWithBackend();
       startAutoRefresh();
     }
@@ -2242,6 +2695,7 @@
       Store.authUser = null;
       Store.viewAsId = null;
       Store.editingUserId = null;
+      Store.detailUserId = null;
       Store.dialCurrentLead = null;
       document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active'));
       ['dashTeamRows', 'callTableRows', 'leadQueueRows', 'userTableRows', 'teamTreeNodesBody', 'leaderboardTableRows',
@@ -2486,9 +2940,20 @@
     function startAutoRefresh() {
       stopAutoRefresh();
       Store.refreshTimer = setInterval(backgroundRefresh, REFRESH_MS);
-      // The dashboard is a live view: its numbers alone are re-read every 20 s while it is open
+      // Live views: every 20 s while open, the dashboard numbers and today's per-agent numbers (User
+      // Management, Lead Calling digest) are re-read, so the green / red circles and the order follow new calls
       Store.dashLiveTimer = setInterval(() => {
-        if (Store.authUser && Store.tab === 'dash' && !document.hidden && !Store.syncing) fetchDashboardData();
+        if (!Store.authUser || document.hidden || Store.syncing) return;
+        if (Store.tab === 'dash') fetchDashboardData();
+        else if (Store.tab === 'user') fetchUserDetail();
+        else if (Store.tab === 'calls') {
+          if (isTyping() || anyModalOpen() || isAudioPlaying()) return;
+          fetchCalls(false).then(() => { if (Store.tab === 'calls') renderCallLog(); });
+        }
+        else if (['users', 'dial'].includes(Store.tab)) {
+          if (isTyping() || anyModalOpen() || $('userFormBox').style.display === 'block') return;
+          fetchTodayStats().then(() => { if (['users', 'dial'].includes(Store.tab)) renderActive(); });
+        }
       }, DASH_LIVE_MS);
     }
     function stopAutoRefresh() {
@@ -2676,31 +3141,31 @@
           teamContainer.innerHTML = `<div class="empty-state">${Store.errors.users ? `COULD NOT LOAD USERS — ${esc(Store.errors.users)}` : 'NO TEAM MEMBERS IN THIS VIEW'}</div>`;
           return;
         }
-        // Online people first, then offline; the existing order is kept inside each group.
-        // Re-sorted on every live refresh (20 s), so logins / logouts move rows without a page reload.
-        const isOnline = (u) => { const r = statsFor(server.teamMembers, u); return !!(r && r.online); };
-        const ordered = callers.map((u, i) => ({ u, i, on: isOnline(u) }))
-          .sort((a, b) => (b.on - a.on) || (a.i - b.i))
+        // Agents with connected calls first (green, most connected on top), then agents with none (red);
+        // the existing order breaks ties. Re-sorted on every live refresh (20 s), no page reload needed.
+        const connectedOf = (u) => { const r = statsFor(server.teamMembers, u); return r ? Number(r.connectedCalls) || 0 : 0; };
+        const ordered = callers.map((u, i) => ({ u, i, c: connectedOf(u) }))
+          .sort((a, b) => ((b.c > 0) - (a.c > 0)) || (b.c - a.c) || (a.i - b.i))
           .map(x => x.u);
+        const countCell = (n) => `<span style="font-family: var(--font-mono); font-weight: 700;"><span class="count-pill ${n > 0 ? 'is-good' : 'is-bad'}">${n}</span></span>`;
         teamContainer.innerHTML = ordered.map(u => {
           const row = statsFor(server.teamMembers, u);
-          const online = !!(row && row.online);
-          const seen = row && row.lastSeenAt ? ` · last active ${fmtTs(new Date(row.lastSeenAt))}` : '';
-          const statusTitle = online ? 'Online' : `Offline${seen}`;
           const uTotal = row ? Number(row.totalCalls) || 0 : 0;
           const uConnected = row ? Number(row.connectedCalls) || 0 : 0;
+          const active = uConnected > 0;
+          const statusTitle = active ? `${uConnected} connected call${uConnected === 1 ? '' : 's'}` : 'No connected calls';
           const uTalk = row ? Number(row.talkTimeSeconds) || 0 : 0;
           const mgrUser = Store.users.find(x => x.id === u.mgr);
           const mgrDisplay = mgrUser ? `${mgrUser.name} (${roleLabel(mgrUser.role)})` : 'Top Level / Admin';
           const target = Number(u.target) || 0;
           const pct = target > 0 ? Math.min(100, Math.round((uTotal / target) * 100)) : 0;
           return `
-            <div class="table-body-row" style="grid-template-columns: 1.3fr 1.3fr 1.1fr 0.8fr 0.9fr 0.9fr 1.4fr;">
-              <strong style="display: flex; align-items: center; gap: 8px; min-width: 0;"><span class="presence-dot ${online ? 'is-online' : 'is-offline'}" role="img" aria-label="${esc(statusTitle)}" title="${esc(statusTitle)}"></span><span style="overflow: hidden; text-overflow: ellipsis;">${esc(u.name)}</span></strong>
+            <div class="table-body-row" data-open-user="${esc(u.id)}" title="Open ${esc(u.name)}'s details" style="grid-template-columns: 1.3fr 1.3fr 1.1fr 0.8fr 0.9fr 0.9fr 1.4fr; cursor: pointer;">
+              <strong style="display: flex; align-items: center; gap: 8px; min-width: 0;"><span class="presence-dot ${active ? 'is-online' : 'is-offline'}" role="img" aria-label="${esc(statusTitle)}" title="${esc(statusTitle)}"></span><span style="overflow: hidden; text-overflow: ellipsis;">${userLink(u)}</span></strong>
               <span style="font-family: var(--font-mono); font-size: 11px; color: #5A6352; font-weight: 700;">${esc(mgrDisplay)}</span>
               <span style="font-family: var(--font-mono); font-size: 12px;">${esc(formatPhone(u.phone))}</span>
-              <span style="font-family: var(--font-mono); font-weight: 700;">${uTotal}</span>
-              <span style="font-family: var(--font-mono); font-weight: 700; color: #2E9E2B;">${uConnected}</span>
+              ${countCell(uTotal)}
+              ${countCell(uConnected)}
               <span style="font-family: var(--font-mono);">${fmtTalk(uTalk)}</span>
               <div style="display: flex; align-items: center; gap: 10px;">
                 <div style="flex: 1; height: 12px; background: #E3DFD2; border-radius: 999px; border: 1px solid var(--ink-900); overflow: hidden;">
@@ -2876,7 +3341,7 @@
 
         return `
           <div class="table-body-row" style="grid-template-columns: 1fr 1.5fr 1.3fr 0.9fr 0.9fr 0.7fr 1.1fr 0.5fr 0.6fr;">
-            <strong>${esc(c.agent)}</strong>
+            <strong>${userLink({ id: c.callerId, phone: c.callerPhone, name: c.agent }, c.agent)}</strong>
             <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
               <span style="${clientStyle}">${esc(clientText)}</span>
               ${showAddLead ? `<button type="button" data-action="add-lead-from-call" data-id="${esc(c.id)}" style="background: #C8FF4A; border: 1px solid #10180C; border-radius: 999px; padding: 2px 8px; font-family: var(--font-mono); font-size: 9.5px; font-weight: 700; cursor: pointer; box-shadow: 2px 2px 0 #10180C;">+ LEAD</button>` : ''}
@@ -3109,6 +3574,12 @@
       // Clicking the dimmed backdrop closes a dialog
       if (e.target && e.target.id === 'dialModal') { closeDialModal(); return; }
       if (e.target && e.target.id === 'leadFormModal') { closeLeadFormModal(); return; }
+      // Dashboard team table: anywhere on an agent's row opens that agent's details page
+      const userRow = e.target.closest('[data-open-user]');
+      if (userRow && !e.target.closest('a, button, input, select, audio')) {
+        location.hash = `#user/${encodeURIComponent(userRow.dataset.openUser)}`;
+        return;
+      }
       const el = e.target.closest('[data-action]');
       if (!el || el.tagName === 'SELECT' || el.tagName === 'INPUT') return;
       const id = el.dataset.id;
@@ -3256,17 +3727,25 @@
       if (!digestPeople.length) {
         digestEl.innerHTML = '<div class="empty-state">NO CALLERS IN THIS VIEW</div>';
       } else {
-        digestEl.innerHTML = digestPeople.map(u => {
+        // Same rule as the dashboard table: agents with connected calls today first (green, most
+        // connected on top), then the rest (red); the existing order breaks ties.
+        const connOf = (u) => { const s = statsFor(Store.todayMembers, u); return s ? Number(s.connectedCalls) || 0 : 0; };
+        const orderedDigest = digestPeople.map((u, i) => ({ u, i, c: connOf(u) }))
+          .sort((a, b) => ((b.c > 0) - (a.c > 0)) || (b.c - a.c) || (a.i - b.i))
+          .map(x => x.u);
+        digestEl.innerHTML = orderedDigest.map(u => {
           const s = statsFor(Store.todayMembers, u);
           const dials = s ? Number(s.totalCalls) || 0 : null;
           const conn = s ? Number(s.connectedCalls) || 0 : 0;
           const rate = dials ? Math.round(conn / dials * 100) : 0;
           const won = scopedLeads.filter(l => (l.agentId ? l.agentId === u.id : l.agent === u.name) && l.status === 'won').length;
+          const active = conn > 0;
+          const statusTitle = active ? `${conn} connected call${conn === 1 ? '' : 's'} today` : 'No connected calls today';
           return `
             <div class="digest-grid" style="padding: 12px 22px; border-top: 1px solid #E3DFD2; align-items: center; font-size: 13px;">
-              <strong>${esc(u.name)}</strong>
-              <span style="font-family: var(--font-mono); font-size: 11px; font-weight: 700;">${dials === null ? '—' : dials}</span>
-              <span style="font-family: var(--font-mono); font-size: 11px; color: #2E9E2B; font-weight: 700;">${dials === null ? '—' : rate + '%'}</span>
+              <strong style="display: flex; align-items: center; gap: 8px; min-width: 0;"><span class="presence-dot ${active ? 'is-online' : 'is-offline'}" role="img" aria-label="${esc(statusTitle)}" title="${esc(statusTitle)}"></span><span style="overflow: hidden; text-overflow: ellipsis;">${userLink(u)}</span></strong>
+              <span style="font-family: var(--font-mono); font-size: 11px; font-weight: 700;">${dials === null ? '—' : `<span class="count-pill ${dials > 0 ? 'is-good' : 'is-bad'}">${dials}</span>`}</span>
+              <span style="font-family: var(--font-mono); font-size: 11px; font-weight: 700;">${dials === null ? '—' : `<span class="count-pill ${active ? 'is-good' : 'is-bad'}">${rate}%</span>`}</span>
               <span style="font-family: var(--font-mono); font-size: 11px;">${s ? fmtTalk(s.talkTimeSeconds) : '—'}</span>
               <span style="font-family: var(--font-mono); font-size: 11px; font-weight: 700;">${won}</span>
             </div>
@@ -3310,7 +3789,7 @@
         return `
           <div class="neo-card" style="padding: 14px 18px;">
             <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 8px;">
-              <strong style="font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis;">${esc(u.name)}</strong>
+              <strong style="font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis;">${userLink(u)}</strong>
               <span style="font-family: var(--font-mono); font-size: 10px; color: #5A6352; white-space: nowrap;">${called} / ${mine.length} CALLED</span>
             </div>
             <div style="height: 10px; border: 1px solid #10180C; border-radius: 999px; overflow: hidden; margin-top: 10px; background: #EFECE3;">
@@ -3373,7 +3852,7 @@
           <div class="table-body-row" style="grid-template-columns: 1.4fr 1fr 0.9fr 1fr 1.2fr 1.4fr 0.7fr;">
             <strong>${esc(l.name)}</strong>
             <span style="font-family: var(--font-mono); font-size: 12px;">${hasPhone ? esc(formatPhone(l.phone)) : '<span style="color: var(--danger);">⚠ NO PHONE</span>'}</span>
-            <span style="font-size: 13px;">${esc(leadAgentName(l))}</span>
+            <span style="font-size: 13px;">${userLink({ id: l.agentId, name: leadAgentName(l) }, leadAgentName(l))}</span>
             <span><span style="background: ${stBg}; color: ${stColor}; border: 1px solid #10180C; border-radius: 999px; padding: 4px 12px; font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; white-space: nowrap;">${esc(label)}</span></span>
             <span style="font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: ${actColor};">${esc(actText)}</span>
             <span style="font-size: 12px; color: #5A6352;">${esc(l.notes || '—')}</span>
@@ -3794,7 +4273,14 @@
       if (!users.length || (!Store.loaded.users && Store.errors.users)) {
         usersEl.innerHTML = `<div class="empty-state">${Store.errors.users ? `COULD NOT LOAD USERS — ${esc(Store.errors.users)}` : 'LOADING USERS…'}</div>`;
       } else {
-        usersEl.innerHTML = users.map(u => {
+        // Same rule as the dashboard table: agents with connected calls today first (green, most
+        // connected on top), then the rest (red); the existing order breaks ties.
+        const todayRow = (u) => (Store.todayMembers ? statsFor(Store.todayMembers, u) : null);
+        const connectedToday = (u) => { const s = todayRow(u); return s ? Number(s.connectedCalls) || 0 : 0; };
+        const ordered = users.map((u, i) => ({ u, i, c: u.role !== 'ADMIN' ? connectedToday(u) : -1 }))
+          .sort((a, b) => ((b.c > 0) - (a.c > 0)) || (b.c - a.c) || (a.i - b.i))
+          .map(x => x.u);
+        usersEl.innerHTML = ordered.map(u => {
           const mgrUser = Store.users.find(x => x.id === u.mgr);
           const mgrName = mgrUser ? `${mgrUser.name} (${roleLabel(mgrUser.role)})` : '—';
           // Everyone except admins makes calls and is counted on the dashboard / leaderboard
@@ -3802,16 +4288,25 @@
           const canEdit = admin || u.role !== 'ADMIN';
           const canDelete = admin && u.role !== 'ADMIN' && u.id !== authId();
           const canViewAs = admin && u.id !== authId();
+          const statsReady = Store.todayMembers !== null;
+          const uConnected = connectedToday(u);
+          const active = uConnected > 0;
+          const todayTotal = (() => { const s = todayRow(u); return s ? Number(s.totalCalls) || 0 : 0; })();
+          const statusTitle = active ? `${uConnected} connected call${uConnected === 1 ? '' : 's'} today` : 'No connected calls today';
+          const todayCell = !isAgent ? '—'
+            : (statsReady ? `<span class="count-pill ${todayTotal > 0 ? 'is-good' : 'is-bad'}">${todayTotal}</span> calls` : `${todayCallsText(u)} calls`);
+          const statusCell = !isAgent || !statsReady ? '—'
+            : `<span style="display: inline-flex; align-items: center; gap: 6px; color: ${active ? '#2E9E2B' : '#D0453A'};" title="${esc(statusTitle)}"><span class="presence-dot ${active ? 'is-online' : 'is-offline'}" aria-hidden="true"></span>${active ? 'ACTIVE' : 'NO CALLS'}</span>`;
           return `
             <div class="table-body-row" style="grid-template-columns: 1fr 1.6fr 1.2fr 1fr 1fr 0.9fr 0.8fr 0.8fr 1.4fr;">
-              <strong>${esc(u.name)}</strong>
+              <strong>${userLink(u)}</strong>
               <span style="font-family: var(--font-mono); font-size: 12px; word-break: break-all;">${esc(u.email || '—')}</span>
               <span style="font-family: var(--font-mono); font-size: 12px;">${esc(formatPhone(u.phone))}</span>
               <span style="justify-self: start;"><span class="role-badge ${roleBadgeClass(u.role)}">${esc(roleLabel(u.role))}</span></span>
-              <span style="font-family: var(--font-mono); font-size: 11px;">${esc(mgrName)}</span>
+              <span style="font-family: var(--font-mono); font-size: 11px;">${mgrUser ? userLink(mgrUser, mgrName) : esc(mgrName)}</span>
               <span style="font-family: var(--font-mono); font-size: 12px;">${isAgent ? `${esc(u.target)} calls/day` : '—'}</span>
-              <span style="font-family: var(--font-mono); font-size: 12px; font-weight: 700;">${isAgent ? `${todayCallsText(u)} calls` : '—'}</span>
-              <span style="font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: #2E9E2B;">● ACTIVE</span>
+              <span style="font-family: var(--font-mono); font-size: 12px; font-weight: 700;">${todayCell}</span>
+              <span style="font-family: var(--font-mono); font-size: 11px; font-weight: 700;">${statusCell}</span>
               <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
                 ${canViewAs ? `<button type="button" data-action="login-as" data-id="${esc(u.id)}" style="border: 1.5px solid #10180C; border-radius: 999px; padding: 4px 12px; font-family: var(--font-mono); font-size: 10px; font-weight: 700; cursor: pointer; background: #3DC838;" title="View the portal scoped to this user">VIEW AS →</button>` : ''}
                 ${canEdit ? `<button type="button" data-action="edit-user" data-id="${esc(u.id)}" style="border: 1.5px solid #10180C; border-radius: 999px; padding: 4px 12px; font-family: var(--font-mono); font-size: 10px; font-weight: 700; cursor: pointer; background: #C8FF4A;">EDIT</button>` : ''}
@@ -3862,7 +4357,7 @@
             <div style="width: 36px; height: 36px; border-radius: 999px; background: var(--green-500); border: 1.5px solid #10180C; display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 14px; flex-shrink: 0;">${esc((u.name || '?').charAt(0).toUpperCase())}</div>
             <div style="flex: 1; min-width: 0;">
               <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                <strong style="font-size: 14px;">${esc(u.name)}</strong>
+                <strong style="font-size: 14px;">${userLink(u)}</strong>
                 <span class="role-badge ${roleBadgeClass(u.role)}">${esc(roleLabel(u.role))}</span>
                 <span style="font-family: var(--font-mono); font-size: 10px; color: var(--text-muted);">${todayCallsText(u)} dials today</span>
               </div>
@@ -3949,6 +4444,7 @@
         const target = Number(e.dailyTarget) || 0;
         return {
           rank: Number(e.rank) || i + 1,
+          id: e.id ? String(e.id) : '',
           name: e.name || '—',
           phone: e.phone || '',
           total,
@@ -3976,7 +4472,7 @@
       } else {
         podiumEl.innerHTML = podiumOrder.map(p => `
           <div style="width: 230px; max-width: 100%; text-align: center; animation: fadeUp 0.4s ease both;">
-            <div style="font-family: var(--font-display); font-size: 20px; margin-bottom: 10px; overflow-wrap: anywhere;">${p.crown}${esc(p.name)}</div>
+            <div style="font-family: var(--font-display); font-size: 20px; margin-bottom: 10px; overflow-wrap: anywhere;">${p.crown}${userLink({ id: p.id, phone: p.phone, name: p.name }, p.name)}</div>
             <div style="border: 1.5px solid var(--ink-900); border-radius: 16px; box-shadow: 4px 4px 0 var(--ink-900); padding: 22px 18px ${p.padB}; background: ${p.bg}; color: ${p.color};">
               <div style="display: inline-block; background: ${p.badgeBg}; color: ${p.badgeColor}; border: 1px solid var(--ink-900); border-radius: 999px; padding: 4px 16px; font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.12em; margin-bottom: 12px;">${p.place}</div>
               <div style="font-family: var(--font-display); font-size: 56px; line-height: 0.95; color: ${p.numColor};">${p.label}</div>
@@ -3993,7 +4489,7 @@
       rowsEl.innerHTML = rows.map(s => `
         <div class="table-body-row" style="grid-template-columns: 0.5fr 1.4fr 1.3fr 0.9fr 1fr 0.9fr 1.3fr;">
           <span style="font-family: var(--font-display); font-size: 20px;">#${s.rank}</span>
-          <strong>${esc(s.name)}</strong>
+          <strong>${userLink({ id: s.id, phone: s.phone, name: s.name }, s.name)}</strong>
           <span style="font-family: var(--font-mono); font-size: 12px;">${esc(formatPhone(s.phone))}</span>
           <span style="font-family: var(--font-mono); font-weight: 700;">${s.total} calls</span>
           <span style="font-family: var(--font-mono); font-weight: 700; color: #2E9E2B;">${s.conn} connected</span>
@@ -4216,7 +4712,7 @@
         <div class="neo-card" id="rec_card_${dk}" style="padding: 20px 24px;">
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
             <div style="min-width: 0;">
-              <div style="font-family: var(--font-display); font-size: 22px; overflow-wrap: anywhere;">${esc(c.agent)} → ${esc(c.client || formatPhone(c.phone))}</div>
+              <div style="font-family: var(--font-display); font-size: 22px; overflow-wrap: anywhere;">${userLink({ id: c.callerId, phone: c.callerPhone, name: c.agent }, c.agent)} → ${esc(c.client || formatPhone(c.phone))}</div>
               <div style="font-family: var(--font-mono); font-size: 12px; color: #5A6352; margin-top: 6px;">${fmtTs(c.ts)} · <strong style="color: #10180C;">${fmtDur(c.dur)}</strong> · ${dirText}${c.sim ? ` · SIM ${esc(c.sim)}` : ''}</div>
             </div>
             <div class="rec-audio-wrap">
@@ -4458,7 +4954,7 @@
             <div style="background: #fff; border: 1.5px solid var(--ink-900); border-radius: 12px; box-shadow: 3px 3px 0 var(--ink-900); padding: 12px 14px; min-width: 0;">
               <div style="font-weight: 700; font-size: 14px; overflow-wrap: anywhere;">${esc(l.name)}</div>
               <div style="font-family: var(--font-mono); font-size: 11px; color: #5A6352; margin-top: 3px;">${esc(formatPhone(l.phone))}</div>
-              <div style="font-family: var(--font-mono); font-size: 10px; margin-top: 6px; color: var(--green-600); font-weight: 700;">AGENT · ${esc(leadAgentName(l))}</div>
+              <div style="font-family: var(--font-mono); font-size: 10px; margin-top: 6px; color: var(--green-600); font-weight: 700;">AGENT · ${userLink({ id: l.agentId, name: leadAgentName(l) }, leadAgentName(l))}</div>
               ${rawLabel !== st ? `<div style="font-family: var(--font-mono); font-size: 9.5px; margin-top: 4px; color: #5A6352;">STATUS · ${esc(rawLabel)}</div>` : ''}
               <div style="font-size: 11px; color: #5A6352; margin-top: 4px; overflow-wrap: anywhere;">${esc(l.notes || '—')}</div>
               <div style="margin-top: 10px; border-top: 1px dashed #E3DFD2; padding-top: 8px;">

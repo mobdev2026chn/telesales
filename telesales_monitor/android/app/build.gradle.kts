@@ -30,6 +30,10 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            // R8 shrinking crashed the app on launch (the debug build, which isn't shrunk, runs fine).
+            // Ship the same unshrunk code as debug; Dart code is still AOT-compiled.
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
 }

@@ -194,6 +194,9 @@ class TeleProvider extends ChangeNotifier {
         _callLogDebounce = Timer(const Duration(seconds: 2), () {
           fetchDeviceCallLogs();
         });
+      } else if (call.method == 'onCallsPushed') {
+        // The call monitor sent the latest calls to the server: show the server's new numbers
+        if (_isLoggedIn) await _refreshServerStats();
       } else if (call.method == 'onRecordingUploaded') {
         // The native queue uploaded recordings: show them
         await refreshPendingUploadCount();
@@ -1175,8 +1178,10 @@ class TeleProvider extends ChangeNotifier {
 
   /// Checks that the registered number is one of the SIMs in this phone.
   /// - positive match: tracking switches to that SIM;
-  /// - numbers readable but none match: invalid (wrong phone / SIM);
-  /// - numbers unreadable (common on Android 10+): valid, the saved tracking mode is kept.
+  /// - numbers unreadable (common on Android 10+) or none match: still valid, the saved tracking
+  ///   mode is kept. The number a phone reports for a SIM is often stale, blank or wrong (ported
+  ///   numbers, eSIM, some carriers), so it must never block a registered caller who signed in
+  ///   with the right password.
   Future<Map<String, dynamic>> verifyRegisteredSimCard(String registeredPhone) async {
     await fetchDeviceSims();
     final last10Reg = last10Digits(registeredPhone);
@@ -1195,12 +1200,8 @@ class TeleProvider extends ChangeNotifier {
         return {'isValid': true, 'matched': true, 'slotIndex': sim.slotIndex};
       }
     }
-    return {
-      'isValid': false,
-      'matched': false,
-      'message': 'The registered work SIM (+91 $last10Reg) was not found in this phone. '
-          'Insert the work SIM or ask your manager to update your registered number.',
-    };
+    debugPrint('SIM check: registered $last10Reg not among the numbers this phone reports; continuing');
+    return {'isValid': true, 'matched': false};
   }
 
   Future<Map<String, dynamic>> validateAndSetTrackingNumber(String inputPhone, int slotIndex) async {
