@@ -66,6 +66,7 @@ class CallRecordingChannel {
   static Future<bool> openAutostartSettings() => _call('openAutostartSettings');
   static Future<bool> openAccessibilitySettings() => _call('openAccessibilitySettings');
   static Future<bool> openAppInfo() => _call('openAppInfo');
+  static Future<bool> openDefaultAppsSettings() => _call('openDefaultAppsSettings');
 }
 
 class RecordingSetupStatus {
@@ -84,6 +85,16 @@ class RecordingSetupStatus {
   /// Our own recording of the last connected work call: "ok", "silent" or "" (none yet).
   final String lastCaptureStatus;
   final DateTime? lastCaptureAt;
+  /// Package of the default Phone app, e.g. "com.google.android.dialer".
+  final String dialerPackage;
+
+  /// "Phone by Google" keeps its recordings inside its own private storage, where AskEVA cannot
+  /// read them. On phones whose maker ships its own dialer, that dialer saves readable recordings.
+  bool get usesGoogleDialerOnOemPhone {
+    if (dialerPackage != 'com.google.android.dialer') return false;
+    final m = '${manufacturer.toLowerCase()} ${brand.toLowerCase()}';
+    return !(m.contains('google') || m.contains('motorola') || m.contains('nokia') || m.contains('hmd'));
+  }
 
   const RecordingSetupStatus({
     required this.manufacturer,
@@ -99,6 +110,7 @@ class RecordingSetupStatus {
     this.accessibilityEnabled = false,
     this.lastCaptureStatus = '',
     this.lastCaptureAt,
+    this.dialerPackage = '',
   });
 
   factory RecordingSetupStatus.fromMap(Map<String, dynamic> m) => RecordingSetupStatus(
@@ -117,6 +129,7 @@ class RecordingSetupStatus {
         lastCaptureAt: asInt(m['lastCaptureAt']) > 0
             ? DateTime.fromMillisecondsSinceEpoch(asInt(m['lastCaptureAt']))
             : null,
+        dialerPackage: asString(m['dialerPackage']),
       );
 }
 

@@ -153,10 +153,13 @@ CallType callTypeFromNative(String? s) {
   }
 }
 
-/// Calls strictly newer than the last timestamp the server acknowledged.
+/// Calls in a small replay window around the last acknowledgement. Android can
+/// expose a call before its final duration/type is written, so replaying recent
+/// rows lets the server update the existing deduplicated record.
 List<CallLogModel> callsNewerThan(List<CallLogModel> calls, DateTime? lastAcked) {
   if (lastAcked == null) return List<CallLogModel>.of(calls);
-  return calls.where((c) => c.timestamp.isAfter(lastAcked)).toList();
+  final replayFrom = lastAcked.subtract(const Duration(minutes: 10));
+  return calls.where((c) => !c.timestamp.isBefore(replayFrom)).toList();
 }
 
 DateTime? newestTimestamp(List<CallLogModel> calls) {

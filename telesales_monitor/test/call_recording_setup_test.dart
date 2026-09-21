@@ -123,4 +123,14 @@ void main() {
     expect(s.nativeRecorderDetected, isFalse);
     expect(s.pendingUploads, 3);
   });
+
+  test('Phone by Google is flagged only on phones that ship their own dialer', () {
+    RecordingSetupStatus status(String manufacturer, String dialer) =>
+        RecordingSetupStatus.fromMap({'manufacturer': manufacturer, 'brand': manufacturer, 'dialerPackage': dialer});
+    expect(status('vivo', 'com.google.android.dialer').usesGoogleDialerOnOemPhone, isTrue);
+    expect(status('vivo', 'com.android.dialer').usesGoogleDialerOnOemPhone, isFalse);
+    expect(status('Google', 'com.google.android.dialer').usesGoogleDialerOnOemPhone, isFalse);
+    expect(status('motorola', 'com.google.android.dialer').usesGoogleDialerOnOemPhone, isFalse);
+    expect(status('Xiaomi', '').usesGoogleDialerOnOemPhone, isFalse);
+  });
 }

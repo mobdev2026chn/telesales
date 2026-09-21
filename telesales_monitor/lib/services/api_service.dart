@@ -44,6 +44,30 @@ class ApiService {
     '/auth/check-phone',
   };
 
+  /// Why the last request that returned null failed, in words a caller can act on ("" = no failure).
+  static String lastNetworkError = '';
+
+  /// Plain-language reason for a network failure.
+  @visibleForTesting
+  static String describeNetworkError(Object e) {
+    final raw = e.toString();
+    final msg = raw.toLowerCase();
+    if (e is TimeoutException) return 'The server took too long to answer (slow or unstable internet).';
+    if (e is HandshakeException || msg.contains('certificate') || msg.contains('handshake')) {
+      return 'Secure connection failed. Check that the phone\'s date & time are set to automatic.';
+    }
+    if (msg.contains('failed host lookup') || msg.contains('no address associated')) {
+      return 'This phone cannot find the server (no internet, or Private DNS / VPN / network permission blocking the app).';
+    }
+    if (msg.contains('network is unreachable') || msg.contains('no route to host')) {
+      return 'No internet connection on this phone.';
+    }
+    if (msg.contains('connection refused') || msg.contains('connection reset')) {
+      return 'The server refused the connection. Try again in a minute.';
+    }
+    return raw.length > 160 ? raw.substring(0, 160) : raw;
+  }
+
   /// True for failures where the request certainly never reached the server
   /// (DNS failure, connection refused, TLS handshake). Only these may be retried on another host.
   @visibleForTesting
@@ -80,6 +104,7 @@ class ApiService {
       if (tokenAtSend.isNotEmpty) 'Authorization': 'Bearer $tokenAtSend',
     };
     final hosts = [baseUrl, ...candidateBaseUrls.where((u) => u != baseUrl)];
+    String? firstError; // the main host's failure is the one worth showing
     for (final base in hosts) {
       final uri = Uri.parse('$base$path');
       try {
@@ -98,18 +123,22 @@ class ApiService {
             res = await _client.post(uri, headers: headers, body: jsonEncode(body ?? const {})).timeout(timeout);
         }
         baseUrl = base;
+        lastNetworkError = '';
         _checkAuthExpired(res, path, tokenAtSend);
         return res;
       } catch (e) {
+        firstError ??= describeNetworkError(e);
         if (isConnectionError(e)) {
           debugPrint('ApiService: $base unreachable ($e), trying next host');
           continue;
         }
         // Timeout or failure after the request may have been sent: never replay it on another host.
         debugPrint('ApiService.$method $path failed: $e');
+        lastNetworkError = firstError;
         return null;
       }
     }
+    lastNetworkError = firstError ?? '';
     return null;
   }
 

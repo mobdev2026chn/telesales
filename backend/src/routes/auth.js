@@ -16,7 +16,7 @@ function publicUser(emp, extra = {}) {
     team: emp.team || '',
     managerId: emp.managerId || '',
     managerName: emp.managerName || '',
-    dailyTarget: emp.dailyTarget || 40,
+    dailyTarget: Number.isFinite(emp.dailyTarget) ? emp.dailyTarget : 40,
     ...extra,
   };
 }

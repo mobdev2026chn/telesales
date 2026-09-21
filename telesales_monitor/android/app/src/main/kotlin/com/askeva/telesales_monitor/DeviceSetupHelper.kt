@@ -85,6 +85,11 @@ object DeviceSetupHelper {
     }
 
     /** App info page (for Android 13+ "Allow restricted settings" when the APK was sideloaded). */
+    /** Settings > Apps > Default apps, where the user picks the phone's own dialer as the Phone app. */
+    fun openDefaultAppsSettings(activity: Activity): Boolean =
+        tryStart(activity, Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)) ||
+            tryStart(activity, Intent(Settings.ACTION_SETTINGS))
+
     fun openAppInfo(activity: Activity): Boolean =
         tryStart(activity, Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${activity.packageName}")))
 
@@ -106,6 +111,13 @@ object DeviceSetupHelper {
         )
         for (i in candidates) if (tryStart(activity, i)) return true
         return tryStart(activity, Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${activity.packageName}")))
+    }
+
+    /** Package of the phone app that handles calls (its recorder decides where recordings are saved). */
+    fun defaultDialerPackage(ctx: Context): String = try {
+        (ctx.getSystemService(Context.TELECOM_SERVICE) as TelecomManager).defaultDialerPackage ?: ""
+    } catch (_: Exception) {
+        ""
     }
 
     fun deviceInfo(): Map<String, Any?> = mapOf(

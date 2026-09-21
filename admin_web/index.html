@@ -1083,8 +1083,8 @@
           <div style="margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap;">
             <label for="callRangeSelect" class="visually-hidden">Date range</label>
             <select id="callRangeSelect" class="toolbar-select" onchange="onCallRangeChange(this.value)">
-              <option value="today">TODAY</option>
-              <option value="7d" selected>LAST 7 DAYS</option>
+              <option value="today" selected>TODAY</option>
+              <option value="7d">LAST 7 DAYS</option>
               <option value="30d">LAST 30 DAYS</option>
               <option value="90d">LAST 90 DAYS</option>
             </select>
@@ -1669,6 +1669,7 @@
     const TOKEN_KEY = 'askeva_admin_token';
     const USER_KEY = 'askeva_admin_user';
     const REFRESH_MS = 60 * 1000;
+    const DASH_LIVE_MS = 20 * 1000;
 
     function getToken() {
       try { return localStorage.getItem(TOKEN_KEY) || ''; } catch (_) { return ''; }
@@ -1880,7 +1881,8 @@
       callAgent: 'ALL',
       callSearch: '',
       callPage: 1,
-      callRange: '7d',
+      callRange: 'today',   // same default period as the dashboard, so the counts match on first view
+      callsScopeKey: null,
       callsReq: 0,
       recFilter: 'ALL',
       recPage: 1,
@@ -2093,12 +2095,15 @@
       return visibleUsers().filter(u => u.role !== 'ADMIN');
     }
 
-    // One exact matcher shared by every tab: callerId first, last-10 phone only as a fallback
+    // One exact matcher shared by every tab, same order as the server's counting:
+    // callerId first, then last-10 phone, then exact name (older rows carry only the name)
     function callBelongsTo(c, u) {
       if (!c || !u) return false;
       if (c.callerId) return c.callerId === u.id;
       const a = last10(c.callerPhone);
-      return !!a && a === last10(u.phone);
+      if (a) return a === last10(u.phone);
+      const n = String(c.agent || '').trim().toLowerCase();
+      return !!n && n !== '—' && n === String(u.name || '').trim().toLowerCase();
     }
 
     function statsFor(list, u) {
@@ -2348,11 +2353,14 @@
       const days = CALL_RANGE_DAYS[Store.callRange] ?? 6;
       const from = istMidnight(istDaysAgoStr(days)).toISOString();
       const to = new Date().toISOString();
-      let qs = `?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&limit=1000`;
+      // Scoped by the server exactly like the dashboard (same people, same matching)
+      const scopeKey = scopeParam();
+      let qs = `?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&limit=1000${scopeKey}`;
       if (append && Store.callsMeta.oldest) qs += `&before=${encodeURIComponent(Store.callsMeta.oldest)}`;
       try {
         const json = await apiFetch(`/admin/calls${qs}`);
         if (reqId !== Store.callsReq) return;
+        Store.callsScopeKey = scopeKey;
         const list = (json.calls || []).map(mapCall).filter(Boolean);
         if (append) {
           const seen = new Set(Store.calls.map(c => c.id));
@@ -2394,7 +2402,8 @@
 
     async function fetchRecordings(append) {
       try {
-        let qs = `?limit=${REC_FETCH_LIMIT}`;
+        const scopeKey = scopeParam();
+        let qs = `?limit=${REC_FETCH_LIMIT}${scopeKey}`;
         if (append && Store.recordings.length) {
           const oldest = Store.recordings.reduce((min, r) => {
             const t = r.createdAt ? new Date(r.createdAt).getTime() : Infinity;
@@ -2413,6 +2422,10 @@
         }
         Store.recordings.sort((a, b) => (b.ts ? b.ts.getTime() : 0) - (a.ts ? a.ts.getTime() : 0));
         Store.recsHasMore = raw.length >= REC_FETCH_LIMIT;
+        if (!append) {
+          Store.recsTotal = Number(json.total) || list.length;
+          Store.recsScopeKey = scopeKey;
+        }
         Store.errors.recs = null;
         Store.loaded.recs = true;
       } catch (e) {
@@ -2461,10 +2474,16 @@
     function startAutoRefresh() {
       stopAutoRefresh();
       Store.refreshTimer = setInterval(backgroundRefresh, REFRESH_MS);
+      // The dashboard is a live view: its numbers alone are re-read every 20 s while it is open
+      Store.dashLiveTimer = setInterval(() => {
+        if (Store.authUser && Store.tab === 'dash' && !document.hidden && !Store.syncing) fetchDashboardData();
+      }, DASH_LIVE_MS);
     }
     function stopAutoRefresh() {
       if (Store.refreshTimer) clearInterval(Store.refreshTimer);
+      if (Store.dashLiveTimer) clearInterval(Store.dashLiveTimer);
       Store.refreshTimer = null;
+      Store.dashLiveTimer = null;
     }
     function backgroundRefresh() {
       if (!Store.authUser || document.hidden) return;
@@ -2613,26 +2632,26 @@
       setTxt('dashAvgDur', fmtDur(avgDur));
       setTxt('dashUniqueClients', m.uniqueClients);
 
-      // Hourly activity (India time, from the server)
+      // Hourly activity, India time, from the same server count as TOTAL CALLS: one bar per hour, 10 AM – 7 PM
       const hourLabel = (h) => h > 12 ? `${h - 12}PM` : (h === 12 ? '12PM' : `${h}AM`);
-      const hoursMap = {};
-      for (let h = 9; h <= 19; h++) hoursMap[hourLabel(h)] = 0;
-      (Array.isArray(server.hourlyCalls) ? server.hourlyCalls : []).forEach(hc => {
+      const byHour = new Array(24).fill(0);
+      (Array.isArray(server.hourlyAll) ? server.hourlyAll : (Array.isArray(server.hourlyCalls) ? server.hourlyCalls : [])).forEach(hc => {
         const h = Number(hc.hourOfDay);
-        if (h >= 9 && h <= 19) hoursMap[hourLabel(h)] = Number(hc.calls) || 0;
+        if (h >= 0 && h <= 23) byHour[h] = Number(hc.calls) || 0;
       });
-      const hourEntries = Object.entries(hoursMap);
+      const hourEntries = [];
+      for (let h = 10; h <= 19; h++) hourEntries.push([hourLabel(h), byHour[h], `${hourLabel(h)} – ${hourLabel(h + 1)}`]);
       const maxH = Math.max(1, ...hourEntries.map(([, cnt]) => cnt));
       const barsContainer = $('dashHourBars');
       if (barsContainer) {
-        barsContainer.innerHTML = hourEntries.map(([lbl, cnt]) => {
+        barsContainer.innerHTML = hourEntries.map(([lbl, cnt, span]) => {
           const pct = Math.round((cnt / maxH) * 80) + 4;
           const bg = cnt === maxH && cnt > 0 ? '#C8FF4A' : (cnt > 0 ? '#7FD63B' : '#E3DFD2');
           return `
-            <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end;" title="${cnt} calls at ${lbl}">
+            <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end;" title="${cnt} call${cnt === 1 ? '' : 's'} ${esc(span)}">
               <div style="font-family: var(--font-mono); font-size: 10px; font-weight: 700;">${cnt || ''}</div>
               <div style="width: 100%; border-radius: 6px 6px 0 0; border: 1.5px solid var(--ink-900); background: ${bg}; height: ${pct}%; min-height: 4px; transition: height 0.4s ease;"></div>
-              <div style="font-family: var(--font-mono); font-size: 10px; color: #5A6352;">${lbl}</div>
+              <div style="font-family: var(--font-mono); font-size: 10px; color: #5A6352; white-space: nowrap;">${esc(lbl)}</div>
             </div>
           `;
         }).join('');
@@ -2750,7 +2769,8 @@
     }
 
     function filteredCalls() {
-      let fc = Store.calls.filter(isCallInScope);
+      // The server already returned only calls in the active scope
+      let fc = Store.calls.slice();
       if (Store.callFilter === 'IN') fc = fc.filter(c => c.dir === 'IN');
       if (Store.callFilter === 'OUT') fc = fc.filter(c => c.dir === 'OUT');
       if (Store.callFilter === 'MISSED') fc = fc.filter(c => c.out === 'MISSED');
@@ -2780,6 +2800,13 @@
       const rangeSel = $('callRangeSelect');
       if (rangeSel) rangeSel.value = Store.callRange;
 
+      // "View as" changed since these calls were loaded: reload them for the new scope
+      if (Store.loaded.calls && Store.callsScopeKey !== scopeParam()) {
+        Store.loaded.calls = false;
+        Store.calls = [];
+        fetchCalls(false).then(() => { if (Store.tab === 'calls') renderCallLog(); });
+      }
+
       const fc = filteredCalls();
       Store.lastCallRows = fc;
 
@@ -2793,8 +2820,12 @@
       Store.callPage = page;
       const pageRows = fc.slice((page - 1) * pageSize, page * pageSize);
 
-      const moreTxt = Store.callsMeta.hasMore ? ` · ${Store.calls.length} OF ${Store.callsMeta.total} LOADED` : '';
-      $('callPageLabel').textContent = `PAGE ${page} / ${totalPages} · ${fc.length} CALLS${moreTxt}`;
+      // Unfiltered: the server's count for the period (counted like the dashboard). Filtered: the matching rows.
+      const unfiltered = Store.callFilter === 'ALL' && Store.callAgent === 'ALL' && !Store.callSearch.trim();
+      const shownCount = unfiltered ? Math.max(Store.callsMeta.total || 0, fc.length) : fc.length;
+      const rangeTxt = { today: 'TODAY', '7d': 'LAST 7 DAYS', '30d': 'LAST 30 DAYS', '90d': 'LAST 90 DAYS' }[Store.callRange] || '';
+      const moreTxt = Store.callsMeta.hasMore ? ` · ${Store.calls.length} LOADED` : '';
+      $('callPageLabel').textContent = `PAGE ${page} / ${totalPages} · ${shownCount} CALLS ${rangeTxt}${moreTxt}`;
       const prevBtn = $('callPrevBtn');
       const nextBtn = $('callNextBtn');
       if (prevBtn) { prevBtn.disabled = page === 1; prevBtn.style.opacity = page === 1 ? '0.4' : '1'; }
@@ -3198,11 +3229,13 @@
       }).join('');
 
       // Today's agent digest — server numbers (IST "today")
+      // Same people as the dashboard team table and the leaderboard
       const digestEl = $('digestRowsContainer');
-      if (!callers.length) {
+      const digestPeople = getScopedCallers();
+      if (!digestPeople.length) {
         digestEl.innerHTML = '<div class="empty-state">NO CALLERS IN THIS VIEW</div>';
       } else {
-        digestEl.innerHTML = callers.map(u => {
+        digestEl.innerHTML = digestPeople.map(u => {
           const s = statsFor(Store.todayMembers, u);
           const dials = s ? Number(s.totalCalls) || 0 : null;
           const conn = s ? Number(s.connectedCalls) || 0 : 0;
@@ -3743,7 +3776,8 @@
         usersEl.innerHTML = users.map(u => {
           const mgrUser = Store.users.find(x => x.id === u.mgr);
           const mgrName = mgrUser ? `${mgrUser.name} (${roleLabel(mgrUser.role)})` : '—';
-          const isAgent = u.role === 'CALLER' || u.role === 'JR_MANAGER';
+          // Everyone except admins makes calls and is counted on the dashboard / leaderboard
+          const isAgent = u.role !== 'ADMIN';
           const canEdit = admin || u.role !== 'ADMIN';
           const canDelete = admin && u.role !== 'ADMIN' && u.id !== authId();
           const canViewAs = admin && u.id !== authId();
@@ -4197,7 +4231,9 @@
       Store.recPage = Math.min(Math.max(1, Store.recPage), totalPages);
       const pageRecs = recs.slice((Store.recPage - 1) * REC_PAGE_SIZE, Store.recPage * REC_PAGE_SIZE);
 
-      $('recsHeaderCount').textContent = `CALL RECORDINGS · ${recs.length} FILES`;
+      // Only part of the list is loaded at a time: unfiltered, show the server's full count for this scope
+      const recTotal = Store.recFilter === 'ALL' && Store.recsScopeKey === scopeParam() ? Math.max(Store.recsTotal || 0, recs.length) : recs.length;
+      $('recsHeaderCount').textContent = `CALL RECORDINGS · ${recTotal} FILES${recTotal > recs.length ? ` (${recs.length} LOADED)` : ''}`;
       $('recReviewerName').textContent = (Store.authUser && Store.authUser.name ? Store.authUser.name : '—').toUpperCase();
       const listEl = $('recordingsCardsList');
       const pager = $('recPager');

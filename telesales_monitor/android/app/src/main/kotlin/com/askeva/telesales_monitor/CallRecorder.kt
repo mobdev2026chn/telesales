@@ -21,8 +21,9 @@ import kotlin.math.min
  * dialer recorder has not been detected. On Android 10+ only the agent's side is captured
  * (the far end is audible only on speakerphone).
  *
- * Primary path: AudioRecord (VOICE_COMMUNICATION -> VOICE_RECOGNITION -> MIC) with a 3x software
- * gain, encoded to AAC with MediaCodec + MediaMuxer. Fallback: MediaRecorder AAC.
+ * Primary path: AudioRecord (VOICE_COMMUNICATION -> VOICE_RECOGNITION -> MIC) with an adaptive
+ * software gain (quiet far-end speech is lifted, loud speech is not clipped), encoded to AAC with
+ * MediaCodec + MediaMuxer. Fallback: MediaRecorder AAC.
  * [requestStop] is cheap (main thread); [awaitResult] joins the encoder (worker thread).
  */
 class CallRecorder(private val ctx: Context) {
@@ -31,8 +32,13 @@ class CallRecorder(private val ctx: Context) {
 
     private companion object {
         const val SAMPLE_RATE = 16_000
-        const val BIT_RATE = 48_000
-        const val GAIN = 3.0f
+        const val BIT_RATE = 64_000
+        /** Adaptive gain: speech is brought towards TARGET_RMS (about -18 dBFS), gain within [MIN_GAIN, MAX_GAIN]. */
+        const val TARGET_RMS = 4000.0
+        const val MIN_GAIN = 1.0
+        const val MAX_GAIN = 10.0
+        /** Output above this level is compressed instead of hard-clipped. */
+        const val LIMIT_KNEE = 26000.0
         const val TIMEOUT_US = 10_000L
         /** RMS (16-bit, before gain) above which a chunk counts as speech: about -40 dBFS. */
         const val SPEECH_RMS = 330.0
@@ -45,7 +51,9 @@ class CallRecorder(private val ctx: Context) {
     @Volatile private var running = false
     private var thread: Thread? = null
     private var mediaRecorder: MediaRecorder? = null
-    private var startedAtMs = 0L
+    /** Wall-clock time capture started; used to trim the ringing before an outgoing call was answered. */
+    var startedAtMs = 0L
+        private set
 
     // Written by the encoder thread
     @Volatile private var totalSamples = 0L
@@ -190,23 +198,35 @@ class CallRecorder(private val ctx: Context) {
 
         fun ptsUs(samples: Long) = samples * 1_000_000L / SAMPLE_RATE
 
+        var gain = 3.0
         try {
             while (running) {
                 val n = rec.read(pcm, 0, pcm.size)
                 if (n < 0) break // mic lost
                 if (n == 0) continue
-                var p = peak
+                var chunkPeak = 0
                 var sumSq = 0.0
                 for (i in 0 until n) {
                     val s = pcm[i].toInt()
-                    if (abs(s) > p) p = abs(s)
+                    if (abs(s) > chunkPeak) chunkPeak = abs(s)
                     sumSq += s.toDouble() * s
-                    val v = (s * GAIN).toInt().coerceIn(-32768, 32767)
+                }
+                val rms = kotlin.math.sqrt(sumSq / n)
+                val voiced = rms > SPEECH_RMS
+                // Adapt on speech only (background noise must not be pumped up): fall fast, rise slowly
+                if (voiced) {
+                    val wanted = (TARGET_RMS / rms).coerceIn(MIN_GAIN, MAX_GAIN)
+                    gain = if (wanted < gain) wanted else gain + (wanted - gain) * 0.05
+                }
+                // A sudden loud chunk must not drive the limiter too hard
+                if (chunkPeak > 0 && chunkPeak * gain > 32767 * 1.5) gain = (32767 * 1.5 / chunkPeak).coerceAtLeast(MIN_GAIN)
+                for (i in 0 until n) {
+                    val v = limit(pcm[i] * gain)
                     bytes[2 * i] = (v and 0xff).toByte()
                     bytes[2 * i + 1] = (v shr 8 and 0xff).toByte()
                 }
-                peak = p
-                if (kotlin.math.sqrt(sumSq / n) > SPEECH_RMS) voicedSamples += n
+                if (chunkPeak > peak) peak = chunkPeak
+                if (voiced) voicedSamples += n
                 val len = n * 2
                 var off = 0
                 while (off < len) {
@@ -247,6 +267,16 @@ class CallRecorder(private val ctx: Context) {
             try { if (muxerStarted) muxer.stop() } catch (_: Exception) { wroteSamples = false }
             try { muxer.release() } catch (_: Exception) {}
         }
+    }
+
+    /** Soft limiter: linear up to LIMIT_KNEE, then compressed towards full scale instead of clipping. */
+    private fun limit(x: Double): Int {
+        val a = abs(x)
+        if (a <= LIMIT_KNEE) return x.toInt()
+        val room = 32767.0 - LIMIT_KNEE
+        val over = a - LIMIT_KNEE
+        val y = LIMIT_KNEE + room * (over / (over + room))
+        return (if (x < 0) -y else y).toInt().coerceIn(-32768, 32767)
     }
 
     private fun startMediaRecorder(file: File): Boolean {

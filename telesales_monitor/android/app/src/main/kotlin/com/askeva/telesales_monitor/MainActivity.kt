@@ -164,6 +164,7 @@ class MainActivity : FlutterActivity() {
                         status["batteryOptimizationIgnored"] = DeviceSetupHelper.isIgnoringBatteryOptimizations(this)
                         status["nativeRecorderDetected"] = CallMonitorStore.nativeRecorderDetected(this)
                         status["accessibilityEnabled"] = CallAccessibilityService.isEnabled(this)
+                        status["dialerPackage"] = DeviceSetupHelper.defaultDialerPackage(this)
                         status["lastCaptureStatus"] = CallMonitorStore.lastCaptureStatus(this)
                         status["lastCaptureAt"] = CallMonitorStore.lastCaptureAt(this)
                         status["pendingUploads"] = try { RecordingQueue.countFor(this, userId) } catch (_: Exception) { 0 }
@@ -185,6 +186,9 @@ class MainActivity : FlutterActivity() {
                 }
                 "openAppInfo" -> {
                     result.success(DeviceSetupHelper.openAppInfo(this))
+                }
+                "openDefaultAppsSettings" -> {
+                    result.success(DeviceSetupHelper.openDefaultAppsSettings(this))
                 }
                 "playAudio" -> {
                     val path = call.argument<String>("filePath") ?: ""
@@ -314,6 +318,14 @@ class MainActivity : FlutterActivity() {
                         val conn = url.openConnection()
                         conn.connectTimeout = 8000
                         conn.readTimeout = 20000
+                        val code = (conn as? java.net.HttpURLConnection)?.responseCode ?: 200
+                        if (code == 404 || code == 403 || code == 401) {
+                            mainHandler.post {
+                                showToast(if (code == 404) "⚠️ The audio of this recording is missing on the server" else "⚠️ Not allowed to play this recording")
+                                result.success(false)
+                            }
+                            return@execute
+                        }
                         val bytes = conn.getInputStream().use { it.readBytes() }
                         downloaded.writeBytes(bytes)
                         mainHandler.post { playLocalAudioFile(downloaded.absolutePath, result, downloaded) }
@@ -394,6 +406,7 @@ class MainActivity : FlutterActivity() {
         } catch (e: Exception) {
             e.printStackTrace()
             deleteTempPlaybackFile()
+            showToast("⚠️ This recording could not be played")
             result.success(false)
         }
     }
@@ -426,12 +439,13 @@ class MainActivity : FlutterActivity() {
                     isPlayerPrepared = true
                     try { mp.start() } catch (_: Exception) {}
                 }
-                prepareAsync()
                 setOnCompletionListener { onPlaybackDone(urlPath) }
                 setOnErrorListener { _, _, _ ->
+                    showToast("⚠️ This recording could not be played")
                     onPlaybackDone(urlPath)
                     true
                 }
+                prepareAsync()
             }
             result.success(true)
         } catch (e: Exception) {
@@ -634,6 +648,7 @@ class MainActivity : FlutterActivity() {
                         CallLog.Calls.OUTGOING_TYPE -> "outgoing"
                         CallLog.Calls.MISSED_TYPE -> "missed"
                         CallLog.Calls.REJECTED_TYPE -> "rejected"
+                        CallLog.Calls.BLOCKED_TYPE -> "rejected"
                         CallLog.Calls.VOICEMAIL_TYPE -> "incoming"
                         CallLog.Calls.ANSWERED_EXTERNALLY_TYPE -> "incoming"
                         else -> "incoming"

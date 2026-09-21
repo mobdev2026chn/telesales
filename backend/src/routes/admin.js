@@ -75,7 +75,7 @@ router.get('/dashboard', async (req, res) => {
     const registeredEmployees = [...scope.employees].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
     const teamMemberStats = registeredEmployees.map(emp => {
       const m = memberStats(emp, stats);
-      const target = emp.dailyTarget || 40;
+      const target = Number.isFinite(emp.dailyTarget) ? emp.dailyTarget : 40;
       return {
         id: emp.id,
         name: emp.name,
@@ -101,7 +101,7 @@ router.get('/dashboard', async (req, res) => {
       };
     }
 
-    const teamDailyTarget = registeredEmployees.reduce((sum, emp) => sum + (emp.dailyTarget || 40), 0);
+    const teamDailyTarget = registeredEmployees.reduce((sum, emp) => sum + (Number.isFinite(emp.dailyTarget) ? emp.dailyTarget : 40), 0);
 
     // Ratios: numerator uses the same scope and period as the denominator
     const connectRatioPercent = totalCalls > 0 ? +((connectedCalls / totalCalls) * 100).toFixed(1) : 0;
@@ -139,7 +139,7 @@ router.get('/dashboard', async (req, res) => {
     const visible = isMgr ? (scope.role === 'admin' ? await Employee.find({}).select('-photoBase64 -avatarUrl').lean() : await resolveScope(req, {}).then(s => s.employees)) : (scope.me ? [scope.me] : []);
     const allUsers = visible
       .filter(u => scope.role === 'admin' || u.role !== 'admin')
-      .map(u => ({ id: u.id, _id: u._id, name: u.name, email: u.email || '', phone: u.phone, role: u.role, team: u.team || DEFAULT_TEAM, managerId: u.managerId || '', managerName: u.managerName || '', dailyTarget: u.dailyTarget || 40 }))
+      .map(u => ({ id: u.id, _id: u._id, name: u.name, email: u.email || '', phone: u.phone, role: u.role, team: u.team || DEFAULT_TEAM, managerId: u.managerId || '', managerName: u.managerName || '', dailyTarget: Number.isFinite(u.dailyTarget) ? u.dailyTarget : 40 }))
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     const managersList = allUsers.filter(u => MANAGER_ROLES.includes(u.role))
       .map(u => ({ id: u.id, name: u.name, email: u.email, phone: u.phone, role: u.role, team: u.team }));
@@ -170,6 +170,8 @@ router.get('/dashboard', async (req, res) => {
         callerLiveStatuses,
         topPerformer,
         hourlyCalls,
+        // Every hour 0-23 (India time); sums to totalCalls
+        hourlyAll: Array.from({ length: 24 }, (_, h) => ({ hourOfDay: h, calls: stats.hourly[h] || 0 })),
         teamMembers: teamMemberStats,
         managersList,
         teams,
@@ -206,10 +208,16 @@ router.get('/calls', async (req, res) => {
     const pageQuery = before ? and(query, { timestamp: { $lt: before } }) : query;
     const limit = parseLimit(req.query.limit, 1000, 5000);
 
-    const [rawCalls, total] = await Promise.all([
+    // Total counted exactly like the dashboard (aggregateCallStats): legacy duplicate rows count once
+    const [rawCalls, totalAgg] = await Promise.all([
       CallLog.find(pageQuery).sort({ timestamp: -1, _id: -1 }).limit(limit + 1).lean(),
-      CallLog.countDocuments(query),
+      CallLog.aggregate([
+        { $match: query },
+        { $group: { _id: { c: '$callerPhone', p: '$phoneNumber', t: '$timestamp' } } },
+        { $count: 'n' },
+      ]).allowDiskUse(true),
     ]);
+    const total = totalAgg.length ? totalAgg[0].n : 0;
     const hasMore = rawCalls.length > limit;
 
     const byId = new Map(scope.employees.map(e => [e.id, e]));
@@ -417,7 +425,9 @@ router.delete('/users/:id', async (req, res) => {
 router.get('/leaderboard', async (req, res) => {
   try {
     const { scope, callLogQuery } = await telemetry(req);
-    const callers = scope.employees.filter(e => (e.role || 'caller') === 'caller');
+    // Everyone who can make calls (managers in caller mode too), the same people as the dashboard's
+    // team table, so per-person numbers and their sum match the dashboard
+    const callers = scope.employees.filter(e => (e.role || 'caller') !== 'admin');
     const stats = await aggregateCallStats(callLogQuery);
     const photos = callers.length
       ? await Employee.find({ id: { $in: callers.map(c => c.id) } }).select('id photoBase64 avatarUrl').lean()
@@ -431,11 +441,11 @@ router.get('/leaderboard', async (req, res) => {
         id: emp.id,
         name: emp.name,
         phone: emp.phone,
-        role: 'caller',
+        role: emp.role || 'caller',
         team: emp.team || DEFAULT_TEAM,
         managerId: emp.managerId || '',
         managerName: emp.managerName || '',
-        dailyTarget: emp.dailyTarget || 40,
+        dailyTarget: Number.isFinite(emp.dailyTarget) ? emp.dailyTarget : 40,
         ...m,
         talkTimeFormatted: fmtHM(m.talkTimeSeconds),
         avatarUrl: photo.avatarUrl || '',

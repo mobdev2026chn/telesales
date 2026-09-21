@@ -201,6 +201,38 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel> with 
         ),
         const SizedBox(height: 14),
 
+        // ---- Google Phone app on a phone that has its own dialer: its recordings cannot be read
+        if (s != null && s.usesGoogleDialerOnOemPhone && !s.nativeRecorderDetected) ...[
+          NeoCard(
+            backgroundColor: AppTheme.limeYellow,
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('USE YOUR PHONE\'S OWN PHONE APP', style: AppTheme.label(size: 9, color: AppTheme.ink900)),
+                const SizedBox(height: 6),
+                Text(
+                  'Your default Phone app is "Phone by Google". It keeps call recordings inside its own app, '
+                  'where AskEVA cannot read them. Make ${guide.brandLabel}\'s own Phone app the default, then turn on '
+                  'automatic call recording in it (steps below). Its recordings contain both sides of the call.',
+                  style: AppTheme.body(size: 12.5),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Settings → Apps → Default apps → Phone app → choose "Phone" (not "Phone by Google").',
+                  style: AppTheme.bodyBold(size: 12),
+                ),
+                const SizedBox(height: 10),
+                _button('OPEN DEFAULT APPS', Icons.phone_forwarded_outlined, () async {
+                  final ok = await CallRecordingChannel.openDefaultAppsSettings();
+                  if (!ok) _snack('Open Settings → Apps → Default apps → Phone app.');
+                }),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+        ],
+
         // ---- Brand guide
         NeoCard(
           padding: const EdgeInsets.all(14),

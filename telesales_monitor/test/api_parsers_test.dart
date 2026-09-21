@@ -167,9 +167,9 @@ void main() {
       call('3', '9825012342', t0.add(const Duration(minutes: 20))),
     ];
 
-    test('only calls newer than the acknowledged timestamp are sent', () {
+    test('replays recent calls so late device updates reach the server', () {
       expect(callsNewerThan(calls, null).length, 3);
-      expect(callsNewerThan(calls, t0.add(const Duration(minutes: 10))).map((c) => c.id), ['3']);
+      expect(callsNewerThan(calls, t0.add(const Duration(minutes: 10))).map((c) => c.id), ['1', '2', '3']);
       expect(callsNewerThan(calls, t0.add(const Duration(hours: 1))), isEmpty);
     });
 

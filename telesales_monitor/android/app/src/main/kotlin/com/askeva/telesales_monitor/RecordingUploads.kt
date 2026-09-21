@@ -251,9 +251,34 @@ object RecordingUploader {
      * base64-encoded on the fly, then the closing quote/brace, so long calls never sit in memory.
      * The server de-duplicates by caller + fileName, so a retry after a lost response is harmless.
      */
+    /**
+     * AMR recordings (many OEM dialers) cannot be played by browsers: upload an AAC copy instead.
+     * The copy's name is derived from the original, so the server's caller + fileName de-duplication
+     * still recognises a retry. Null = upload the original.
+     */
+    private fun playableCopy(ctx: Context, item: QueuedRecording): File? {
+        if (item.source != "builtin") return null // our own recordings are already AAC
+        return try {
+            if (!AudioTools.needsTranscode(ctx, item.path, item.uri)) return null
+            val out = File(ctx.cacheDir, "upload_${item.id}.m4a")
+            if (AudioTools.transcodeToAac(ctx, item.path, item.uri, out)) out else { out.delete(); null }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     fun uploadOne(ctx: Context, base: String, session: CallMonitorStore.Session, item: QueuedRecording): Outcome {
+        val converted = playableCopy(ctx, item)
+        try {
+            return uploadStream(ctx, base, session, item, converted)
+        } finally {
+            converted?.delete()
+        }
+    }
+
+    private fun uploadStream(ctx: Context, base: String, session: CallMonitorStore.Session, item: QueuedRecording, converted: File?): Outcome {
         val input: InputStream = try {
-            openAudio(ctx, item) ?: return Outcome.DROP
+            if (converted != null) FileInputStream(converted) else openAudio(ctx, item) ?: return Outcome.DROP
         } catch (_: FileNotFoundException) {
             return Outcome.DROP // the file was deleted (e.g. by the user in the recorder app)
         } catch (_: SecurityException) {
@@ -261,6 +286,7 @@ object RecordingUploader {
         } catch (_: Exception) {
             return Outcome.RETRY
         }
+        val fileName = if (converted != null) item.fileName.substringBeforeLast('.') + ".m4a" else item.fileName
 
         val meta = JSONObject()
             .put("callerId", session.userId)
@@ -269,7 +295,7 @@ object RecordingUploader {
             .put("contactName", item.contactName.ifEmpty { item.phoneNumber.ifEmpty { "Unknown" } })
             .put("phoneNumber", item.phoneNumber)
             .put("durationSeconds", item.durationSeconds.coerceAtLeast(1))
-            .put("fileName", item.fileName)
+            .put("fileName", fileName)
             .put("type", item.type)
             .put("callStartedAt", isoUtc(item.callStartedAtMs))
             .put("callLogTimestampMs", item.callStartedAtMs)

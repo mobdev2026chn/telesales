@@ -60,7 +60,20 @@ function parseDate(value) {
   return isNaN(d.getTime()) ? null : d;
 }
 
+// A call time sent by a phone. Older app builds send the phone's local (India) wall-clock time
+// without a zone, e.g. "2026-09-19T12:22:00.000". The server runs in UTC and would read that as
+// 12:22 UTC = 5:52 PM India time, so a zone-less value is read as India time (+05:30).
+function parseDeviceTime(value) {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value === 'number' || /^\d+$/.test(String(value))) return parseDate(value);
+  const s = String(value).trim();
+  const hasZone = /(Z|[+-]\d{2}:?\d{2})$/i.test(s);
+  const isDateTime = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(s);
+  return parseDate(isDateTime && !hasZone ? `${s.replace(' ', 'T')}+05:30` : s);
+}
+
 module.exports = {
+  parseDeviceTime,
   escapeRegex,
   last10,
   isObjectId,

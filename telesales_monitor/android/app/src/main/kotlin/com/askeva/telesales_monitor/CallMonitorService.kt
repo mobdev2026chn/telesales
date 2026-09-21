@@ -314,8 +314,19 @@ class CallMonitorService : Service() {
             return
         }
         val type = row?.type ?: if (call.incoming) "INCOMING" else "OUTGOING"
-        val talkSec = row?.durationSec ?: ((call.endMs - call.offhookMs) / 1000).toInt()
+        // Talk time = the call log's duration, which starts when the call is answered. OFFHOOK -> IDLE
+        // is only a fallback: for an outgoing call OFFHOOK is the moment of dialling, so it includes the ringing.
+        val offhookSec = if (call.offhookMs > 0) ((call.endMs - call.offhookMs) / 1000).toInt().coerceAtLeast(0) else 0
+        val talkSec = if (row != null && row.durationSec > 0) row.durationSec else offhookSec
         val contact = row?.name?.ifEmpty { null } ?: lookupContactName(number) ?: number.ifEmpty { "Unknown" }
+
+        // Our recording of an outgoing call started at dialling: cut the ringing so it holds the conversation only
+        if (own != null && row != null && row.durationSec > 0) {
+            val answeredAtMs = call.endMs - row.durationSec * 1000L
+            // Call-log seconds are rounded down, so keep a one second margin before the answer
+            val leadInMs = answeredAtMs - call.recorder!!.startedAtMs - 1000L
+            if (leadInMs >= 1500L) AudioTools.trimLeading(own.file, leadInMs * 1000L)
+        }
 
         // Built-in recorder: poll a few times, OEM recorders finalise the file late
         var found: BuiltInRecordingFinder.Found? = null
@@ -335,6 +346,7 @@ class CallMonitorService : Service() {
 
         if (found != null) {
             own?.file?.delete()
+            CallMonitorStore.cancelNotification(this, CallMonitorStore.NOTIF_ID_RECORDING)
             RecordingDiagnostics.add(this, JSONObject().put("result", "builtin").put("builtInFound", true).put("talkSeconds", talkSec))
             CallMonitorStore.onBuiltInFound(this, found.key, BuiltInRecordingFinder.usedKeyFor(found.displayName))
             RecordingQueue.add(
@@ -342,7 +354,7 @@ class CallMonitorService : Service() {
                     id = QueuedRecording.newId(), userId = session.userId, source = "builtin",
                     path = found.path, uri = found.uri, fileName = found.displayName,
                     callStartedAtMs = call.startMs, phoneNumber = number, contactName = contact, type = type,
-                    simSlot = slot, durationSeconds = if (found.durationSeconds > 0) found.durationSeconds else talkSec,
+                    simSlot = slot, durationSeconds = if (talkSec > 0) talkSec else found.durationSeconds,
                 )
             )
         } else {
@@ -352,9 +364,18 @@ class CallMonitorService : Service() {
             val recorderUsed = call.recorder
             if (own != null) {
                 CallMonitorStore.setLastCapture(this, "ok", recorderUsed?.usedSource ?: -1)
+                CallMonitorStore.cancelNotification(this, CallMonitorStore.NOTIF_ID_RECORDING)
             } else if (recorderUsed?.discardedAsSilent == true) {
                 // Android muted the mic for this call: nothing worth uploading
                 CallMonitorStore.setLastCapture(this, "silent", recorderUsed.usedSource)
+                if (!CallAccessibilityService.isEnabled(this)) {
+                    CallMonitorStore.postAlert(
+                        this, CallMonitorStore.NOTIF_ID_RECORDING,
+                        "Call was not recorded",
+                        "Android muted the microphone. Open AskEVA → More → Call recording setup and turn on " +
+                            "\"AskEVA Call Recording\" in Accessibility so calls are recorded with sound."
+                    )
+                }
             }
             if (recorderUsed != null && recorderUsed.usedSource >= 0) {
                 CallMonitorStore.reportSourceResult(this, recorderUsed.usedSource, heardSpeech = own != null)
@@ -386,7 +407,7 @@ class CallMonitorService : Service() {
                         id = QueuedRecording.newId(), userId = session.userId, source = "own",
                         path = own.file.absolutePath, uri = "", fileName = own.file.name,
                         callStartedAtMs = call.startMs, phoneNumber = number, contactName = contact, type = type,
-                        simSlot = slot, durationSeconds = own.durationSeconds,
+                        simSlot = slot, durationSeconds = if (talkSec > 0) talkSec else own.durationSeconds,
                     )
                 )
             }

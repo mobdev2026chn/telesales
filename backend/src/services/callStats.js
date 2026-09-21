@@ -1,7 +1,7 @@
 const CallLog = require('../models/CallLog');
 const Lead = require('../models/Lead');
 const Recording = require('../models/Recording');
-const { last10, exactNameRegex, anyPhoneRegex } = require('../utils/common');
+const { last10, exactNameRegex, anyPhoneRegex, parseDeviceTime } = require('../utils/common');
 const {
   buildDedupKey, buildDedupKeyById, normalizeCallType, pairCallsWithRecordings,
   initialLeadStatus, nextAutoStatus, LINK_WINDOW_MS,
@@ -95,7 +95,7 @@ async function aggregateCallStats(match) {
         phoneNumber: { $first: '$phoneNumber' },
         type: { $first: '$type' },
         timestamp: { $first: '$timestamp' },
-        durationSeconds: { $first: '$durationSeconds' },
+        durationSeconds: { $max: '$durationSeconds' },
       }
     },
     {
@@ -149,7 +149,7 @@ function prepareCalls(callerEmp, calls, fallbackPhone = '') {
   const out = [];
   for (const call of calls || []) {
     if (!call || !call.phoneNumber) continue;
-    const callTime = call.timestamp ? new Date(call.timestamp) : null;
+    const callTime = parseDeviceTime(call.timestamp);
     if (!callTime || isNaN(callTime.getTime())) continue;
     const phoneNumber = String(call.phoneNumber).trim().slice(0, 40);
     const key = buildDedupKeyById(callerEmp.id, phoneNumber, callTime);
@@ -180,58 +180,73 @@ async function syncCallsForCaller(callerEmp, calls) {
   if (rows.length === 0) return 0;
 
   // 1. Which calls already exist? New id-based key, the old phone-based key, and rows stored before keys existed.
-  const existing = await CallLog.find({ dedupKey: { $in: rows.flatMap(r => [r.key, r.oldKey]) } }).select('dedupKey').lean();
-  const existingKeys = new Set(existing.map(e => e.dedupKey));
   const legacyRows = await CallLog.find({
     dedupKey: { $exists: false },
     timestamp: { $in: rows.map(r => r.timestamp) },
     $or: [{ callerId: callerEmp.id }, ...(callerPhone ? [{ callerPhone }] : [])],
-  }).select('phoneNumber timestamp').lean();
-  const legacyKeys = new Set(legacyRows.map(l => `${last10(l.phoneNumber) || l.phoneNumber}_${new Date(l.timestamp).getTime()}`));
+  }).select('_id phoneNumber timestamp').lean();
+  const legacyIds = new Map(legacyRows.map(l => [
+    `${last10(l.phoneNumber) || l.phoneNumber}_${new Date(l.timestamp).getTime()}`,
+    l._id,
+  ]));
 
-  const fresh = rows.filter(r =>
-    !existingKeys.has(r.key) && !existingKeys.has(r.oldKey) &&
-    !legacyKeys.has(`${r.last10 || r.phoneNumber}_${r.timestamp.getTime()}`));
-  if (fresh.length === 0) return 0;
+  // Call-log entries can be observed before their final duration/type is available.
+  const syncable = rows;
 
-  // 2. Insert in one bulk write (upsert on the key so a concurrent sync can't double insert)
-  const ops = fresh.map(r => ({
+  // 2. Upsert in one bulk write. Existing rows get the latest call facts from the device (type, talk
+  // time); names and notes are only written on insert so edits made since (e.g. a saved contact) survive.
+  // New rows are still protected by the unique dedupKey index.
+  const ops = syncable.map(r => ({
     updateOne: {
-      filter: { dedupKey: r.key },
+      filter: {
+        $or: [
+          { dedupKey: r.key },
+          { dedupKey: r.oldKey },
+          ...(legacyIds.has(`${r.last10 || r.phoneNumber}_${r.timestamp.getTime()}`)
+            ? [{ _id: legacyIds.get(`${r.last10 || r.phoneNumber}_${r.timestamp.getTime()}`) }]
+            : []),
+        ],
+      },
       update: {
-        $setOnInsert: {
+        $set: {
           dedupKey: r.key,
           callerId: callerEmp.id,
           callerName: callerEmp.name || '',
           callerPhone,
-          contactName: r.contactName,
           phoneNumber: r.phoneNumber,
           type: r.type,
           timestamp: r.timestamp,
           durationSeconds: r.durationSeconds,
           simSlot: r.simSlot,
+        },
+        $setOnInsert: {
+          contactName: r.contactName,
           note: r.note,
           recordingUrl: '',
           recordingId: '',
           createdAt: new Date(),
           updatedAt: new Date(),
-        }
+        },
       },
       upsert: true,
     }
   }));
+  let writeResult = {};
   let upserted = {};
   try {
     const res = await CallLog.bulkWrite(ops, { ordered: false, timestamps: false });
+    writeResult = res;
     upserted = res.upsertedIds || {};
   } catch (err) {
     // 11000 = the same call was inserted by a concurrent sync; everything else is a real error
     const writeErrors = err.writeErrors || (err.result && err.result.getWriteErrors ? err.result.getWriteErrors() : []);
     if (!writeErrors.length || writeErrors.some(e => (e.code || (e.err && e.err.code)) !== 11000)) throw err;
-    upserted = (err.result && (err.result.upsertedIds || (err.result.result && err.result.result.upsertedIds))) || {};
+    writeResult = err.result || {};
+    upserted = writeResult.upsertedIds || (writeResult.result && writeResult.result.upsertedIds) || {};
   }
-  const inserted = Object.entries(upserted).map(([idx, _id]) => ({ ...fresh[Number(idx)], _id }));
-  if (inserted.length === 0) return 0;
+  const inserted = Object.entries(upserted).map(([idx, _id]) => ({ ...syncable[Number(idx)], _id }));
+  const modified = Number(writeResult.modifiedCount || writeResult.nModified || 0);
+  if (inserted.length === 0 && modified === 0) return 0;
 
   // 3. Link recordings uploaded before this sync (same caller + number, start within ±5 min, closest wins)
   try {
@@ -247,7 +262,7 @@ async function syncCallsForCaller(callerEmp, calls) {
     console.warn('Lead update warning:', leadErr.message);
   }
 
-  return inserted.length;
+  return inserted.length + modified;
 }
 
 async function linkRecordingsToNewCalls(callerEmp, inserted) {

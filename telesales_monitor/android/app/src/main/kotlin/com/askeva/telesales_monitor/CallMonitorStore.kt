@@ -230,6 +230,7 @@ object CallMonitorStore {
     const val NOTIF_ID_SERVICE = 9101
     const val NOTIF_ID_LOGIN = 9102
     const val NOTIF_ID_RESUME = 9103
+    const val NOTIF_ID_RECORDING = 9104
 
     fun ensureChannels(ctx: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return

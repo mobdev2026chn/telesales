@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -132,6 +133,10 @@ class TeleProvider extends ChangeNotifier {
         syncCallMonitor();
         CallRecordingChannel.retryUploads();
         _refreshRecordings();
+        // Calls made while the app was in the background, and target changes made by the admin
+        refreshProfile();
+        _refreshLiveNumbers();
+        refreshRecordingSetupStatus();
       }
     } else {
       _syncPollingTimer?.cancel();
@@ -194,7 +199,9 @@ class TeleProvider extends ChangeNotifier {
         await refreshPendingUploadCount();
         await _refreshRecordings();
       } else if (call.method == 'onUploadQueueChanged') {
+        // Also sent when a call has been processed: the last capture result may have changed
         await refreshPendingUploadCount();
+        await refreshRecordingSetupStatus();
       } else if (call.method == 'onUploadAuthFailed') {
         // The server rejected the token: /auth/me confirms it and signs out (onAuthRequired)
         await refreshProfile();
@@ -334,6 +341,7 @@ class TeleProvider extends ChangeNotifier {
   void toggleManagerCallerMode() {
     _isManagerCallerMode = !_isManagerCallerMode;
     _backendStats = null; // team numbers must never be shown as the manager's personal numbers
+    _todayStats = null;
     _pushAutoRecordToNative();
     _savePreferences();
     notifyListeners();
@@ -463,6 +471,7 @@ class TeleProvider extends ChangeNotifier {
       await fetchDeviceCallLogs();
       await fetchBackendData();
       CallRecordingChannel.retryUploads();
+      refreshRecordingSetupStatus();
     }
     _startPeriodicSyncTimer();
   }
@@ -487,8 +496,11 @@ class TeleProvider extends ChangeNotifier {
     _currentUserEmail = asString(user['email']);
     _currentUserRole = asString(user['role'], _currentUserRole).toLowerCase();
     _currentUserTeam = asString(user['team'], _currentUserRole == 'caller' ? 'Telesales Team' : 'Management');
-    final target = asInt(user['dailyTarget']);
-    _currentUserDailyTarget = target > 0 ? target : 40;
+    // The admin can change the target at any time: take the server's value whenever it is sent
+    if (user.containsKey('dailyTarget')) {
+      final target = asInt(user['dailyTarget'], -1);
+      if (target >= 0) _currentUserDailyTarget = target;
+    }
     final phone = asString(user['phone']);
     if (phone.isNotEmpty && (!keepTrackingNumber || _verifiedTrackingNumber.isEmpty || _verifiedTrackingNumber.contains('@'))) {
       _verifiedTrackingNumber = phone;
@@ -497,15 +509,55 @@ class TeleProvider extends ChangeNotifier {
 
   Timer? _syncPollingTimer;
 
-  /// Notification poll: every 60 s while the app is in the foreground and a user is signed in.
+  /// Poll every 60 s while the app is in the foreground and a user is signed in: profile (daily
+  /// target), call counts and notifications. Catches changes the call-log observer missed.
   void _startPeriodicSyncTimer() {
     _syncPollingTimer?.cancel();
     if (!_appInForeground) return;
     _syncPollingTimer = Timer.periodic(const Duration(seconds: 60), (_) {
       if (_isLoggedIn && _appInForeground) {
+        refreshProfile();
+        _refreshLiveNumbers();
         fetchNotifications();
       }
     });
+  }
+
+  /// Re-reads the device call log (which uploads new calls) and the server-counted numbers.
+  Future<void> _refreshLiveNumbers() async {
+    if (!_isLoggedIn) return;
+    if (_isCallerContext) await fetchDeviceCallLogs();
+    await _refreshServerStats();
+  }
+
+  // Latest call-recording setup state (Accessibility, built-in recorder, last capture) for the dashboard warning
+  RecordingSetupStatus? _recordingSetupStatus;
+  RecordingSetupStatus? get recordingSetupStatus => _recordingSetupStatus;
+
+  Future<void> refreshRecordingSetupStatus() async {
+    if (!Platform.isAndroid || !_isLoggedIn || !_isCallerContext) return;
+    final s = await CallRecordingChannel.status(_currentUserId);
+    if (s == null) return;
+    _recordingSetupStatus = s;
+    notifyListeners();
+  }
+
+  /// Why calls are probably not being recorded with sound, or null when recording looks fine.
+  String? get recordingProblem {
+    final s = _recordingSetupStatus;
+    if (s == null || !_autoRecordEnabled) return null;
+    if (s.nativeRecorderDetected && s.mediaPermission) return null; // the phone's own recordings are uploaded
+    if (!s.micPermission) return 'Microphone permission is off, so calls are not recorded.';
+    if (!s.accessibilityEnabled && s.usesGoogleDialerOnOemPhone) {
+      return 'Turn on the Accessibility permission, or switch to your phone\'s own Phone app with automatic call recording.';
+    }
+    if (!s.accessibilityEnabled) {
+      return s.lastCaptureStatus == 'silent'
+          ? 'Your last call was not recorded: Android muted the microphone. Turn on the Accessibility permission.'
+          : 'Turn on the Accessibility permission, otherwise Android mutes the microphone and calls are recorded silent.';
+    }
+    if (s.lastCaptureStatus == 'silent') return 'Your last call was recorded without sound. Open call recording setup.';
+    return null;
   }
 
   static String _syncAckKey(String userId) => 'call_sync_ack_ms_$userId';
@@ -607,6 +659,7 @@ class TeleProvider extends ChangeNotifier {
 
   Map<String, dynamic>? _backendStats;
   Map<String, dynamic>? get backendStats => _backendStats;
+  Map<String, dynamic>? _todayStats; // caller's own numbers for today (daily-target card)
   int _statsRequestSeq = 0; // only the latest stats request may update the screen
   List<EmployeeModel> _teamEmployees = [];
   String _selectedTeamFilter = 'ALL';
@@ -706,49 +759,14 @@ class TeleProvider extends ChangeNotifier {
           userIdParam = _selectedUserFilter;
         }
       }
-      // A manager in caller mode is scoped like a caller on the server.
-      final scopeRole = _isManagerCallerMode ? 'caller' : _currentUserRole;
-
       final q = _periodQuery();
       final String? dateParam = q['date'];
       final String? periodParam = q['period'];
       final String? startDateParam = q['startDate'];
       final String? endDateParam = q['endDate'];
 
-      final statsRequest = ++_statsRequestSeq;
-      final stats = await ApiService.fetchDashboardStats(
-        callerPhone: phoneParam,
-        callerName: nameParam,
-        team: teamParam,
-        userId: userIdParam,
-        period: periodParam,
-        date: dateParam,
-        startDate: startDateParam,
-        endDate: endDateParam,
-        timeFilter: _selectedTimeFilter.toString(),
-        loggedInRole: scopeRole,
-        loggedInTeam: _currentUserTeam,
-        loggedInUserId: _currentUserId,
-      );
+      await _refreshServerStats();
       if (!_isCurrentSession(gen)) return;
-      // A slower response for a period the user already switched away from must not overwrite newer numbers
-      if (stats != null && statsRequest == _statsRequestSeq) {
-        _backendStats = stats;
-        if (stats['teams'] is List) {
-          final rawTeams = (stats['teams'] as List).map((t) => t.toString()).toList();
-          final filtered = rawTeams.where((t) =>
-            t != 'ALL' &&
-            t != 'ALL TEAMS' &&
-            t != 'BD TEAM - AE' &&
-            t != 'BDE' &&
-            t != 'Telesales Mumbai'
-          ).toList();
-          _availableTeams = ['ALL', ...(filtered.isNotEmpty ? filtered : ['Telesales Team', 'Management'])];
-        }
-        if (stats['allUsers'] is List) {
-          _allUsers = (stats['allUsers'] as List).whereType<Map>().map((u) => Map<String, dynamic>.from(u)).toList();
-        }
-      }
       final emps = await ApiService.fetchLeaderboard(
         callerPhone: phoneParam,
         callerName: nameParam,
@@ -1069,27 +1087,76 @@ class TeleProvider extends ChangeNotifier {
     return {'period': const ['today', 'week', 'month'][_selectedTimeFilter.clamp(0, 2)]};
   }
 
-  Future<void> _refreshServerStats() async {
-    final gen = _sessionGeneration;
-    final q = _periodQuery();
-    final statsRequest = ++_statsRequestSeq;
-    final stats = await ApiService.fetchDashboardStats(
-      callerPhone: _verifiedTrackingNumber.contains('@') ? null : _verifiedTrackingNumber,
-      callerName: _callerName,
-      userId: _currentUserId.isNotEmpty ? _currentUserId : _callerName,
-      period: q['period'],
-      date: q['date'],
-      startDate: q['startDate'],
-      endDate: q['endDate'],
-      timeFilter: _selectedTimeFilter.toString(),
-      loggedInRole: _isManagerCallerMode ? 'caller' : _currentUserRole,
-      loggedInTeam: _currentUserTeam,
-      loggedInUserId: _currentUserId,
-    );
-    if (stats != null && statsRequest == _statsRequestSeq && _isLoggedIn && _isCurrentSession(gen)) {
-      _backendStats = stats;
-      notifyListeners();
+  /// Who the dashboard numbers are for: the signed-in caller (also a manager in caller mode), or the
+  /// manager's selected team / user.
+  Map<String, String?> _statsScope() {
+    if (_isCallerContext) {
+      return {
+        'phone': _verifiedTrackingNumber.contains('@') ? null : _verifiedTrackingNumber,
+        'name': _callerName,
+        'userId': _currentUserId.isNotEmpty ? _currentUserId : _callerName,
+        'team': null,
+      };
     }
+    return {
+      'phone': null,
+      'name': _selectedUserFilter != 'ALL' ? _selectedUserFilter : null,
+      'userId': _selectedUserFilter != 'ALL' ? _selectedUserFilter : null,
+      'team': _selectedTeamFilter != 'ALL' ? _selectedTeamFilter : null,
+    };
+  }
+
+  /// Server-counted numbers for the selected period and, for a caller, for today (the daily-target
+  /// card always shows today). Only the latest request may update the screen.
+  Future<void> _refreshServerStats() async {
+    if (!_isLoggedIn) return;
+    final gen = _sessionGeneration;
+    final scope = _statsScope();
+    final q = _periodQuery();
+    final isToday = q['period'] == 'today';
+    Future<Map<String, dynamic>?> fetch(Map<String, String?> period, String timeFilter) => ApiService.fetchDashboardStats(
+          callerPhone: scope['phone'],
+          callerName: scope['name'],
+          team: scope['team'],
+          userId: scope['userId'],
+          period: period['period'],
+          date: period['date'],
+          startDate: period['startDate'],
+          endDate: period['endDate'],
+          timeFilter: timeFilter,
+          // A manager in caller mode is scoped like a caller on the server.
+          loggedInRole: _isManagerCallerMode ? 'caller' : _currentUserRole,
+          loggedInTeam: _currentUserTeam,
+          loggedInUserId: _currentUserId,
+        );
+    final statsRequest = ++_statsRequestSeq;
+    final results = await Future.wait([
+      fetch(q, _selectedTimeFilter.toString()),
+      if (!isToday && _isCallerContext) fetch(const {'period': 'today'}, '0'),
+    ]);
+    // A slower response for a period the user already switched away from must not overwrite newer numbers
+    if (!_isLoggedIn || !_isCurrentSession(gen) || statsRequest != _statsRequestSeq) return;
+    final stats = results[0];
+    if (stats != null) {
+      _backendStats = stats;
+      if (stats['teams'] is List) {
+        final rawTeams = (stats['teams'] as List).map((t) => t.toString()).toList();
+        final filtered = rawTeams.where((t) =>
+          t != 'ALL' &&
+          t != 'ALL TEAMS' &&
+          t != 'BD TEAM - AE' &&
+          t != 'BDE' &&
+          t != 'Telesales Mumbai'
+        ).toList();
+        _availableTeams = ['ALL', ...(filtered.isNotEmpty ? filtered : ['Telesales Team', 'Management'])];
+      }
+      if (stats['allUsers'] is List) {
+        _allUsers = (stats['allUsers'] as List).whereType<Map>().map((u) => Map<String, dynamic>.from(u)).toList();
+      }
+    }
+    final today = isToday ? stats : (results.length > 1 ? results[1] : null);
+    if (today != null && _isCallerContext) _todayStats = today;
+    notifyListeners();
   }
 
   Future<void> fetchDeviceSims() async {
@@ -1145,7 +1212,14 @@ class TeleProvider extends ChangeNotifier {
     try {
       final verifyRes = await ApiService.checkPhoneRegistered(last10);
       if (verifyRes == null) {
-        return {'isValid': false, 'message': 'Failed to connect to server. Please check your internet connection.'};
+        final why = ApiService.lastNetworkError;
+        return {
+          'isValid': false,
+          'message': 'Could not reach the AskEVA server.'
+              '${why.isNotEmpty ? '\n\nReason: $why' : ''}'
+              '\n\nTip: open https://telesales.askeva.io/api/health in Chrome on this phone. If it opens, allow AskEVA '
+              'to use Wi-Fi and mobile data in Settings → Apps → AskEVA.',
+        };
       }
       if (verifyRes['success'] != true) {
         return {
@@ -1158,7 +1232,7 @@ class TeleProvider extends ChangeNotifier {
       debugPrint('DB verification error: $e');
       return {
         'isValid': false,
-        'message': 'Failed to connect to server. Please check your internet connection.'
+        'message': 'Verification could not be completed ($e). Please try again.'
       };
     }
 
@@ -1295,6 +1369,8 @@ class TeleProvider extends ChangeNotifier {
 
     // Data
     _backendStats = null; // never show the previous user's numbers to the next login
+    _todayStats = null;
+    _recordingSetupStatus = null;
     _statsRequestSeq++;
     _teamEmployees = [];
     _allUsers = [];
@@ -1420,6 +1496,7 @@ class TeleProvider extends ChangeNotifier {
         _pushAutoRecordToNative();
         await fetchBackendData();
         _startPeriodicSyncTimer();
+        refreshRecordingSetupStatus();
         notifyListeners();
         return {'success': true, 'message': 'Manager authentication successful'};
       }
@@ -1455,6 +1532,7 @@ class TeleProvider extends ChangeNotifier {
       await fetchDeviceCallLogs();
       await fetchBackendData();
       _startPeriodicSyncTimer();
+      refreshRecordingSetupStatus();
       notifyListeners();
       return {'success': true, 'message': 'Caller authentication successful'};
     } catch (e) {
@@ -1505,6 +1583,7 @@ class TeleProvider extends ChangeNotifier {
     await fetchDeviceCallLogs();
     await fetchBackendData();
     _startPeriodicSyncTimer();
+    refreshRecordingSetupStatus();
     notifyListeners();
     return {'success': true, 'message': 'Mobile SIM number linked and verified successfully!'};
   }
@@ -1685,6 +1764,28 @@ class TeleProvider extends ChangeNotifier {
     final v = _backendStats?[key];
     return v is num ? v.toInt() : deviceValue;
   }
+
+  // Today's numbers for the daily-target card, whatever period the metrics below show. Server-counted
+  // (same as the admin web); a call the phone logged but has not uploaded yet is never hidden.
+  List<CallLogModel> get _deviceTodayLogs {
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    return _callLogs.where((c) {
+      if (_simTrackingMode == SimTrackingMode.sim1Only && c.simSlot != 1) return false;
+      if (_simTrackingMode == SimTrackingMode.sim2Only && c.simSlot != 2) return false;
+      return !c.timestamp.isBefore(todayStart);
+    }).toList();
+  }
+
+  int _todayCount(String key, int deviceValue) {
+    final v = _todayStats?[key];
+    return v is num && v.toInt() > deviceValue ? v.toInt() : deviceValue;
+  }
+
+  int get todayTotalCalls => _todayCount('totalCalls', _deviceTodayLogs.length);
+  int get todayConnectedCalls => _todayCount('connectedCalls', _deviceTodayLogs.where((c) => c.duration.inSeconds > 0).length);
+  Duration get todayTalkTime => Duration(
+      seconds: _todayCount('talkSeconds', _deviceTodayLogs.fold<int>(0, (sum, c) => sum + c.duration.inSeconds)));
 
   int get totalCalls => _serverCount('totalCalls', trackedTotalCalls);
   int get connectedCalls => _serverCount('connectedCalls', trackedConnectedCalls);

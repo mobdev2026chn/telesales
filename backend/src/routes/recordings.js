@@ -10,7 +10,7 @@ const Employee = require('../models/Employee');
 const Notification = require('../models/Notification');
 const { MANAGERS } = require('../middleware/auth');
 const {
-  escapeRegex, last10, byIdQuery, exactNameRegex, phoneRegex, anyPhoneRegex, serverError, parseLimit, parseDate,
+  escapeRegex, last10, byIdQuery, exactNameRegex, phoneRegex, anyPhoneRegex, serverError, parseLimit, parseDate, parseDeviceTime,
 } = require('../utils/common');
 const { resolveScope, recordingQueryFor, ownerInScope, findEmployeeByRef } = require('../services/scope');
 const { pickClosestCall, recordingStartMs, parseRange, LINK_WINDOW_MS } = require('../services/matching');
@@ -71,7 +71,19 @@ function toRecordingDTO(r, extra = {}) {
 }
 
 // ---- Audio helpers -----------------------------------------------------------------------------
-function getAudioMimeType(fileName = '') {
+function getAudioMimeType(fileName = '', filePath = '') {
+  try {
+    const header = Buffer.alloc(12);
+    const fd = fs.openSync(filePath, 'r');
+    fs.readSync(fd, header, 0, header.length, 0);
+    fs.closeSync(fd);
+    if (header.toString('ascii', 0, 4) === 'RIFF' && header.toString('ascii', 8, 12) === 'WAVE') return 'audio/wav';
+    if (header.toString('ascii', 4, 8) === 'ftyp') return 'audio/mp4';
+    if (header[0] === 0x49 && header[1] === 0x44 && header[2] === 0x33) return 'audio/mpeg';
+    if (header[0] === 0xff && (header[1] & 0xe0) === 0xe0) return (header[1] & 0x06) === 0 ? 'audio/aac' : 'audio/mpeg';
+    if (header.toString('ascii', 0, 4) === 'OggS') return 'audio/ogg';
+    if (header.toString('ascii', 0, 5) === '#!AMR') return 'audio/amr';
+  } catch (_) {}
   const ext = path.extname(fileName).toLowerCase();
   if (ext === '.wav') return 'audio/wav';
   if (ext === '.m4a' || ext === '.mp4' || ext === '.aac') return 'audio/mp4';
@@ -150,6 +162,14 @@ function getWavDurationSeconds(filePath) {
   }
 }
 
+// Talk time (call-log duration, counted from answer) of the calls these recordings are linked to.
+async function linkedCallTalkSeconds(recs) {
+  const ids = [...new Set(recs.map(r => String(r.callLogId || '')).filter(id => /^[a-f0-9]{24}$/i.test(id)))];
+  if (ids.length === 0) return new Map();
+  const calls = await CallLog.find({ _id: { $in: ids } }).select('durationSeconds').lean();
+  return new Map(calls.filter(c => c.durationSeconds > 0).map(c => [String(c._id), Math.round(c.durationSeconds)]));
+}
+
 // Record-level permission for managers / callers holding a token (legacy clients are not checked
 // during the grace period, as before).
 async function canAccessRecording(req, rec) {
@@ -191,7 +211,7 @@ router.get(['/api/recordings/:id/audio', '/api/admin/recordings/:id/audio', '/ap
     const names = [rec.fileName, rec.audioUrl ? path.basename(rec.audioUrl) : null].filter(Boolean);
     for (const name of names) {
       const p = diskPath(name);
-      if (p && fileSize(p) > 100) return streamAudioFile(p, req, res, getAudioMimeType(name));
+      if (p && fileSize(p) > 100) return streamAudioFile(p, req, res, getAudioMimeType(name, p));
     }
 
     if (rec.audioData && typeof rec.audioData === 'string' && rec.audioData.length > 100) {
@@ -200,7 +220,7 @@ router.get(['/api/recordings/:id/audio', '/api/admin/recordings/:id/audio', '/ap
         const name = rec.fileName || `${rec.id}.wav`;
         const p = diskPath(name);
         if (p) { try { fs.writeFileSync(p, buffer); } catch (_) { /* cache only */ } }
-        return streamAudioBuffer(buffer, req, res, getAudioMimeType(name));
+        return streamAudioBuffer(buffer, req, res, getAudioMimeType(name, p));
       }
     }
 
@@ -246,11 +266,13 @@ router.get(['/api/recordings', '/api/admin/recordings'], async (req, res) => {
     ]);
     const hasMore = rows.length > limit;
     const page = rows.slice(0, limit);
+    const talkSecondsByCall = await linkedCallTalkSeconds(page);
 
     const recordings = page.map(r => {
       const p = diskPath(r.fileName) || diskPath(r.audioUrl ? path.basename(r.audioUrl) : '');
       const size = fileSize(p);
-      let durationSeconds = r.durationSeconds || 0;
+      // Duration = talk time of the call (from answer), not the length of the audio file, which can include ringing
+      let durationSeconds = talkSecondsByCall.get(String(r.callLogId || '')) || r.durationSeconds || 0;
       if (durationSeconds <= 1 && size > 44) durationSeconds = getWavDurationSeconds(p) || durationSeconds;
       return toRecordingDTO({ ...r, durationSeconds }, { hasAudio: size > 100 || !!r.hasAudioData });
     });
@@ -338,7 +360,7 @@ router.post(['/api/recordings', '/api/user/recordings/upload', '/api/admin/recor
     }
 
     // Call start: explicit ISO, else the call log timestamp the app matched, else unknown
-    const callStartedAt = parseDate(body.callStartedAt) || parseDate(body.callLogTimestampMs) || null;
+    const callStartedAt = parseDeviceTime(body.callStartedAt) || parseDeviceTime(body.callLogTimestampMs) || null;
     const durationSeconds = Math.max(0, Math.round(Number(body.durationSeconds) || 0));
     const bodyType = String(body.type || '').toUpperCase();
     const type = bodyType === 'INCOMING' || bodyType === 'OUTGOING' ? bodyType : deriveType({ originalFileName: originalName });

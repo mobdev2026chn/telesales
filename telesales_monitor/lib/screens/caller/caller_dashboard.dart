@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/neo_card.dart';
 import '../../providers/tele_provider.dart';
+import '../setup/call_recording_setup_screen.dart';
 import 'call_session_screen.dart';
 
 class CallerDashboard extends StatefulWidget {
@@ -18,18 +19,16 @@ class _CallerDashboardState extends State<CallerDashboard> {
   Widget build(BuildContext context) {
     final tele = Provider.of<TeleProvider>(context);
 
-    final logs = tele.simTrackedCallLogs;
-    final totalCalls = logs.length;
-    var totalSeconds = 0;
-    for (var c in logs) {
-      totalSeconds += c.duration.inSeconds;
-    }
-    final totalDuration = Duration(seconds: totalSeconds);
+    // Today's numbers (the target is per day), counted the same way as the metrics card and the admin web
+    final totalCalls = tele.todayTotalCalls;
+    final totalDuration = tele.todayTalkTime;
     final h = totalDuration.inHours;
     final m = totalDuration.inMinutes % 60;
-    final talkTimeStr = h > 0 ? '${h}h ${m}m' : '${m}m';
+    final s = totalDuration.inSeconds % 60;
+    final talkTimeStr = h > 0 ? '${h}h ${m}m' : (m > 0 ? '${m}m ${s}s' : '${s}s');
 
-    final connectedCalls = logs.where((c) => c.duration.inSeconds > 0).length;
+    final connectedCalls = tele.todayConnectedCalls;
+    final recordingProblem = tele.recordingProblem;
     final callerName = tele.callerName.isNotEmpty ? tele.callerName.toUpperCase() : '—';
     final initials = callerName.split(' ').map((w) => w.isNotEmpty ? w[0] : '').take(2).join('').toUpperCase();
 
@@ -51,8 +50,10 @@ class _CallerDashboardState extends State<CallerDashboard> {
         color: AppTheme.greenNeon,
         backgroundColor: AppTheme.ink900,
         onRefresh: () async {
-          await tele.fetchBackendData();
           await tele.fetchDeviceCallLogs();
+          await tele.refreshProfile();
+          await tele.fetchBackendData();
+          await tele.refreshRecordingSetupStatus();
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -158,6 +159,48 @@ class _CallerDashboardState extends State<CallerDashboard> {
                 ],
               ),
               const SizedBox(height: 16),
+
+              // Calls are not being recorded with sound: say why and how to fix it
+              if (recordingProblem != null) ...[
+                GestureDetector(
+                  onTap: () async {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const CallRecordingSetupScreen()),
+                    );
+                    await tele.refreshRecordingSetupStatus();
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppTheme.redOverdue,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppTheme.ink900, width: 1.5),
+                      boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.mic_off_rounded, color: AppTheme.white, size: 22),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('CALLS ARE NOT BEING RECORDED',
+                                  style: AppTheme.label(size: 9.5, color: AppTheme.white, letterSpacing: 0.14)),
+                              const SizedBox(height: 4),
+                              Text(recordingProblem, style: AppTheme.body(size: 12, color: AppTheme.white)),
+                              const SizedBox(height: 4),
+                              Text('TAP TO FIX →', style: AppTheme.mono(size: 10, color: AppTheme.white, weight: FontWeight.w700)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+              ],
 
               // Card 1: DAILY TARGET
               NeoCard(
