@@ -585,20 +585,8 @@ class MainActivity : FlutterActivity() {
             return logsList
         }
 
-        // PHONE_ACCOUNT_ID holds the subscription id (newer Android) or the SIM's ICCID (older):
-        // map by exact equality only. Anything else is reported as 0 = unknown.
-        val subIdToSlot = HashMap<String, Int>()
-        val iccIdToSlot = HashMap<String, Int>()
-        val subs = activeSubscriptions()
-        for (info in subs) {
-            val slot = info.simSlotIndex + 1
-            subIdToSlot[info.subscriptionId.toString()] = slot
-            try {
-                val icc = info.iccId
-                if (!icc.isNullOrEmpty()) iccIdToSlot[icc.lowercase(Locale.US)] = slot
-            } catch (_: Exception) {}
-        }
-        val onlySlot = if (subs.size == 1) subs[0].simSlotIndex + 1 else 0
+        // PHONE_ACCOUNT_ID -> SIM slot: subscription id, ICCID or telecom account id (SimSlots). 0 = unknown.
+        val sims = SimSlots.Resolver(this)
 
         try {
             val uri = CallLog.Calls.CONTENT_URI
@@ -637,12 +625,7 @@ class MainActivity : FlutterActivity() {
                     val durationLong = if (durationIdx != -1) it.getLong(durationIdx) else 0L
                     val phoneAccountId = if (accountIdx != -1) it.getString(accountIdx) ?: "" else ""
 
-                    val simSlot = when {
-                        phoneAccountId.isEmpty() -> onlySlot
-                        subIdToSlot.containsKey(phoneAccountId) -> subIdToSlot[phoneAccountId] ?: 0
-                        iccIdToSlot.containsKey(phoneAccountId.lowercase(Locale.US)) -> iccIdToSlot[phoneAccountId.lowercase(Locale.US)] ?: 0
-                        else -> onlySlot
-                    }
+                    val simSlot = sims.slotFor(phoneAccountId)
 
                     val typeStr = when (typeInt) {
                         CallLog.Calls.OUTGOING_TYPE -> "outgoing"

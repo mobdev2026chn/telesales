@@ -191,13 +191,15 @@ class CallMonitorService : Service() {
                 CallLog.Calls.NUMBER, CallLog.Calls.CACHED_NAME, CallLog.Calls.TYPE,
                 CallLog.Calls.DATE, CallLog.Calls.DURATION, CallLog.Calls.PHONE_ACCOUNT_ID
             )
+            val sims = SimSlots.Resolver(this)
+            val simCount = SimSlots.activeSimCount(this)
             contentResolver.query(
                 CallLog.Calls.CONTENT_URI, projection, "${CallLog.Calls.DATE} >= ?",
                 arrayOf(since.toString()), "${CallLog.Calls.DATE} ASC"
             )?.use { c ->
                 while (c.moveToNext() && calls.length() < MAX_PUSH_BATCH) {
-                    val slot = slotFromAccountId(c.getString(5) ?: "")
-                    if (!CallMonitorStore.isWorkSim(slot, session.simMode)) continue // personal SIM: never leaves the phone
+                    val slot = sims.slotFor(c.getString(5))
+                    if (!CallMonitorStore.isWorkSim(slot, session.simMode, simCount)) continue // personal SIM: never leaves the phone
                     val number = c.getString(0) ?: ""
                     val date = c.getLong(3)
                     val type = when (c.getInt(2)) {
@@ -393,7 +395,9 @@ class CallMonitorService : Service() {
 
     private fun maybeStartOwnRecording() {
         val session = CallMonitorStore.recordingSession(this) ?: return
-        if (!CallMonitorStore.isWorkSim(callSlot, session.simMode)) return
+        // The SIM of an outgoing call is often unknown at this point: record unless it is positively the
+        // personal SIM. The call-log row decides after the call, and a non-work recording is deleted then.
+        if (!CallMonitorStore.isWorkSim(callSlot, session.simMode, 1)) return
         // The phone's own recorder handles it: do not compete with it for the microphone
         if (CallMonitorStore.nativeRecorderDetected(this) && CallMonitorStore.hasMediaPermission(this)) return
         if (!CallMonitorStore.hasPermission(this, Manifest.permission.RECORD_AUDIO)) return
@@ -453,7 +457,7 @@ class CallMonitorService : Service() {
         }
         val number = row?.number?.ifEmpty { null } ?: call.number
         val slot = if (row != null && row.simSlot > 0) row.simSlot else call.simSlot
-        if (!CallMonitorStore.isWorkSim(slot, session.simMode)) {
+        if (!CallMonitorStore.isWorkSim(slot, session.simMode, SimSlots.activeSimCount(this))) {
             own?.file?.delete()
             return
         }
@@ -606,29 +610,10 @@ class CallMonitorService : Service() {
         }
     }
 
-    private fun activeSubscriptions(): List<android.telephony.SubscriptionInfo> {
-        return try {
-            if (!CallMonitorStore.hasPermission(this, Manifest.permission.READ_PHONE_STATE)) return emptyList()
-            val sm = getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as? SubscriptionManager
-            sm?.activeSubscriptionInfoList ?: emptyList()
-        } catch (_: Exception) {
-            emptyList()
-        }
-    }
+    private fun activeSubscriptions(): List<android.telephony.SubscriptionInfo> = SimSlots.activeSubscriptions(this)
 
-    /** PHONE_ACCOUNT_ID is the subscription id (newer Android) or the ICCID (older). 0 = unknown. */
-    private fun slotFromAccountId(accountId: String): Int {
-        val subs = activeSubscriptions()
-        val only = if (subs.size == 1) subs[0].simSlotIndex + 1 else 0
-        if (accountId.isEmpty()) return only
-        for (info in subs) {
-            if (info.subscriptionId.toString() == accountId) return info.simSlotIndex + 1
-            try {
-                if (!info.iccId.isNullOrEmpty() && info.iccId.equals(accountId, ignoreCase = true)) return info.simSlotIndex + 1
-            } catch (_: Exception) {}
-        }
-        return only
-    }
+    /** 1-based SIM slot of a call-log PHONE_ACCOUNT_ID (subscription id, ICCID or telecom account). 0 = unknown. */
+    private fun slotFromAccountId(accountId: String): Int = SimSlots.Resolver(this).slotFor(accountId)
 
     /** 1-based SIM slot of the subscription named in a PHONE_STATE broadcast, 0 when unknown. */
     private fun slotFromIntent(intent: Intent): Int {

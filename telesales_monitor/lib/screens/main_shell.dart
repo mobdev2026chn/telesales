@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../providers/tele_provider.dart';
+import '../widgets/work_sim_picker.dart';
 import 'manager/manager_dashboard.dart';
 import 'manager/leaderboard_screen.dart';
 import 'manager/employee_detail_screen.dart';
@@ -20,9 +21,28 @@ class MainShell extends StatefulWidget {
 }
 
 class _MainShellState extends State<MainShell> {
+  bool _simPromptOpen = false;
+
+  /// Signed-in caller on a dual-SIM phone whose work SIM is unknown: ask once which SIM holds the
+  /// registered number, so the other SIM's calls are never tracked.
+  void _maybeAskWorkSim(TeleProvider tele) {
+    if (!tele.needsWorkSimChoice || _simPromptOpen) return;
+    _simPromptOpen = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final slot = await showWorkSimPicker(context, sims: tele.detectedSims, registeredPhone: tele.verifiedTrackingNumber);
+      if (slot != null) {
+        await tele.setWorkSimForRegisteredNumber(slot);
+        _simPromptOpen = false;
+      }
+      // Closed without a choice: not asked again until the app is opened next time
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final tele = Provider.of<TeleProvider>(context);
+    _maybeAskWorkSim(tele);
     final isManager = tele.currentRole == UserRole.manager && !tele.isManagerCallerMode;
     final isEmpDetailOpen = tele.selectedEmployee != null;
 

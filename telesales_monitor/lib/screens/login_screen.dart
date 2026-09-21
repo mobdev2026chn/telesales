@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/neo_button.dart';
 import '../widgets/ticker_banner.dart';
+import '../widgets/work_sim_picker.dart';
 import '../providers/tele_provider.dart';
 import 'main_shell.dart';
 
@@ -98,6 +99,8 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() => _isLoading = false);
       if (result['requiresPhoneInput'] == true) {
         _showMobileNumberVerificationSheet(context, tele, result['user'] as Map<String, dynamic>?);
+      } else if (result['requiresSimChoice'] == true) {
+        await _chooseWorkSimAndFinish(tele, result['phone']?.toString() ?? '');
       } else if (result['success'] == true) {
         Navigator.of(context).pushReplacement(
           PageRouteBuilder(
@@ -117,6 +120,27 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         );
       }
+    }
+  }
+
+  /// Dual-SIM phone that cannot tell which SIM holds the registered number: the caller picks it,
+  /// then the login completes. Only that SIM's calls are tracked.
+  Future<void> _chooseWorkSimAndFinish(TeleProvider tele, String phone) async {
+    final slot = await showWorkSimPicker(context, sims: tele.detectedSims, registeredPhone: phone);
+    if (!mounted) return;
+    if (slot == null) {
+      tele.cancelPendingSimChoice();
+      setState(() => _authError = 'Choose the SIM that holds your registered number to sign in.');
+      return;
+    }
+    setState(() => _isLoading = true);
+    final res = await tele.completeLoginWithWorkSim(slot);
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+    if (res['success'] == true) {
+      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const MainShell()));
+    } else {
+      setState(() => _authError = res['message']?.toString() ?? 'Sign in failed. Please try again.');
     }
   }
 
@@ -581,7 +605,10 @@ class _LoginScreenState extends State<LoginScreen> {
                             final sheetNavigator = Navigator.of(ctx);
                             final pageNavigator = Navigator.of(context);
                             final res = await tele.linkAndVerifySimPhone(inputPhone: raw);
-                            if (res['success'] == true) {
+                            if (res['requiresSimChoice'] == true) {
+                              sheetNavigator.pop();
+                              await _chooseWorkSimAndFinish(tele, res['phone']?.toString() ?? raw);
+                            } else if (res['success'] == true) {
                               sheetNavigator.pop();
                               pageNavigator.pushReplacement(
                                 MaterialPageRoute(builder: (_) => const MainShell()),

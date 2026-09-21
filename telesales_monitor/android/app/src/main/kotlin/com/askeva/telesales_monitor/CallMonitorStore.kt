@@ -86,9 +86,14 @@ object CallMonitorStore {
         return if (s.isCallerContext && s.autoRecord) s else null
     }
 
-    /** Slot 0 = unknown: kept (as in the Dart code). Calls positively on the personal SIM are dropped. */
-    fun isWorkSim(slot: Int, simMode: String): Boolean {
-        if (slot <= 0) return true
+    /**
+     * Only calls on the registered (work) SIM are tracked, recorded and uploaded.
+     * Slot 0 = the phone could not tell which SIM carried the call: kept only when both SIMs are
+     * tracked or the phone has a single SIM; on a dual-SIM phone it may be the personal SIM, so it is
+     * dropped (same rule as the Dart code).
+     */
+    fun isWorkSim(slot: Int, simMode: String, activeSimCount: Int): Boolean {
+        if (slot <= 0) return simMode == "bothSims" || activeSimCount <= 1
         return when (simMode) {
             "sim1Only" -> slot == 1
             "sim2Only" -> slot == 2

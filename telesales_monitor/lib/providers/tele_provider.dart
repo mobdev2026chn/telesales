@@ -15,6 +15,7 @@ import '../models/notification_model.dart';
 import '../services/api_parsers.dart';
 import '../services/api_service.dart';
 import '../services/call_recording_setup.dart';
+import '../services/work_sim.dart';
 
 enum UserRole { manager, caller }
 enum SimTrackingMode { sim1Only, sim2Only, bothSims }
@@ -287,19 +288,11 @@ class TeleProvider extends ChangeNotifier {
     await prefs.remove('pending_recording_uploads');
   }
 
-  /// SIM slot 0 means the device could not tell which SIM carried the call: keep it (work data
-  /// must not be lost); calls positively identified on the personal SIM are dropped.
-  bool _isWorkSim(int simSlot) {
-    if (simSlot <= 0) return true;
-    switch (_simTrackingMode) {
-      case SimTrackingMode.sim1Only:
-        return simSlot == 1;
-      case SimTrackingMode.sim2Only:
-        return simSlot == 2;
-      case SimTrackingMode.bothSims:
-        return true;
-    }
-  }
+  /// Only calls on the registered (work) SIM are tracked and sent to the server.
+  /// SIM slot 0 means the device could not tell which SIM carried the call: kept when both SIMs are
+  /// tracked or the phone has one SIM; on a dual-SIM phone it may be the personal SIM, so it is dropped
+  /// (same rule as CallMonitorStore.isWorkSim on the native side).
+  bool _isWorkSim(int simSlot) => isWorkSimCall(simSlot, _simTrackingMode.name, _detectedSims.length);
 
   String _authToken = '';
   String get authToken => _authToken;
@@ -471,6 +464,7 @@ class TeleProvider extends ChangeNotifier {
       await refreshProfile();
     }
     if (_isLoggedIn) {
+      await _checkWorkSimForSession(); // before the first sync: only the registered SIM's calls
       await fetchDeviceCallLogs();
       await fetchBackendData();
       CallRecordingChannel.retryUploads();
@@ -1295,6 +1289,10 @@ class TeleProvider extends ChangeNotifier {
 
   void setSimTrackingMode(SimTrackingMode mode) {
     _simTrackingMode = mode;
+    // A specific SIM picked in settings becomes this caller's remembered work SIM
+    if (_isLoggedIn && mode != SimTrackingMode.bothSims) {
+      _rememberWorkSim(_verifiedTrackingNumber, mode == SimTrackingMode.sim2Only ? 2 : 1);
+    }
     _savePreferences();
     notifyListeners();
   }
@@ -1391,6 +1389,8 @@ class TeleProvider extends ChangeNotifier {
     _lastCallSyncAck = null;
     _lastCallSyncAt = null;
     _callSyncPending = false;
+    _needsWorkSimChoice = false;
+    _pendingSimChoice = null;
 
     // Filters
     _selectedTeamFilter = 'ALL';
@@ -1525,21 +1525,126 @@ class TeleProvider extends ChangeNotifier {
         };
       }
 
-      await _beginSession(res, user);
-      _currentRole = UserRole.caller;
-      _isManagerCallerMode = userRole == 'manager' || userRole == 'jr_manager';
-      await _savePreferences();
-      _pushAutoRecordToNative();
-      await fetchDeviceCallLogs();
-      await fetchBackendData();
-      _startPeriodicSyncTimer();
-      refreshRecordingSetupStatus();
-      notifyListeners();
-      return {'success': true, 'message': 'Caller authentication successful'};
+      // Only the registered number's SIM is tracked: find it, or let the caller pick it
+      final workSlot = await _resolveWorkSimSlot(regPhone, simCheck);
+      if (workSlot == null) {
+        _pendingSimChoice = {'res': res, 'user': user, 'role': userRole, 'phone': regPhone};
+        return {
+          'success': false,
+          'requiresSimChoice': true,
+          'phone': last10Digits(regPhone),
+          'message': 'Choose the SIM that holds your registered number.',
+        };
+      }
+      if (workSlot > 0) _applyWorkSim(workSlot);
+      return await _finishCallerLogin(res, user, userRole);
     } catch (e) {
       debugPrint('TeleProvider.performLogin notice: $e');
     }
     return {'success': false, 'message': 'Could not reach server. Check backend connection.'};
+  }
+
+  // ---- Work SIM: the SIM that holds the caller's registered number ----
+  // Remembered per registered number (device setting that survives logout), so one caller's choice is
+  // never applied to another caller who signs in on the same phone.
+  static String _workSimKey(String phone) => 'work_sim_slot_${last10Digits(phone)}';
+
+  /// Login waiting for the caller to pick their SIM (dual-SIM phone that cannot tell by itself).
+  Map<String, dynamic>? _pendingSimChoice;
+
+  /// A signed-in caller on a dual-SIM phone whose work SIM is not known yet: the app asks once.
+  bool _needsWorkSimChoice = false;
+  bool get needsWorkSimChoice => _needsWorkSimChoice;
+
+  /// 1-based slot of the registered number's SIM: the SIM whose number matches, the caller's
+  /// remembered choice, or the phone's only SIM. -1 = SIM info not readable (tracking unchanged).
+  /// Null = dual-SIM phone that cannot tell: the caller has to pick.
+  Future<int?> _resolveWorkSimSlot(String registeredPhone, Map<String, dynamic> simCheck) async {
+    if (last10Digits(registeredPhone).length != 10) return -1;
+    final prefs = await SharedPreferences.getInstance();
+    final key = _workSimKey(registeredPhone);
+    final matched = simCheck['matched'] == true && simCheck['slotIndex'] is int ? (simCheck['slotIndex'] as int) + 1 : null;
+    if (matched != null) await prefs.setInt(key, matched);
+    return pickWorkSimSlot(
+      matchedSlot: matched,
+      savedSlot: prefs.getInt(key),
+      detectedSlots: _detectedSims.map((s) => s.slotIndex + 1).toSet(),
+    );
+  }
+
+  void _applyWorkSim(int slot) {
+    _activeSimSlot = slot;
+    _simTrackingMode = slot == 2 ? SimTrackingMode.sim2Only : SimTrackingMode.sim1Only;
+  }
+
+  Future<void> _rememberWorkSim(String phone, int slot) async {
+    if (last10Digits(phone).length != 10 || (slot != 1 && slot != 2)) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_workSimKey(phone), slot);
+  }
+
+  Future<Map<String, dynamic>> _finishCallerLogin(Map<String, dynamic> res, Map<String, dynamic> user, String userRole) async {
+    await _beginSession(res, user);
+    _currentRole = UserRole.caller;
+    _isManagerCallerMode = userRole == 'manager' || userRole == 'jr_manager';
+    _needsWorkSimChoice = false;
+    await _savePreferences();
+    _pushAutoRecordToNative();
+    await fetchDeviceCallLogs();
+    await fetchBackendData();
+    _startPeriodicSyncTimer();
+    refreshRecordingSetupStatus();
+    notifyListeners();
+    return {'success': true, 'message': 'Caller authentication successful'};
+  }
+
+  /// Completes a login that asked the caller which SIM holds the registered number (1 or 2).
+  Future<Map<String, dynamic>> completeLoginWithWorkSim(int slot) async {
+    final p = _pendingSimChoice;
+    if (p == null) return {'success': false, 'message': 'Session expired. Please sign in again.'};
+    _pendingSimChoice = null;
+    await _rememberWorkSim(asString(p['phone']), slot);
+    _applyWorkSim(slot);
+    return _finishCallerLogin(
+      Map<String, dynamic>.from(p['res'] as Map),
+      Map<String, dynamic>.from(p['user'] as Map),
+      asString(p['role'], 'caller'),
+    );
+  }
+
+  void cancelPendingSimChoice() {
+    if (!_isLoggedIn) _pendingSimChoice = null;
+  }
+
+  /// Signed-in caller picked their work SIM (1 or 2): only that SIM's calls are tracked from now on.
+  Future<void> setWorkSimForRegisteredNumber(int slot) async {
+    await _rememberWorkSim(_verifiedTrackingNumber, slot);
+    _applyWorkSim(slot);
+    _needsWorkSimChoice = false;
+    await _savePreferences();
+    notifyListeners();
+    await fetchDeviceCallLogs(); // re-filter the list for the chosen SIM
+  }
+
+  /// On app start: make sure the tracked SIM is this caller's registered SIM (not an old setting).
+  Future<void> _checkWorkSimForSession() async {
+    if (!_isLoggedIn || !_isCallerContext || last10Digits(_verifiedTrackingNumber).length != 10) return;
+    final check = await verifyRegisteredSimCard(_verifiedTrackingNumber);
+    final slot = await _resolveWorkSimSlot(_verifiedTrackingNumber, check);
+    if (slot == null) {
+      _needsWorkSimChoice = true;
+      notifyListeners();
+      return;
+    }
+    _needsWorkSimChoice = false;
+    if (slot > 0) {
+      final before = _simTrackingMode;
+      _applyWorkSim(slot);
+      if (before != _simTrackingMode) {
+        await _savePreferences();
+        notifyListeners();
+      }
+    }
   }
 
   /// Links the signed-in caller's own number (POST /auth/link-phone with the session token) and
@@ -1575,18 +1680,22 @@ class TeleProvider extends ChangeNotifier {
     user['phone'] = asString(user['phone']).isNotEmpty ? user['phone'] : last10;
     _pendingPhoneLink = null;
 
-    await _beginSession(Map<String, dynamic>.from(pending['res'] as Map), user);
+    final res = Map<String, dynamic>.from(pending['res'] as Map);
     final role = asString(user['role'], 'caller').toLowerCase();
-    _currentRole = UserRole.caller;
-    _isManagerCallerMode = role == 'manager' || role == 'jr_manager';
-    await _savePreferences();
-    _pushAutoRecordToNative();
-    await fetchDeviceCallLogs();
-    await fetchBackendData();
-    _startPeriodicSyncTimer();
-    refreshRecordingSetupStatus();
-    notifyListeners();
-    return {'success': true, 'message': 'Mobile SIM number linked and verified successfully!'};
+    // Only the registered number's SIM is tracked: find it, or let the caller pick it
+    final workSlot = await _resolveWorkSimSlot(last10, simCheck);
+    if (workSlot == null) {
+      _pendingSimChoice = {'res': res, 'user': user, 'role': role, 'phone': last10};
+      return {
+        'success': false,
+        'requiresSimChoice': true,
+        'phone': last10,
+        'message': 'Choose the SIM that holds your registered number.',
+      };
+    }
+    if (workSlot > 0) _applyWorkSim(workSlot);
+    final done = await _finishCallerLogin(res, user, role);
+    return {...done, 'message': 'Mobile SIM number linked and verified successfully!'};
   }
 
   /// Abandon a login that is waiting for phone linking.

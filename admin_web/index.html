@@ -3148,6 +3148,14 @@
           .sort((a, b) => ((b.c > 0) - (a.c > 0)) || (b.c - a.c) || (a.i - b.i))
           .map(x => x.u);
         const countCell = (n) => `<span style="font-family: var(--font-mono); font-weight: 700;"><span class="count-pill ${n > 0 ? 'is-good' : 'is-bad'}">${n}</span></span>`;
+        // Days in the selected period (India time), so WEEK / MONTH compare against daily target × days
+        const targetDays = (() => {
+          if (Store.dashCustomDate || !['week', 'month'].includes(Store.dashPeriod)) return 1;
+          const today = istDateStr(new Date());
+          if (Store.dashPeriod === 'month') return Number(today.slice(8, 10));
+          const [y, mo, d] = today.split('-').map(Number);
+          return ((new Date(Date.UTC(y, mo - 1, d)).getUTCDay() + 6) % 7) + 1;
+        })();
         teamContainer.innerHTML = ordered.map(u => {
           const row = statsFor(server.teamMembers, u);
           const uTotal = row ? Number(row.totalCalls) || 0 : 0;
@@ -3157,8 +3165,9 @@
           const uTalk = row ? Number(row.talkTimeSeconds) || 0 : 0;
           const mgrUser = Store.users.find(x => x.id === u.mgr);
           const mgrDisplay = mgrUser ? `${mgrUser.name} (${roleLabel(mgrUser.role)})` : 'Top Level / Admin';
-          const target = Number(u.target) || 0;
-          const pct = target > 0 ? Math.min(100, Math.round((uTotal / target) * 100)) : 0;
+          const target = (Number(u.target) || 0) * targetDays;  // daily target × days in the period
+          const attain = target > 0 ? Math.round((uTotal / target) * 100) : 0;
+          const pct = Math.min(100, attain);
           return `
             <div class="table-body-row" data-open-user="${esc(u.id)}" title="Open ${esc(u.name)}'s details" style="grid-template-columns: 1.3fr 1.3fr 1.1fr 0.8fr 0.9fr 0.9fr 1.4fr; cursor: pointer;">
               <strong style="display: flex; align-items: center; gap: 8px; min-width: 0;"><span class="presence-dot ${active ? 'is-online' : 'is-offline'}" role="img" aria-label="${esc(statusTitle)}" title="${esc(statusTitle)}"></span><span style="overflow: hidden; text-overflow: ellipsis;">${userLink(u)}</span></strong>
@@ -3171,7 +3180,7 @@
                 <div style="flex: 1; height: 12px; background: #E3DFD2; border-radius: 999px; border: 1px solid var(--ink-900); overflow: hidden;">
                   <div style="height: 100%; background: #7FD63B; width: ${pct}%; transition: width 0.5s ease;"></div>
                 </div>
-                <span style="font-family: var(--font-mono); font-size: 11px; white-space: nowrap;">${target > 0 ? `${uTotal}/${target} target` : 'no target'}</span>
+                <span style="font-family: var(--font-mono); font-size: 11px; white-space: nowrap;">${target > 0 ? `${uTotal}/${target} target · <strong>${attain}%</strong>` : 'no target'}</span>
               </div>
             </div>
           `;
@@ -4624,8 +4633,12 @@
       }
     }
 
+    // Recordings of 1 second or less are missed / cut-off calls with nothing to hear: never listed
+    const MIN_RECORDING_SECONDS = 1;
+    function isShortRecording(c) { return !(c.dur > MIN_RECORDING_SECONDS); }
+
     function filteredRecordings() {
-      let recs = Store.recordings.filter(isCallInScope);
+      let recs = Store.recordings.filter(isCallInScope).filter(c => !isShortRecording(c));
       if (Store.recFilter === 'IN') recs = recs.filter(c => c.dir === 'IN');
       if (Store.recFilter === 'OUT') recs = recs.filter(c => c.dir === 'OUT');
       if (Store.recFilter === '5+') recs = recs.filter(c => c.dur >= 300);
@@ -4749,7 +4762,9 @@
       const pageRecs = recs.slice((Store.recPage - 1) * REC_PAGE_SIZE, Store.recPage * REC_PAGE_SIZE);
 
       // Only part of the list is loaded at a time: unfiltered, show the server's full count for this scope
-      const recTotal = Store.recFilter === 'ALL' && Store.recsScopeKey === scopeParam() ? Math.max(Store.recsTotal || 0, recs.length) : recs.length;
+      // (the server's count includes the hidden 1-second files, so those loaded are taken off)
+      const shortLoaded = Store.recordings.filter(c => isCallInScope(c) && isShortRecording(c)).length;
+      const recTotal = Store.recFilter === 'ALL' && Store.recsScopeKey === scopeParam() ? Math.max((Store.recsTotal || 0) - shortLoaded, recs.length) : recs.length;
       $('recsHeaderCount').textContent = `CALL RECORDINGS · ${recTotal} FILES${recTotal > recs.length ? ` (${recs.length} LOADED)` : ''}`;
       $('recReviewerName').textContent = (Store.authUser && Store.authUser.name ? Store.authUser.name : '—').toUpperCase();
       const listEl = $('recordingsCardsList');
