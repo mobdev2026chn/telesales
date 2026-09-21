@@ -829,6 +829,17 @@
       .tree-node { flex-wrap: wrap; }
       #tab-recs .neo-card { padding: 16px !important; }
     }
+
+    /* Online / offline dot beside an agent's name */
+    .presence-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      border: 1px solid var(--ink-900);
+    }
+    .presence-dot.is-online { background: #3DC838; }
+    .presence-dot.is-offline { background: #D0453A; }
   </style>
 </head>
 <body>
@@ -1299,7 +1310,7 @@
             </div>
             <div>
               <label class="user-form-label" for="fUserTarget">TARGET/DAY</label>
-              <input type="number" id="fUserTarget" value="40" min="0" max="1000" step="1" style="width: 100%; box-sizing: border-box; border: 1.5px solid var(--ink-900); border-radius: 10px; padding: 9px 12px; font-family: var(--font-mono); font-size: 13px;" />
+              <input type="number" id="fUserTarget" value="250" min="0" max="1000" step="1" style="width: 100%; box-sizing: border-box; border: 1.5px solid var(--ink-900); border-radius: 10px; padding: 9px 12px; font-family: var(--font-mono); font-size: 13px;" />
             </div>
             <button type="button" id="btnSaveUserRecord" onclick="saveUserRecord()" style="background: var(--lime-400); border: 1.5px solid var(--ink-900); border-radius: 999px; padding: 10px 20px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; cursor: pointer; box-shadow: 3px 3px 0 var(--ink-900); white-space: nowrap;">SAVE USER</button>
           </div>
@@ -1669,6 +1680,7 @@
     const TOKEN_KEY = 'askeva_admin_token';
     const USER_KEY = 'askeva_admin_user';
     const REFRESH_MS = 60 * 1000;
+    const DEFAULT_DAILY_TARGET = 250;   // same default as the server
     const DASH_LIVE_MS = 20 * 1000;
 
     function getToken() {
@@ -1918,7 +1930,7 @@
         phone: u.phone || '',
         role,
         team: u.team || '',
-        target: Number.isFinite(t) && u.dailyTarget !== null && u.dailyTarget !== '' ? t : (role === 'CALLER' ? 40 : 0),
+        target: Number.isFinite(t) && u.dailyTarget !== null && u.dailyTarget !== '' ? t : (role === 'CALLER' ? DEFAULT_DAILY_TARGET : 0),
         mgr: u.managerId ? String(u.managerId) : null,
         photoBase64: safeImage(u.photoBase64 || ''),
       };
@@ -2664,8 +2676,17 @@
           teamContainer.innerHTML = `<div class="empty-state">${Store.errors.users ? `COULD NOT LOAD USERS — ${esc(Store.errors.users)}` : 'NO TEAM MEMBERS IN THIS VIEW'}</div>`;
           return;
         }
-        teamContainer.innerHTML = callers.map(u => {
+        // Online people first, then offline; the existing order is kept inside each group.
+        // Re-sorted on every live refresh (20 s), so logins / logouts move rows without a page reload.
+        const isOnline = (u) => { const r = statsFor(server.teamMembers, u); return !!(r && r.online); };
+        const ordered = callers.map((u, i) => ({ u, i, on: isOnline(u) }))
+          .sort((a, b) => (b.on - a.on) || (a.i - b.i))
+          .map(x => x.u);
+        teamContainer.innerHTML = ordered.map(u => {
           const row = statsFor(server.teamMembers, u);
+          const online = !!(row && row.online);
+          const seen = row && row.lastSeenAt ? ` · last active ${fmtTs(new Date(row.lastSeenAt))}` : '';
+          const statusTitle = online ? 'Online' : `Offline${seen}`;
           const uTotal = row ? Number(row.totalCalls) || 0 : 0;
           const uConnected = row ? Number(row.connectedCalls) || 0 : 0;
           const uTalk = row ? Number(row.talkTimeSeconds) || 0 : 0;
@@ -2675,7 +2696,7 @@
           const pct = target > 0 ? Math.min(100, Math.round((uTotal / target) * 100)) : 0;
           return `
             <div class="table-body-row" style="grid-template-columns: 1.3fr 1.3fr 1.1fr 0.8fr 0.9fr 0.9fr 1.4fr;">
-              <strong>${esc(u.name)}</strong>
+              <strong style="display: flex; align-items: center; gap: 8px; min-width: 0;"><span class="presence-dot ${online ? 'is-online' : 'is-offline'}" role="img" aria-label="${esc(statusTitle)}" title="${esc(statusTitle)}"></span><span style="overflow: hidden; text-overflow: ellipsis;">${esc(u.name)}</span></strong>
               <span style="font-family: var(--font-mono); font-size: 11px; color: #5A6352; font-weight: 700;">${esc(mgrDisplay)}</span>
               <span style="font-family: var(--font-mono); font-size: 12px;">${esc(formatPhone(u.phone))}</span>
               <span style="font-family: var(--font-mono); font-weight: 700;">${uTotal}</span>
@@ -3630,7 +3651,7 @@
         $('fUserRole').value = 'CALLER';
         const me = getActiveUser();
         mgrSel.value = (me.role !== 'ADMIN' && mgrChoices.some(m => m.id === me.id)) ? me.id : (mgrSel.options[0] ? mgrSel.options[0].value : '');
-        $('fUserTarget').value = 40;
+        $('fUserTarget').value = DEFAULT_DAILY_TARGET;
       }
       passInput.type = 'password';
       const passIcon = $('eyeIconUserPass');
@@ -3652,7 +3673,7 @@
       const role = $('fUserRole').value;
       const mgr = $('fUserMgr').value;
       const rawTarget = $('fUserTarget').value.trim();
-      const target = rawTarget === '' ? (role === 'CALLER' ? 40 : 0) : Number(rawTarget);
+      const target = rawTarget === '' ? (role === 'CALLER' ? DEFAULT_DAILY_TARGET : 0) : Number(rawTarget);
       const editing = Store.editingUserId;
 
       $('fUserError').style.display = 'none';

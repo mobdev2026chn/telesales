@@ -200,6 +200,12 @@ class ApiService {
   }
 
   /// GET /auth/me. Returns `{success, user}`; null when offline.
+  /// POST /auth/logout: the admin dashboard shows this user as offline straight away. Best effort.
+  static Future<void> logout() async {
+    if (_token.isEmpty) return;
+    await _request('POST', '/auth/logout', timeout: const Duration(seconds: 5));
+  }
+
   static Future<Map<String, dynamic>?> fetchMe() async {
     final res = await _request('GET', '/auth/me');
     if (res == null) return null;
@@ -539,7 +545,7 @@ class ApiService {
     required String password,
     String role = 'caller',
     String team = 'Telesales Team',
-    int dailyTarget = 40,
+    int dailyTarget = kDefaultDailyTarget,
     String? managerId,
     String? managerName,
   }) async {

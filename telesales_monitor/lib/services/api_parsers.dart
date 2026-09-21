@@ -7,6 +7,9 @@ import '../models/lead_model.dart';
 import '../models/recording_model.dart';
 
 /// JSON numbers may arrive as int, double or numeric strings. Never throws.
+/// Daily call target when none is set (same default as the server).
+const int kDefaultDailyTarget = 250;
+
 int asInt(dynamic v, [int fallback = 0]) {
   if (v is num) return v.toInt();
   if (v is String) return num.tryParse(v.trim())?.toInt() ?? fallback;
@@ -97,7 +100,7 @@ EmployeeModel employeeFromJson(Map<String, dynamic> e) {
     missedCalls: asInt(e['missedCalls']),
     neverAttendedCalls: asInt(e['neverAttendedCalls']),
     rank: asInt(e['rank']),
-    dailyTarget: asInt(e['dailyTarget'], 40) > 0 ? asInt(e['dailyTarget'], 40) : 40,
+    dailyTarget: asInt(e['dailyTarget'], kDefaultDailyTarget) > 0 ? asInt(e['dailyTarget'], kDefaultDailyTarget) : kDefaultDailyTarget,
   );
 }
 

@@ -80,6 +80,8 @@ class CallMonitorService : Service() {
 
         private val BUILTIN_POLL_OFFSETS_MS = longArrayOf(4000L, 7000L, 11000L, 16000L)
         private const val MIN_TALK_SECONDS_FOR_MISS = 5
+        /** Server marks a user offline after 5 minutes without any request. */
+        private const val HEARTBEAT_EVERY_SEC = 120L
     }
 
     private data class EndedCall(
@@ -96,6 +98,8 @@ class CallMonitorService : Service() {
 
     /** Post-call work runs one call at a time, off the main thread. */
     private val worker: ExecutorService = Executors.newSingleThreadExecutor()
+    /** "Still here" pings, so the admin dashboard shows this caller as online while logged in. */
+    private var heartbeat: java.util.concurrent.ScheduledExecutorService? = null
     private var receiver: BroadcastReceiver? = null
 
     // Current call
@@ -136,8 +140,38 @@ class CallMonitorService : Service() {
         registerCallReceiver()
         isRunning = true
         RecordingUploader.schedule(this) // retry anything left from earlier
+        startHeartbeat()
         CallMonitorEvents.emit("onCallMonitorState", mapOf("running" to true))
         return START_STICKY
+    }
+
+    private fun startHeartbeat() {
+        if (heartbeat != null) return
+        heartbeat = Executors.newSingleThreadScheduledExecutor().also {
+            it.scheduleWithFixedDelay({ sendHeartbeat() }, 0, HEARTBEAT_EVERY_SEC, java.util.concurrent.TimeUnit.SECONDS)
+        }
+    }
+
+    /** POST <base>/auth/heartbeat with the session token. Failures are ignored (next ping retries). */
+    private fun sendHeartbeat() {
+        val session = CallMonitorStore.session(this) ?: return
+        if (session.token.isEmpty() || session.token == CallMonitorStore.authFailedToken(this)) return
+        var conn: java.net.HttpURLConnection? = null
+        try {
+            conn = (java.net.URL("${CallMonitorStore.baseUrl(this)}/auth/heartbeat").openConnection() as java.net.HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = 15_000
+                readTimeout = 15_000
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("Authorization", "Bearer ${session.token}")
+            }
+            conn.outputStream.use { it.write("{}".toByteArray()) }
+            conn.responseCode
+        } catch (_: Exception) {
+        } finally {
+            conn?.disconnect()
+        }
     }
 
     private fun buildNotification(text: String): Notification {
@@ -511,6 +545,8 @@ class CallMonitorService : Service() {
 
     override fun onDestroy() {
         isRunning = false
+        heartbeat?.shutdownNow()
+        heartbeat = null
         try { receiver?.let { unregisterReceiver(it) } } catch (_: Exception) {}
         receiver = null
         // Finish (and queue) a call that is still being recorded

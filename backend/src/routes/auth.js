@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Employee = require('../models/Employee');
 const { signToken, verifyAndUpgradePassword, requireAuth, MANAGERS } = require('../middleware/auth');
+const presence = require('../services/presence');
 
 const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const last10 = (s) => String(s || '').replace(/[^0-9]/g, '').slice(-10);
@@ -16,7 +17,7 @@ function publicUser(emp, extra = {}) {
     team: emp.team || '',
     managerId: emp.managerId || '',
     managerName: emp.managerName || '',
-    dailyTarget: Number.isFinite(emp.dailyTarget) ? emp.dailyTarget : 40,
+    dailyTarget: Number.isFinite(emp.dailyTarget) ? emp.dailyTarget : Employee.DEFAULT_DAILY_TARGET,
     ...extra,
   };
 }
@@ -57,6 +58,7 @@ async function login(req, res, { allowedRoles, wrongRoleMessage }) {
   }
 
   const token = signToken(emp);
+  presence.touch(emp.id); // online from the moment of login
   return res.json({
     success: true,
     token,
@@ -110,6 +112,21 @@ router.get('/me', requireAuth(), async (req, res) => {
     res.json({ success: true, user: publicUser(emp) });
   } catch (err) {
     res.status(500).json({ success: false, message: 'Could not load profile.' });
+  }
+});
+
+// POST /api/auth/heartbeat — "still here" from a signed-in app (the auth middleware records it)
+router.post('/heartbeat', requireAuth(), (req, res) => {
+  res.json({ success: true });
+});
+
+// POST /api/auth/logout — marks the user offline straight away
+router.post('/logout', requireAuth(), async (req, res) => {
+  try {
+    await presence.markLoggedOut(req.user.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Could not log out.' });
   }
 });
 

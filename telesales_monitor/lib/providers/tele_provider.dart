@@ -306,9 +306,9 @@ class TeleProvider extends ChangeNotifier {
   String get currentUserTeam => _currentUserTeam;
   String _currentUserId = '';
   String get currentUserId => _currentUserId;
-  int _currentUserDailyTarget = 40;
-  /// Per-user daily call target set by the admin (falls back to 40).
-  int get dailyTarget => _currentUserDailyTarget > 0 ? _currentUserDailyTarget : 40;
+  int _currentUserDailyTarget = kDefaultDailyTarget;
+  /// Per-user daily call target set by the admin (falls back to the default).
+  int get dailyTarget => _currentUserDailyTarget > 0 ? _currentUserDailyTarget : kDefaultDailyTarget;
   String _profilePhotoBase64 = '';
   String get profilePhotoBase64 => _profilePhotoBase64;
   String _profilePhotoPath = '';
@@ -381,7 +381,7 @@ class TeleProvider extends ChangeNotifier {
       _currentUserTeam = prefs.getString('current_user_team') ?? 'Telesales Team';
       _currentUserId = prefs.getString('current_user_id') ?? '';
       _currentUserEmail = prefs.getString('current_user_email') ?? '';
-      _currentUserDailyTarget = prefs.getInt('current_user_daily_target') ?? 40;
+      _currentUserDailyTarget = prefs.getInt('current_user_daily_target') ?? kDefaultDailyTarget;
       _isManagerCallerMode = prefs.getBool('manager_caller_mode') ?? false;
       _profilePhotoBase64 = prefs.getString('profile_photo_base64') ?? '';
       _profilePhotoPath = prefs.getString('profile_photo_path') ?? '';
@@ -1361,7 +1361,7 @@ class TeleProvider extends ChangeNotifier {
     _currentUserEmail = '';
     _currentUserRole = 'caller';
     _currentUserTeam = 'Telesales Team';
-    _currentUserDailyTarget = 40;
+    _currentUserDailyTarget = kDefaultDailyTarget;
     _currentRole = UserRole.caller;
     _isManagerCallerMode = false;
     _profilePhotoBase64 = '';
@@ -1596,7 +1596,11 @@ class TeleProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> logout() => purgeUserSession();
+  Future<void> logout() async {
+    // Before the token is cleared: the dashboard turns this user offline immediately
+    await ApiService.logout();
+    await purgeUserSession();
+  }
 
   void setTabIndex(int index) {
     _activeTabIndex = index;
@@ -2470,7 +2474,7 @@ class TeleProvider extends ChangeNotifier {
     required String password,
     String role = 'caller',
     String team = 'Telesales Team',
-    int dailyTarget = 40,
+    int dailyTarget = kDefaultDailyTarget,
     String? managerId,
     String? managerName,
   }) async {

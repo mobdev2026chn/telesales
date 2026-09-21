@@ -8,6 +8,7 @@ import '../../widgets/neo_card.dart';
 import '../../widgets/top_header.dart';
 import '../../providers/tele_provider.dart';
 import '../../models/employee_model.dart';
+import '../../services/api_parsers.dart';
 
 class LeaderboardScreen extends StatefulWidget {
   final Function(EmployeeModel) onSelectEmployee;
@@ -54,7 +55,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         final String talkTime = emp.talkTimeFormatted.isNotEmpty ? emp.talkTimeFormatted : '0s';
 
         final rate = calls > 0 ? ((conn / calls) * 100).toStringAsFixed(0) : '0';
-        final progress = calls > 0 ? (calls / (emp.dailyTarget > 0 ? emp.dailyTarget : 40)).clamp(0.01, 1.0) : 0.0;
+        final progress = calls > 0 ? (calls / (emp.dailyTarget > 0 ? emp.dailyTarget : kDefaultDailyTarget)).clamp(0.01, 1.0) : 0.0;
 
         final photo = isMe && tele.profilePhotoBase64.isNotEmpty ? tele.profilePhotoBase64 : emp.photoBase64;
 

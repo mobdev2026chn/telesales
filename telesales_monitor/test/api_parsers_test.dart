@@ -129,7 +129,7 @@ void main() {
       final e = employeeFromJson({'id': 'U2', 'name': 'X'});
       expect(e.totalCalls, 0);
       expect(e.reportingManagerId, isNull);
-      expect(e.dailyTarget, 40);
+      expect(e.dailyTarget, kDefaultDailyTarget);
     });
 
     test('recordingFromJson builds an absolute audio url and prefers callStartedAt', () {

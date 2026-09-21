@@ -639,7 +639,7 @@ class _CallerProfileScreenState extends State<CallerProfileScreen> {
             onPressed: () async {
               final navigator = Navigator.of(context);
               Navigator.of(ctx).pop();
-              await tele.purgeUserSession();
+              await tele.logout();
               navigator.pushAndRemoveUntil(
                 PageRouteBuilder(
                   pageBuilder: (context, animation, secondaryAnimation) => const LoginScreen(),

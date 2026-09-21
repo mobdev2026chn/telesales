@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const presence = require('../services/presence');
 
 const TOKEN_TTL = '30d';
 
@@ -102,6 +103,8 @@ function authenticate(req, res, next) {
     };
     pin(req.query);
     if (req.body && typeof req.body === 'object' && !Array.isArray(req.body)) pin(req.body);
+    // Any signed-in request means the user is active (the logout request itself does not count)
+    if (!/\/auth\/logout$/.test(req.path)) presence.touch(req.user.id);
   }
   next();
 }

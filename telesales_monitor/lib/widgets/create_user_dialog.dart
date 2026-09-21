@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../providers/tele_provider.dart';
+import '../services/api_parsers.dart';
 
 class CreateUserDialog extends StatefulWidget {
   const CreateUserDialog({super.key});
@@ -24,7 +25,7 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
   final _phoneCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
-  final _targetCtrl = TextEditingController(text: '40');
+  final _targetCtrl = TextEditingController(text: '$kDefaultDailyTarget');
 
   String _selectedRole = 'caller';
   String _selectedTeam = 'Telesales Team';
@@ -55,7 +56,7 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
       password: _passwordCtrl.text.trim(),
       role: _selectedRole,
       team: _selectedTeam,
-      dailyTarget: int.tryParse(_targetCtrl.text.trim()) ?? 40,
+      dailyTarget: int.tryParse(_targetCtrl.text.trim()) ?? kDefaultDailyTarget,
     );
 
     setState(() => _isLoading = false);

@@ -5,6 +5,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/neo_card.dart';
 import '../../widgets/top_header.dart';
 import '../../providers/tele_provider.dart';
+import '../../services/api_parsers.dart';
 
 class ManagerDashboard extends StatelessWidget {
   final VoidCallback onNavigateToBoard;
@@ -101,7 +102,7 @@ class ManagerDashboard extends StatelessWidget {
     // Team target = sum of each caller's admin-set daily target
     final teamTarget = tele.employees
         .where((e) => e.role.toLowerCase() == 'caller')
-        .fold<int>(0, (sum, e) => sum + (e.dailyTarget > 0 ? e.dailyTarget : 40));
+        .fold<int>(0, (sum, e) => sum + (e.dailyTarget > 0 ? e.dailyTarget : kDefaultDailyTarget));
     final targetProgress = totalCalls > 0 && teamTarget > 0 ? (totalCalls / teamTarget).clamp(0.01, 1.0) : 0.0;
 
     return RefreshIndicator(

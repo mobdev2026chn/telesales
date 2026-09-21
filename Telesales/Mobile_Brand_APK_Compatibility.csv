@@ -1,0 +1,23 @@
+Mobile brand,APK installation,Call log sync,Call recording reliability,Recommended for this app,Important setup / limitation
+Samsung Galaxy,Yes - Android only,Good,Good on supported models and Android versions,Recommended,"Allow Phone, Call logs, Microphone, Notifications, Files, and unrestricted battery usage; test the exact model"
+OnePlus,Yes - Android only,Good,Medium to Good,"Recommended with testing","Disable battery optimization and allow background activity; recording availability varies by region and dialer"
+Xiaomi / Redmi / POCO,Yes - Android only,Good,Medium,"Works with setup","Set Autostart on, disable battery saver restrictions, allow all required permissions; native recorder behavior varies"
+OPPO,Yes - Android only,Good,Medium,"Works with setup","Allow background activity and unrestricted battery usage; test recording on the exact ColorOS version"
+Realme,Yes - Android only,Good,Medium,"Works with setup","Enable Autostart, background activity, and notifications; test dual-SIM selection and recording"
+Vivo,Yes - Android only,Good,Medium to Low,"Use only after device testing","Aggressive background restrictions may stop monitoring; enable Autostart and unrestricted battery use"
+Motorola,Yes - Android only,Good,Medium,"Generally suitable","Allow all permissions and battery-unrestricted operation; test the built-in recorder path"
+Google Pixel,Yes - Android only,Good,Low to Medium,"Suitable for call-log analytics; recording must be tested","Android and regional call-recording restrictions can limit audio capture"
+Nokia Android,Yes - Android only,Good,Medium,"Generally suitable","Use a recent Android version and test the phone app recording behavior"
+Tecno,Yes - Android only,Good,Low to Medium,"Test before deployment","HiOS battery management may stop background services; enable Autostart and disable optimization"
+Infinix,Yes - Android only,Good,Low to Medium,"Test before deployment","XOS battery management may stop background services; enable Autostart and disable optimization"
+HONOR,Yes - Android only,Good,Medium,"Works with setup","Allow background launch, notifications, and battery-unrestricted operation"
+Huawei,Yes - Android only,Limited on newer models,Low,"Not recommended for production recording","Newer devices may lack Google services and may restrict call recording or app compatibility"
+iPhone / iOS,No - APK cannot be installed,Not applicable,Not supported by current APK,"Not compatible","The current app is Android APK-based; iOS requires a separate iPhone app and different recording approach"
+Any Android brand with Android 8 or newer,Usually yes,Depends on permissions and OEM,Depends on model and region,"Install only after a real-device test","Verify the exact Android version, SIM behavior, phone app, call recording, battery settings, and permissions"
+
+Decision summary,,,,,
+Best first choices,,,,Samsung Galaxy; Motorola; OnePlus after testing,
+Use caution,,,,Xiaomi / Redmi / POCO; OPPO; Realme; Vivo; Tecno; Infinix; HONOR,
+Do not use current APK,,,,iPhone / iOS; newer Huawei devices,
+Important note,,,,APK installation does not guarantee call recording. The phone brand, exact model, Android version, region, dialer, SIM configuration, permissions, and battery settings all affect recording.,
+Testing checklist,,,,Make one outgoing call and one incoming call; test each SIM separately; confirm call log time is IST; confirm talk time; confirm recording upload; restart the phone and test again.,

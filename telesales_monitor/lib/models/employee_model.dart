@@ -29,7 +29,7 @@ class EmployeeModel {
     this.photoBase64,
     this.reportingManagerId,
     this.workSimSlot = 1,
-    this.dailyTarget = 40,
+    this.dailyTarget = 250, // kDefaultDailyTarget
     required this.totalCalls,
     required this.connectedCalls,
     required this.totalTalkTime,

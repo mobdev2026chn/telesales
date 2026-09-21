@@ -690,7 +690,7 @@ class _MoreScreenState extends State<MoreScreen> {
             onPressed: () async {
               final navigator = Navigator.of(context);
               Navigator.of(ctx).pop();
-              await tele.purgeUserSession();
+              await tele.logout();
               navigator.pushAndRemoveUntil(
                 PageRouteBuilder(
                   pageBuilder: (context, animation, secondaryAnimation) => const LoginScreen(),

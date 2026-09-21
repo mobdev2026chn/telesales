@@ -8,6 +8,7 @@ const Lead = require('../models/Lead');
 const { hashPassword } = require('../middleware/auth');
 const { getPeriodRange, aggregateCallStats, findCallerStats, buildDedupKey } = require('../services/callStats');
 const { resolveScope, callLogQueryFor, leadQueryFor, MANAGER_ROLES } = require('../services/scope');
+const { isOnline } = require('../services/presence');
 const { escapeRegex, last10, byIdQuery, phoneRegex, serverError, parseLimit, parseDate } = require('../utils/common');
 
 const DEFAULT_TEAM = 'Telesales Team';
@@ -75,7 +76,7 @@ router.get('/dashboard', async (req, res) => {
     const registeredEmployees = [...scope.employees].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
     const teamMemberStats = registeredEmployees.map(emp => {
       const m = memberStats(emp, stats);
-      const target = Number.isFinite(emp.dailyTarget) ? emp.dailyTarget : 40;
+      const target = Number.isFinite(emp.dailyTarget) ? emp.dailyTarget : Employee.DEFAULT_DAILY_TARGET;
       return {
         id: emp.id,
         name: emp.name,
@@ -86,6 +87,8 @@ router.get('/dashboard', async (req, res) => {
         managerId: emp.managerId || '',
         managerName: emp.managerName || '',
         dailyTarget: target,
+        online: isOnline(emp),
+        lastSeenAt: emp.lastSeenAt || null,
         ...m,
         talkTimeFormatted: fmtHM(m.talkTimeSeconds),
         progressPercent: Math.min(Math.round((m.totalCalls / target) * 100), 100),
@@ -101,7 +104,7 @@ router.get('/dashboard', async (req, res) => {
       };
     }
 
-    const teamDailyTarget = registeredEmployees.reduce((sum, emp) => sum + (Number.isFinite(emp.dailyTarget) ? emp.dailyTarget : 40), 0);
+    const teamDailyTarget = registeredEmployees.reduce((sum, emp) => sum + (Number.isFinite(emp.dailyTarget) ? emp.dailyTarget : Employee.DEFAULT_DAILY_TARGET), 0);
 
     // Ratios: numerator uses the same scope and period as the denominator
     const connectRatioPercent = totalCalls > 0 ? +((connectedCalls / totalCalls) * 100).toFixed(1) : 0;
@@ -129,8 +132,8 @@ router.get('/dashboard', async (req, res) => {
         name: emp.name,
         phone: emp.phone,
         managerName: emp.managerName,
-        status: active ? 'ON CALL' : (emp.totalCalls > 0 ? 'ONLINE' : 'OFFLINE'),
-        statusColor: active ? '#FF3B30' : (emp.totalCalls > 0 ? '#34C759' : '#8E8E93'),
+        status: active ? 'ON CALL' : (emp.online ? 'ONLINE' : 'OFFLINE'),
+        statusColor: active ? '#FF3B30' : (emp.online ? '#34C759' : '#8E8E93'),
         totalCalls: emp.totalCalls,
       };
     });
@@ -139,7 +142,7 @@ router.get('/dashboard', async (req, res) => {
     const visible = isMgr ? (scope.role === 'admin' ? await Employee.find({}).select('-photoBase64 -avatarUrl').lean() : await resolveScope(req, {}).then(s => s.employees)) : (scope.me ? [scope.me] : []);
     const allUsers = visible
       .filter(u => scope.role === 'admin' || u.role !== 'admin')
-      .map(u => ({ id: u.id, _id: u._id, name: u.name, email: u.email || '', phone: u.phone, role: u.role, team: u.team || DEFAULT_TEAM, managerId: u.managerId || '', managerName: u.managerName || '', dailyTarget: Number.isFinite(u.dailyTarget) ? u.dailyTarget : 40 }))
+      .map(u => ({ id: u.id, _id: u._id, name: u.name, email: u.email || '', phone: u.phone, role: u.role, team: u.team || DEFAULT_TEAM, managerId: u.managerId || '', managerName: u.managerName || '', dailyTarget: Number.isFinite(u.dailyTarget) ? u.dailyTarget : Employee.DEFAULT_DAILY_TARGET }))
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     const managersList = allUsers.filter(u => MANAGER_ROLES.includes(u.role))
       .map(u => ({ id: u.id, name: u.name, email: u.email, phone: u.phone, role: u.role, team: u.team }));
@@ -310,7 +313,7 @@ router.post('/users', async (req, res) => {
 
     const managerId = b.managerId ? String(b.managerId) : '';
     const managerName = typeof b.managerName === 'string' && b.managerName ? b.managerName : await managerNameFor(managerId);
-    const dailyTarget = b.dailyTarget !== undefined && b.dailyTarget !== '' ? Math.max(0, Math.round(Number(b.dailyTarget) || 0)) : 40;
+    const dailyTarget = b.dailyTarget !== undefined && b.dailyTarget !== '' ? Math.max(0, Math.round(Number(b.dailyTarget) || 0)) : Employee.DEFAULT_DAILY_TARGET;
 
     const newUser = await Employee.create({
       id: `user_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -445,7 +448,7 @@ router.get('/leaderboard', async (req, res) => {
         team: emp.team || DEFAULT_TEAM,
         managerId: emp.managerId || '',
         managerName: emp.managerName || '',
-        dailyTarget: Number.isFinite(emp.dailyTarget) ? emp.dailyTarget : 40,
+        dailyTarget: Number.isFinite(emp.dailyTarget) ? emp.dailyTarget : Employee.DEFAULT_DAILY_TARGET,
         ...m,
         talkTimeFormatted: fmtHM(m.talkTimeSeconds),
         avatarUrl: photo.avatarUrl || '',
