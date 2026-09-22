@@ -1177,23 +1177,15 @@
             </label>
             <div style="display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap;">
               <label for="leadAssignSelect" style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #B9C4B0;">ASSIGN TO</label>
-              <select id="leadAssignSelect" style="border: 1.5px solid #3DC838; background: #10180C; color: #EFECE3; border-radius: 999px; padding: 8px 14px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; cursor: pointer; max-width: 100%;">
-                <option value="auto">AUTO · ROUND-ROBIN</option>
+              <select id="leadAssignSelect" onchange="renderPendingUpload()" style="border: 1.5px solid #3DC838; background: #10180C; color: #EFECE3; border-radius: 999px; padding: 8px 14px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; cursor: pointer; max-width: 100%;">
+                <option value="">SELECT MANAGER…</option>
               </select>
               <button type="button" onclick="downloadLeadTemplate()" style="margin-left: auto; background: #C8FF4A; color: #10180C; border-radius: 999px; padding: 8px 18px; font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.12em; cursor: pointer; border: none;">⬇ DOWNLOAD TEMPLATE</button>
             </div>
+            <!-- The chosen file waits here until ASSIGN: it is then imported for the chosen manager, who splits it among their callers -->
             <div style="display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; border-top: 1px dashed #3DC838; padding-top: 14px;">
-              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #B9C4B0;">REASSIGN FRESH LEADS</span>
-              <label for="reassignFromSelect" class="visually-hidden">From agent</label>
-              <select id="reassignFromSelect" style="border: 1.5px solid #3DC838; background: #10180C; color: #EFECE3; border-radius: 999px; padding: 8px 14px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; cursor: pointer; max-width: 100%;">
-                <option value="">FROM…</option>
-              </select>
-              <span style="color: #7FD63B; font-weight: 700;" aria-hidden="true">→</span>
-              <label for="reassignToSelect" class="visually-hidden">To agent</label>
-              <select id="reassignToSelect" style="border: 1.5px solid #3DC838; background: #10180C; color: #EFECE3; border-radius: 999px; padding: 8px 14px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; cursor: pointer; max-width: 100%;">
-                <option value="">TO…</option>
-              </select>
-              <button type="button" onclick="doReassignLeads()" style="background: #3DC838; color: #10180C; border-radius: 999px; padding: 8px 18px; font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.12em; cursor: pointer; border: none;">MOVE</button>
+              <span id="pendingUploadText" style="flex: 1 1 200px; min-width: 0; font-family: var(--font-mono); font-size: 11px; color: #B9C4B0; overflow-wrap: anywhere;">NO FILE SELECTED</span>
+              <button type="button" id="leadAssignBtn" onclick="assignPendingUpload()" disabled style="background: #3DC838; color: #10180C; border-radius: 999px; padding: 8px 22px; font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.12em; cursor: pointer; border: none; opacity: 0.4;">ASSIGN</button>
             </div>
           </div>
 
@@ -1683,6 +1675,35 @@
   </div>
 
   <!-- ADD LEAD MODAL (pipeline "+ ADD CRM LEAD" and call-log "+ LEAD") -->
+  <!-- UPLOADED FILE DETAILS (Lead Calling · 02 Upload history) -->
+  <div id="batchModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="batchModalTitle">
+    <div class="modal-card" style="width: 960px; max-width: calc(100vw - 32px); max-height: 88vh; overflow-y: auto;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 14px;">
+        <div style="min-width: 0;">
+          <div style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em; font-weight: 700; color: var(--text-muted);">UPLOADED FILE DETAILS</div>
+          <div id="batchModalTitle" style="font-family: var(--font-display); font-size: 24px; overflow-wrap: anywhere; margin-top: 4px;">—</div>
+          <div id="batchModalMeta" style="font-family: var(--font-mono); font-size: 11px; color: #5A6352; margin-top: 4px;"></div>
+        </div>
+        <div style="display: flex; gap: 8px; flex-shrink: 0;">
+          <button type="button" class="filter-chip" onclick="exportBatchLeads()" title="Export this file's leads to Excel">⬇ EXPORT</button>
+          <button type="button" class="filter-chip" onclick="closeBatchModal()" aria-label="Close file details">✕ CLOSE</button>
+        </div>
+      </div>
+      <div id="batchModalSummary" style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;"></div>
+      <div id="batchModalAgents" style="font-family: var(--font-mono); font-size: 11px; color: #5A6352; margin-bottom: 12px; line-height: 1.6;"></div>
+      <!-- Manager splits the file's unassigned leads among their callers (each caller's lead target) -->
+      <div id="batchSplitSection"></div>
+      <label for="batchSearchInput" class="visually-hidden">Search this file's leads</label>
+      <input type="text" id="batchSearchInput" placeholder="Search lead, phone or agent…" oninput="onBatchSearch(this.value)" style="width: 100%; box-sizing: border-box; border: 1.5px solid var(--ink-900); border-radius: 999px; padding: 9px 18px; font-family: var(--font-mono); font-size: 12px; background: #fff; margin-bottom: 12px;" />
+      <div class="neo-table-card table-scroll-wrap">
+        <div class="table-head-row" style="grid-template-columns: 1.4fr 1.1fr 1fr 1fr 1.3fr 1.3fr;">
+          <span>LEAD</span><span>PHONE</span><span>AGENT</span><span>STATUS</span><span>DIAL ACTIVITY</span><span>NOTES</span>
+        </div>
+        <div id="batchModalRows"></div>
+      </div>
+    </div>
+  </div>
+
   <div id="leadFormModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="leadFormTitle">
     <form class="modal-card" style="width: 460px;" onsubmit="event.preventDefault(); saveLeadForm(); return false;" novalidate>
       <div id="leadFormTitle" style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em; font-weight: 700; margin-bottom: 16px;">ADD CRM LEAD</div>
@@ -2109,6 +2130,8 @@
         attempts: Number(l.attempts) || 0,
         agentId: l.assignedCallerId ? String(l.assignedCallerId) : '',
         agent: l.assignedCaller || '',
+        managerId: l.managerId ? String(l.managerId) : '',   // manager who owns the uploaded batch
+        managerName: l.managerName || '',
         notes: l.notes || '',
         batchName: l.batchName || '',
         source: l.source || '',
@@ -2203,7 +2226,8 @@
       if (me.role === 'ADMIN') return true;
       return getScopedCallers().some(u =>
         (l.agentId && l.agentId === u.id) ||
-        (!l.agentId && l.agent && l.agent.trim().toLowerCase() === (u.name || '').trim().toLowerCase()));
+        (!l.agentId && l.agent && l.agent.trim().toLowerCase() === (u.name || '').trim().toLowerCase()) ||
+        (!l.agentId && l.managerId && l.managerId === u.id));   // not split yet: owned by a manager in view
     }
 
     // Server-side scope for "view as" (the server pins real managers to their team regardless)
@@ -2711,6 +2735,8 @@
       Store.detailUserId = null;
       Store.recAgent = 'ALL';
       Store.recRange = 'today';
+      Store.pendingUpload = null;
+      Store.batchOpen = null;
       Store.dialCurrentLead = null;
       document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active'));
       ['dashTeamRows', 'callTableRows', 'leadQueueRows', 'userTableRows', 'teamTreeNodesBody', 'leaderboardTableRows',
@@ -3611,6 +3637,7 @@
       if (e.key !== 'Escape') return;
       if ($('dialModal').classList.contains('active')) { closeDialModal(); return; }
       if ($('leadFormModal').classList.contains('active')) { closeLeadFormModal(); return; }
+      if ($('batchModal').classList.contains('active')) { closeBatchModal(); return; }
       if (isTyping()) return;
       closeBottomAudioBar();
     });
@@ -3622,6 +3649,7 @@
       // Clicking the dimmed backdrop closes a dialog
       if (e.target && e.target.id === 'dialModal') { closeDialModal(); return; }
       if (e.target && e.target.id === 'leadFormModal') { closeLeadFormModal(); return; }
+      if (e.target && e.target.id === 'batchModal') { closeBatchModal(); return; }
       // Dashboard team table: anywhere on an agent's row opens that agent's details page
       const userRow = e.target.closest('[data-open-user]');
       if (userRow && !e.target.closest('a, button, input, select, audio')) {
@@ -3635,6 +3663,10 @@
         case 'play-log': playCallAudioDirect(id, 'log'); break;
         case 'add-lead-from-call': saveCallAsLead(id); break;
         case 'open-dial': openDialModal(id); break;
+        case 'open-batch': openBatchModal(id); break;
+        case 'split-even': splitBatchEvenly(); break;
+        case 'split-clear': Store.batchSplit = {}; Store.batchSplitMsg = ''; renderBatchModal(); break;
+        case 'split-assign': assignBatchSplit(); break;
         case 'login-as': loginAsUser(id); break;
         case 'edit-user': toggleUserForm(id); break;
         case 'delete-user': deleteUserRecord(id); break;
@@ -3654,6 +3686,10 @@
 
     document.addEventListener('input', (e) => {
       const el = e.target;
+      if (el && el.dataset && el.dataset.action === 'split-count') {
+        (Store.batchSplit || (Store.batchSplit = {}))[el.dataset.id] = Math.max(0, Math.floor(Number(el.value) || 0));
+        updateBatchSplitTotal();
+      }
       if (el && el.dataset && el.dataset.action === 'rec-draft') {
         const meta = ensureRecMeta(el.dataset.id);
         meta.draft = el.value;
@@ -3718,7 +3754,9 @@
     function renderLeadCalling() {
       const callers = dialableCallers();
 
-      fillSelect($('leadAssignSelect'), '<option value="auto">AUTO · ROUND-ROBIN</option>', callers, u => `ALL TO ${u.name.toUpperCase()}`);
+      // Uploads are assigned to a manager (who then splits the leads among their callers)
+      fillSelect($('leadAssignSelect'), '<option value="">SELECT MANAGER…</option>', assignableManagers(), u => `${u.name.toUpperCase()} (${roleLabel(u.role)})`);
+      renderPendingUpload();
       fillSelect($('reassignFromSelect'), '<option value="">FROM…</option>', callers, u => u.name.toUpperCase());
       fillSelect($('reassignToSelect'), '<option value="">TO…</option>', callers, u => u.name.toUpperCase());
 
@@ -3728,21 +3766,30 @@
       const batches = {};
       scopedLeads.forEach(l => {
         if (!l.batchName) return;
-        const b = batches[l.batchName] || (batches[l.batchName] = { name: l.batchName, count: 0, fresh: 0, latest: 0 });
+        const b = batches[l.batchName] || (batches[l.batchName] = { name: l.batchName, count: 0, fresh: 0, latest: 0, unassigned: 0, managerId: '' });
         b.count++;
         if (isFreshLead(l)) b.fresh++;
+        if (!l.agentId && isFreshLead(l)) b.unassigned++;
+        if (l.managerId && !b.managerId) b.managerId = l.managerId;
         const t = l.createdAt ? l.createdAt.getTime() : 0;
         if (t > b.latest) b.latest = t;
       });
       const batchList = Object.values(batches).sort((a, b) => b.latest - a.latest).slice(0, 8);
+      // Keep an open file-details window current, but never rebuild it under the user's typing
+      const typingInBatch = document.activeElement && document.activeElement.tagName === 'INPUT' && $('batchModal').contains(document.activeElement);
+      if (Store.batchOpen && $('batchModal').classList.contains('active') && !typingInBatch) renderBatchModal();
+      // Each uploaded file opens its details (every lead in it) on click
       $('uploadHistoryList').innerHTML = batchList.length ? batchList.map(b => `
-        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid #E3DFD2; border-radius: 12px; padding: 10px 14px;">
+        <button type="button" data-action="open-batch" data-id="${esc(b.name)}" title="View the leads in ${esc(b.name)}" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid #E3DFD2; border-radius: 12px; padding: 10px 14px; background: transparent; width: 100%; text-align: left; cursor: pointer; font: inherit; color: inherit;">
           <div style="min-width: 0;">
             <div style="font-family: var(--font-mono); font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${esc(b.name)}</div>
-            <div style="font-size: 11px; color: #5A6352;">${b.latest ? esc(fmtTs(new Date(b.latest))) : '—'} · ${b.fresh} NOT DIALED YET</div>
+            <div style="font-size: 11px; color: #5A6352;">${b.latest ? esc(fmtTs(new Date(b.latest))) : '—'} · ${b.fresh} NOT DIALED YET${(() => { const m = b.managerId && Store.users.find(u => u.id === b.managerId); return m ? ` · MANAGER ${esc(m.name.toUpperCase())}` : ''; })()}${b.unassigned ? ` · <strong style="color: #C88A2E;">${b.unassigned} TO SPLIT</strong>` : ''}</div>
           </div>
-          <span style="background: #EFECE3; border: 1px solid #10180C; border-radius: 999px; padding: 4px 12px; font-family: var(--font-mono); font-size: 10px; font-weight: 700; flex-shrink: 0;">${b.count} LEADS</span>
-        </div>
+          <span style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+            <span style="background: #EFECE3; border: 1px solid #10180C; border-radius: 999px; padding: 4px 12px; font-family: var(--font-mono); font-size: 10px; font-weight: 700;">${b.count} LEADS</span>
+            <span style="font-family: var(--font-mono); font-size: 10px; font-weight: 700; color: var(--green-600);">VIEW →</span>
+          </span>
+        </button>
       `).join('') : `<div class="empty-state" style="padding: 18px;">${Store.errors.leads ? `COULD NOT LOAD LEADS — ${esc(Store.errors.leads)}` : 'NO UPLOADED BATCHES YET'}</div>`;
 
       // Conversion funnel from lead statuses
@@ -3962,41 +4009,79 @@
           pop('COULD NOT PARSE EXCEL FILE — CHECK FORMAT');
           return;
         }
-        importLeadRows(rows, file.name);
+        // Held until ASSIGN, so the manager can be picked first
+        const withPhone = rows.filter(r => last10(r.phone)).length;
+        if (!withPhone) {
+          pop(`NO ROWS WITH A VALID PHONE NUMBER IN ${file.name.toUpperCase()}`);
+          return;
+        }
+        Store.pendingUpload = { fileName: file.name, rows, withPhone };
+        renderPendingUpload();
+        pop(`${withPhone} LEADS READY · SELECT A MANAGER AND PRESS ASSIGN`);
       };
       reader.readAsArrayBuffer(file);
     }
 
-    async function importLeadRows(rows, fileName) {
-      const callers = dialableCallers();
-      const pick = $('leadAssignSelect').value;
+    // Managers an upload can be assigned to: managers / jr managers in the current view
+    function assignableManagers() {
+      return visibleUsers().filter(u => u.role === 'MANAGER' || u.role === 'JR_MANAGER');
+    }
+
+    function renderPendingUpload() {
+      const p = Store.pendingUpload;
+      const txt = $('pendingUploadText');
+      const btn = $('leadAssignBtn');
+      if (!txt || !btn) return;
+      const mgr = $('leadAssignSelect') ? $('leadAssignSelect').value : '';
+      txt.textContent = p ? `READY: ${p.fileName} · ${p.withPhone} LEADS${mgr ? '' : ' · SELECT A MANAGER'}` : 'NO FILE SELECTED';
+      txt.style.color = p ? '#C8FF4A' : '#B9C4B0';
+      const ready = !!(p && mgr && !Store.assigningUpload);
+      btn.disabled = !ready;
+      btn.style.opacity = ready ? '1' : '0.4';
+      btn.textContent = Store.assigningUpload ? 'ASSIGNING…' : 'ASSIGN';
+    }
+
+    async function assignPendingUpload() {
+      const p = Store.pendingUpload;
+      const managerId = $('leadAssignSelect').value;
+      if (!p) { pop('CHOOSE AN EXCEL / CSV FILE FIRST'); return; }
+      if (!managerId) { pop('SELECT THE MANAGER TO ASSIGN THIS FILE TO'); return; }
+      Store.assigningUpload = true;
+      renderPendingUpload();
+      const ok = await importLeadRows(p.rows, p.fileName, managerId);
+      Store.assigningUpload = false;
+      if (ok) Store.pendingUpload = null;
+      renderPendingUpload();
+    }
+
+    // Imports the rows as one upload owned by the manager; the leads stay unassigned until the
+    // manager splits them among their callers (Upload history → VIEW → Split leads).
+    async function importLeadRows(rows, fileName, managerId) {
       const valid = [];
       let noPhone = 0;
       rows.forEach(r => {
         if (!last10(r.phone)) { noPhone++; return; }
         const lead = { name: r.name || `Lead ${formatPhone(r.phone)}`, phone: r.phone };
         if (r.notes) lead.notes = r.notes;
-        if (pick === 'auto') {
-          if (callers.length) lead.assignedCallerId = callers[valid.length % callers.length].id;
-        } else if (pick) {
-          lead.assignedCallerId = pick;
-        }
         valid.push(lead);
       });
       if (!valid.length) {
         pop(`NO ROWS WITH A VALID PHONE NUMBER IN ${fileName.toUpperCase()}`);
-        return;
+        return false;
       }
+      const mgr = Store.users.find(u => u.id === managerId);
       pop(`UPLOADING ${valid.length} LEADS…`);
       try {
-        const json = await apiFetch('/admin/leads/import', { method: 'POST', body: { batchName: fileName, leads: valid } });
+        const json = await apiFetch('/admin/leads/import', { method: 'POST', body: { batchName: fileName, managerId, leads: valid } });
         const created = Number(json.created) || 0;
         const skipped = (Number(json.skipped) || 0) + noPhone;
-        pop(`${created} LEADS IMPORTED · ${skipped} SKIPPED (DUPLICATE / NO PHONE)`);
+        pop(`${created} LEADS ASSIGNED TO ${(mgr ? mgr.name : 'THE MANAGER').toUpperCase()} · ${skipped} SKIPPED (DUPLICATE / NO PHONE)`);
         await fetchLeads();
         renderActive();
+        return true;
       } catch (e) {
         pop(`⚠️ IMPORT FAILED: ${e.message}`);
+        return false;
       }
     }
 
@@ -4969,6 +5054,217 @@
 
     function closeLeadFormModal() {
       $('leadFormModal').classList.remove('active');
+    }
+
+    // ---- Uploaded file details (Lead Calling · Upload history) ----
+    function batchLeads() {
+      return Store.leads.filter(l => isLeadInScope(l) && l.batchName === Store.batchOpen);
+    }
+
+    function openBatchModal(name) {
+      Store.batchOpen = name;
+      Store.batchSearch = '';
+      Store.batchSplit = {};
+      Store.batchSplitMsg = '';
+      $('batchSearchInput').value = '';
+      renderBatchModal();
+      $('batchModal').classList.add('active');
+    }
+
+    function closeBatchModal() {
+      Store.batchOpen = null;
+      $('batchModal').classList.remove('active');
+    }
+
+    function onBatchSearch(val) {
+      Store.batchSearch = val;
+      renderBatchModal();
+    }
+
+    function renderBatchModal() {
+      if (!Store.batchOpen) return;
+      const leads = batchLeads();
+      const uploaded = leads.reduce((min, l) => (l.createdAt && (!min || l.createdAt < min) ? l.createdAt : min), null);
+      $('batchModalTitle').textContent = Store.batchOpen;
+      $('batchModalMeta').textContent = `UPLOADED ${uploaded ? fmtTs(uploaded) : '—'} · ${leads.length} LEAD${leads.length === 1 ? '' : 'S'}`;
+
+      // Summary by status
+      const count = (fn) => leads.filter(fn).length;
+      const chips = [
+        ['TOTAL', leads.length, '#10180C', '#EFECE3'],
+        ['NOT DIALED', count(isFreshLead), '#fff', '#10180C'],
+        ['DIALED', count(l => !isFreshLead(l)), '#3DC838', '#10180C'],
+        ['INTERESTED', count(l => STATUS_TO_STAGE[l.status] === 'INTERESTED'), '#C8FF4A', '#10180C'],
+        ['FOLLOW-UP', count(l => STATUS_TO_STAGE[l.status] === 'FOLLOW-UP'), '#C8FF4A', '#10180C'],
+        ['CONVERTED', count(l => STATUS_TO_STAGE[l.status] === 'CONVERTED'), '#7FD63B', '#10180C'],
+        ['NOT INTERESTED', count(l => STATUS_TO_STAGE[l.status] === 'NOT INTERESTED'), '#EFECE3', '#5A6352'],
+      ];
+      $('batchModalSummary').innerHTML = chips.map(([label, n, bg, color]) =>
+        `<span style="background: ${bg}; color: ${color}; border: 1px solid #10180C; border-radius: 999px; padding: 5px 12px; font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.06em;">${label} · ${n}</span>`).join('');
+
+      // Split by agent
+      const byAgent = {};
+      leads.forEach(l => { const a = leadAgentName(l); byAgent[a] = (byAgent[a] || 0) + 1; });
+      const agentEntries = Object.entries(byAgent).sort((a, b) => b[1] - a[1]);
+      $('batchModalAgents').innerHTML = agentEntries.length
+        ? `ASSIGNED TO: ${agentEntries.map(([a, n]) => `<strong style="color: #10180C;">${esc(a)}</strong> ${n}`).join(' · ')}`
+        : '';
+
+      renderBatchSplit(leads);
+
+      // Leads table
+      const q = (Store.batchSearch || '').trim().toLowerCase();
+      const qDigits = q.replace(/\D/g, '');
+      const list = leads.filter(l => !q ||
+        l.name.toLowerCase().includes(q) ||
+        (qDigits && l.phone.replace(/\D/g, '').includes(qDigits)) ||
+        leadAgentName(l).toLowerCase().includes(q)
+      ).sort((a, b) => a.name.localeCompare(b.name));
+      const stMap = {
+        'FRESH': ['#fff', '#10180C'], 'NEW': ['#fff', '#10180C'], 'INTERESTED': ['#3DC838', '#10180C'],
+        'FOLLOW-UP': ['#C8FF4A', '#10180C'], 'NOT INTERESTED': ['#EFECE3', '#5A6352'], 'NO ANSWER': ['#fff', '#C88A2E'],
+        'LOST': ['#10180C', '#EFECE3'], 'CONVERTED': ['#7FD63B', '#10180C'],
+      };
+      $('batchModalRows').innerHTML = list.length ? list.map(l => {
+        const label = leadLabel(l);
+        const [stBg, stColor] = stMap[label] || ['#fff', '#10180C'];
+        const fresh = isFreshLead(l);
+        const act = fresh ? 'NOT DIALED YET' : `${l.attempts || 0}× DIALED${l.lastCallDate ? ' · LAST ' + fmtTs(l.lastCallDate) : ''}`;
+        return `
+          <div class="table-body-row" style="grid-template-columns: 1.4fr 1.1fr 1fr 1fr 1.3fr 1.3fr;">
+            <strong style="overflow-wrap: anywhere;">${esc(l.name)}</strong>
+            <span style="font-family: var(--font-mono); font-size: 12px;">${last10(l.phone) ? esc(formatPhone(l.phone)) : '<span style="color: var(--danger);">⚠ NO PHONE</span>'}</span>
+            <span style="font-size: 13px;">${userLink({ id: l.agentId, name: leadAgentName(l) }, leadAgentName(l))}</span>
+            <span><span style="background: ${stBg}; color: ${stColor}; border: 1px solid #10180C; border-radius: 999px; padding: 4px 10px; font-family: var(--font-mono); font-size: 10px; font-weight: 700; white-space: nowrap;">${esc(label)}</span></span>
+            <span style="font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: ${fresh ? '#8A8574' : '#2E9E2B'};">${esc(act)}</span>
+            <span style="font-size: 12px; color: #5A6352; overflow-wrap: anywhere;">${esc(l.notes || '—')}</span>
+          </div>`;
+      }).join('') : `<div class="empty-state">${leads.length ? 'NO LEADS MATCH THIS SEARCH' : 'NO LEADS FROM THIS FILE IN YOUR VIEW'}</div>`;
+    }
+
+    // ---- Split an upload among the owning manager's callers ----
+    function batchOwnerId(leads) {
+      const counts = {};
+      leads.forEach(l => { if (l.managerId) counts[l.managerId] = (counts[l.managerId] || 0) + 1; });
+      return Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0] || '';
+    }
+
+    // Callers who can receive this file's leads: the owning manager's team (everyone dialable when no owner)
+    function batchSplitCallers(ownerId) {
+      const visible = new Set(visibleUsers().map(u => u.id));
+      const pool = ownerId ? descendantsOf(ownerId) : dialableCallers();
+      return pool.filter(u => (u.role === 'CALLER' || u.role === 'JR_MANAGER') && visible.has(u.id))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    function renderBatchSplit(leads) {
+      const el = $('batchSplitSection');
+      if (!el) return;
+      const role = getActiveUser().role;
+      const unassigned = leads.filter(l => !l.agentId && isFreshLead(l)).length;
+      if (!['ADMIN', 'MANAGER', 'JR_MANAGER'].includes(role) || (!unassigned && !Store.batchSplitMsg)) { el.innerHTML = ''; return; }
+      const ownerId = batchOwnerId(leads);
+      const owner = ownerId ? Store.users.find(u => u.id === ownerId) : null;
+      const callers = batchSplitCallers(ownerId);
+      const split = Store.batchSplit || (Store.batchSplit = {});
+      const allocated = callers.reduce((s, u) => s + (Number(split[u.id]) || 0), 0);
+      const over = allocated > unassigned;
+      const mine = (u) => leads.filter(l => l.agentId === u.id);
+      el.innerHTML = `
+        <div style="border: 1.5px solid var(--ink-900); border-radius: 14px; background: #F7F5EC; padding: 14px 16px; margin-bottom: 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;">
+            <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; font-weight: 700;">SPLIT LEADS TO CALLERS${owner ? ` · ${esc(owner.name.toUpperCase())}'S TEAM` : ''}</span>
+            <span style="font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: ${unassigned ? '#C88A2E' : '#2E9E2B'};">${unassigned} UNASSIGNED LEAD${unassigned === 1 ? '' : 'S'} LEFT</span>
+          </div>
+          ${Store.batchSplitMsg ? `<div style="font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: #2E9E2B; margin-bottom: 10px;">${esc(Store.batchSplitMsg)}</div>` : ''}
+          ${!unassigned ? '' : (!callers.length ? `<div class="empty-state" style="padding: 12px;">${owner ? `${esc(owner.name.toUpperCase())} HAS NO CALLERS YET — ADD THEM IN USER MANAGEMENT` : 'NO CALLERS IN YOUR VIEW'}</div>` : `
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px;">
+              ${callers.map(u => {
+                const has = mine(u);
+                return `
+                  <label style="display: flex; align-items: center; justify-content: space-between; gap: 10px; background: #fff; border: 1px solid #E3DFD2; border-radius: 10px; padding: 8px 10px;">
+                    <span style="min-width: 0;">
+                      <strong style="display: block; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${esc(u.name)}</strong>
+                      <span style="font-family: var(--font-mono); font-size: 10px; color: #5A6352;">HAS ${has.length} · ${has.filter(l => !isFreshLead(l)).length} CALLED</span>
+                    </span>
+                    <input type="number" min="0" max="${unassigned}" step="1" inputmode="numeric" data-action="split-count" data-id="${esc(u.id)}" value="${Number(split[u.id]) || ''}" placeholder="0" aria-label="Leads to give ${esc(u.name)}" style="width: 76px; border: 1.5px solid var(--ink-900); border-radius: 8px; padding: 6px 8px; font-family: var(--font-mono); font-size: 13px; font-weight: 700; text-align: center;" />
+                  </label>`;
+              }).join('')}
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px;">
+              <span id="batchSplitTotal" style="font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: ${over ? 'var(--danger)' : '#10180C'};">ALLOCATED ${allocated} / ${unassigned}${over ? ' · MORE THAN AVAILABLE' : ''}</span>
+              <button type="button" class="filter-chip" data-action="split-even" style="margin-left: auto;">SPLIT EVENLY</button>
+              <button type="button" class="filter-chip" data-action="split-clear">CLEAR</button>
+              <button type="button" data-action="split-assign" ${Store.batchSplitting ? 'disabled' : ''} style="background: #3DC838; color: #10180C; border: 1.5px solid #10180C; border-radius: 999px; padding: 8px 22px; font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.12em; cursor: pointer; box-shadow: 2px 2px 0 #10180C;">${Store.batchSplitting ? 'ASSIGNING…' : 'ASSIGN'}</button>
+            </div>`)}
+        </div>`;
+    }
+
+    function updateBatchSplitTotal() {
+      const leads = batchLeads();
+      const unassigned = leads.filter(l => !l.agentId && isFreshLead(l)).length;
+      const callers = batchSplitCallers(batchOwnerId(leads));
+      const allocated = callers.reduce((s, u) => s + (Number((Store.batchSplit || {})[u.id]) || 0), 0);
+      const el = $('batchSplitTotal');
+      if (!el) return;
+      const over = allocated > unassigned;
+      el.textContent = `ALLOCATED ${allocated} / ${unassigned}${over ? ' · MORE THAN AVAILABLE' : ''}`;
+      el.style.color = over ? 'var(--danger)' : '#10180C';
+    }
+
+    function splitBatchEvenly() {
+      const leads = batchLeads();
+      const unassigned = leads.filter(l => !l.agentId && isFreshLead(l)).length;
+      const callers = batchSplitCallers(batchOwnerId(leads));
+      if (!callers.length) return;
+      const base = Math.floor(unassigned / callers.length);
+      let extra = unassigned % callers.length;
+      Store.batchSplit = {};
+      callers.forEach(u => { Store.batchSplit[u.id] = base + (extra-- > 0 ? 1 : 0); });
+      Store.batchSplitMsg = '';
+      renderBatchModal();
+    }
+
+    async function assignBatchSplit() {
+      const leads = batchLeads();
+      const unassigned = leads.filter(l => !l.agentId && isFreshLead(l)).length;
+      const callers = batchSplitCallers(batchOwnerId(leads));
+      const allocations = callers.map(u => ({ callerId: u.id, count: Math.max(0, Math.floor(Number((Store.batchSplit || {})[u.id]) || 0)) }))
+        .filter(a => a.count > 0);
+      const total = allocations.reduce((s, a) => s + a.count, 0);
+      if (!total) { pop('ENTER HOW MANY LEADS EACH CALLER SHOULD GET'); return; }
+      if (total > unassigned) { pop(`ONLY ${unassigned} UNASSIGNED LEADS LEFT — REDUCE THE NUMBERS`); return; }
+      Store.batchSplitting = true;
+      renderBatchModal();
+      try {
+        const json = await apiFetch('/admin/leads/distribute', { method: 'POST', body: { batchName: Store.batchOpen, allocations } });
+        const done = (json.assigned || []).filter(a => a.count > 0);
+        Store.batchSplit = {};
+        Store.batchSplitMsg = `✓ ASSIGNED ${done.map(a => `${a.count} TO ${String(a.name || '').toUpperCase()}`).join(' · ')}`;
+        pop(`${done.reduce((s, a) => s + a.count, 0)} LEADS SPLIT AMONG ${done.length} CALLER${done.length === 1 ? '' : 'S'}`);
+        await fetchLeads();
+      } catch (e) {
+        pop(`⚠️ SPLIT FAILED: ${e.message}`);
+      } finally {
+        Store.batchSplitting = false;
+        renderActive();
+        renderBatchModal();
+      }
+    }
+
+    function exportBatchLeads() {
+      const rows = batchLeads().map(l => ({
+        Lead: l.name,
+        Phone: l.phone,
+        Agent: leadAgentName(l),
+        Status: leadLabel(l),
+        Dials: l.attempts || 0,
+        'Last call (IST)': l.lastCallDate ? fmtIstFull(l.lastCallDate) : '',
+        Notes: l.notes || '',
+        File: l.batchName,
+      }));
+      const safe = String(Store.batchOpen || 'upload').replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9_-]+/g, '_');
+      exportRows(rows, 'Leads', `${safe}-leads.xlsx`);
     }
 
     async function saveLeadForm() {

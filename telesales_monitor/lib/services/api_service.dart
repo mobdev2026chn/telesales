@@ -388,15 +388,19 @@ class ApiService {
     String? loggedInTeam,
     String? loggedInUserId,
   }) async {
-    final q = _query(_scopeQuery(
-      callerPhone: callerPhone,
-      callerName: callerName,
-      team: team,
-      userId: userId,
-      loggedInRole: loggedInRole,
-      loggedInTeam: loggedInTeam,
-      loggedInUserId: loggedInUserId,
-    ));
+    final q = _query({
+      ..._scopeQuery(
+        callerPhone: callerPhone,
+        callerName: callerName,
+        team: team,
+        userId: userId,
+        loggedInRole: loggedInRole,
+        loggedInTeam: loggedInTeam,
+        loggedInUserId: loggedInUserId,
+      ),
+      // Large uploads are split among callers (e.g. 1000 leads): load them all, not the default 500
+      'limit': '2000',
+    });
     final res = await _request('GET', '/leads$q');
     if (!_ok(res)) return null;
     final data = _decodeMap(res);
