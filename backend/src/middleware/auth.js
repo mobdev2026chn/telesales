@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const presence = require('../services/presence');
+const Employee = require('../models/Employee');
 
 const TOKEN_TTL = '30d';
 
@@ -64,9 +65,28 @@ function readToken(req) {
   return null;
 }
 
+// The token only proves WHO is signed in. Role / team / name come from the account as it is now,
+// so a caller promoted to manager (or a manager moved back) gets the new access without logging
+// out. Looked up at most every few seconds per user; changes via the users API apply at once.
+const PROFILE_TTL_MS = 15 * 1000;
+const profileCache = new Map(); // id -> { at, emp | null }
+
+async function currentProfile(id) {
+  const hit = profileCache.get(id);
+  if (hit && Date.now() - hit.at < PROFILE_TTL_MS) return hit.emp;
+  const emp = await Employee.findOne({ id }).select('id role team name phone').lean();
+  profileCache.set(id, { at: Date.now(), emp: emp || null });
+  if (profileCache.size > 5000) profileCache.delete(profileCache.keys().next().value);
+  return emp || null;
+}
+
+function forgetProfile(id) {
+  if (id) profileCache.delete(String(id)); else profileCache.clear();
+}
+
 // Global, non-blocking: attaches req.user when a valid token is present and pins the
-// scoping parameters the routes read to the token's identity (clients can't claim another role).
-function authenticate(req, res, next) {
+// scoping parameters the routes read to the account's identity (clients can't claim another role).
+async function authenticate(req, res, next) {
   req.user = null;
   const token = readToken(req);
   if (token) {
@@ -81,6 +101,23 @@ function authenticate(req, res, next) {
       };
     } catch (_) {
       req.tokenInvalid = true;
+    }
+  }
+  if (req.user) {
+    try {
+      const emp = await currentProfile(req.user.id);
+      if (!emp) {
+        // Account deleted: the token no longer signs anyone in
+        req.user = null;
+        req.tokenInvalid = true;
+      } else {
+        req.user.role = normalizeRole(emp.role);
+        req.user.team = emp.team || '';
+        req.user.name = emp.name || req.user.name;
+        req.user.phone = emp.phone || req.user.phone;
+      }
+    } catch (_) {
+      // Database unreachable: keep what the token says rather than failing every request
     }
   }
   if (req.user) {
@@ -135,6 +172,7 @@ module.exports = {
   isHashed,
   verifyAndUpgradePassword,
   authenticate,
+  forgetProfile,
   requireAuth,
   legacyGraceEnabled,
   MANAGERS,

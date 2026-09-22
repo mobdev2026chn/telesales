@@ -1198,25 +1198,11 @@
           </div>
         </div>
 
-        <!-- MIDDLE ROW: CONVERSION FUNNEL & AGENT DIGEST -->
-        <div class="grid-2-col">
-          <!-- 03 · CONVERSION FUNNEL -->
-          <div class="neo-card">
-            <div style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em; margin-bottom: 16px; font-weight: 700;">03 · CONVERSION FUNNEL</div>
-            <div id="funnelRowsContainer" style="display: flex; flex-direction: column; gap: 8px;">
-              <!-- Populated via JS -->
-            </div>
-          </div>
-
-          <!-- 04 · TODAY'S AGENT DIGEST -->
-          <div class="neo-table-card table-scroll-wrap">
-            <div style="padding: 20px 22px 12px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em; font-weight: 700;">04 · TODAY'S AGENT DIGEST · DIALS, TALK &amp; OUTCOMES</div>
-            <div class="digest-grid" style="padding: 10px 22px; background: #10180C; color: #EFECE3; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; font-weight: 700;">
-              <span>AGENT</span><span>DIALS</span><span>CONNECT %</span><span>TALK</span><span>WON</span>
-            </div>
-            <div id="digestRowsContainer">
-              <!-- Populated via JS -->
-            </div>
+        <!-- MIDDLE ROW: CONVERSION FUNNEL -->
+        <div class="neo-card" style="margin-bottom: 18px;">
+          <div style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em; margin-bottom: 16px; font-weight: 700;">03 · CONVERSION FUNNEL</div>
+          <div id="funnelRowsContainer" style="display: flex; flex-direction: column; gap: 8px;">
+            <!-- Populated via JS -->
           </div>
         </div>
 
@@ -2023,6 +2009,28 @@
       };
     }
 
+    // Points every user's `mgr` at their manager's `id`, as the server does: the stored managerId may
+    // be the manager's database _id, and older records only carry the manager's name.
+    function linkManagers(users, raw) {
+      const byOid = new Map();
+      raw.forEach(r => { if (r && r._id) byOid.set(String(r._id), String(r.id || r._id)); });
+      const ids = new Set(users.map(u => u.id));
+      const managersByName = new Map();
+      users.filter(u => u.role === 'MANAGER' || u.role === 'JR_MANAGER' || u.role === 'ADMIN').forEach(m => {
+        const k = m.name.trim().toLowerCase();
+        managersByName.set(k, managersByName.has(k) ? null : m.id);   // ambiguous names are not guessed
+      });
+      const byId = new Map(users.map(u => [u.id, u]));
+      raw.forEach(r => {
+        const u = r && byId.get(String(r.id || r._id || ''));
+        if (!u) return;
+        if (u.mgr && !ids.has(u.mgr) && byOid.has(u.mgr)) u.mgr = byOid.get(u.mgr);
+        if (!u.mgr && r.managerName) u.mgr = managersByName.get(String(r.managerName).trim().toLowerCase()) || null;
+        if (u.mgr === u.id) u.mgr = null;
+      });
+      return users;
+    }
+
     function isUnknownName(n) {
       const s = String(n || '').trim();
       return !s || /^unknown( contact| caller)?$/i.test(s);
@@ -2168,9 +2176,21 @@
       return Store.authUser ? mapUser(Store.authUser) : { id: '', name: '—', email: '', phone: '', role: 'CALLER', target: 0, mgr: null };
     }
 
+    // Same rule as the server: everyone under the manager down the reporting tree, plus (for the
+    // manager themself only) the people on their team. The shared default team links nobody.
     function descendantsOf(rootId) {
       const out = [];
       const seen = new Set([rootId]);
+      const root = Store.users.find(u => u.id === rootId);
+      const team = String((root && root.team) || '').trim().toLowerCase();
+      if (team && team !== 'telesales team') {
+        Store.users.forEach(u => {
+          if (u.role !== 'ADMIN' && !seen.has(u.id) && String(u.team || '').trim().toLowerCase() === team) {
+            seen.add(u.id);
+            out.push(u);
+          }
+        });
+      }
       const walk = (id) => {
         Store.users.forEach(u => {
           if (u.mgr === id && !seen.has(u.id)) {
@@ -2180,7 +2200,9 @@
           }
         });
       };
+      const teamMembers = out.slice();
       walk(rootId);
+      teamMembers.forEach(u => walk(u.id));
       return out;
     }
 
@@ -2844,7 +2866,7 @@
       try {
         const json = await apiFetch('/admin/users');
         const list = json.users || (Array.isArray(json) ? json : []);
-        Store.users = list.map(mapUser).filter(u => u.id);
+        Store.users = linkManagers(list.map(mapUser).filter(u => u.id), list);
         Store.errors.users = null;
         Store.loaded.users = true;
         if (Store.viewAsId && !Store.users.some(u => u.id === Store.viewAsId)) Store.viewAsId = null;
@@ -3814,39 +3836,6 @@
           </div>
         `;
       }).join('');
-
-      // Today's agent digest — server numbers (IST "today")
-      // Same people as the dashboard team table and the leaderboard
-      const digestEl = $('digestRowsContainer');
-      const digestPeople = getScopedCallers();
-      if (!digestPeople.length) {
-        digestEl.innerHTML = '<div class="empty-state">NO CALLERS IN THIS VIEW</div>';
-      } else {
-        // Same rule as the dashboard table: agents with connected calls today first (green, most
-        // connected on top), then the rest (red); the existing order breaks ties.
-        const connOf = (u) => { const s = statsFor(Store.todayMembers, u); return s ? Number(s.connectedCalls) || 0 : 0; };
-        const orderedDigest = digestPeople.map((u, i) => ({ u, i, c: connOf(u) }))
-          .sort((a, b) => ((b.c > 0) - (a.c > 0)) || (b.c - a.c) || (a.i - b.i))
-          .map(x => x.u);
-        digestEl.innerHTML = orderedDigest.map(u => {
-          const s = statsFor(Store.todayMembers, u);
-          const dials = s ? Number(s.totalCalls) || 0 : null;
-          const conn = s ? Number(s.connectedCalls) || 0 : 0;
-          const rate = dials ? Math.round(conn / dials * 100) : 0;
-          const won = scopedLeads.filter(l => (l.agentId ? l.agentId === u.id : l.agent === u.name) && l.status === 'won').length;
-          const active = conn > 0;
-          const statusTitle = active ? `${conn} connected call${conn === 1 ? '' : 's'} today` : 'No connected calls today';
-          return `
-            <div class="digest-grid" style="padding: 12px 22px; border-top: 1px solid #E3DFD2; align-items: center; font-size: 13px;">
-              <strong style="display: flex; align-items: center; gap: 8px; min-width: 0;"><span class="presence-dot ${active ? 'is-online' : 'is-offline'}" role="img" aria-label="${esc(statusTitle)}" title="${esc(statusTitle)}"></span><span style="overflow: hidden; text-overflow: ellipsis;">${userLink(u)}</span></strong>
-              <span style="font-family: var(--font-mono); font-size: 11px; font-weight: 700;">${dials === null ? '—' : `<span class="count-pill ${dials > 0 ? 'is-good' : 'is-bad'}">${dials}</span>`}</span>
-              <span style="font-family: var(--font-mono); font-size: 11px; font-weight: 700;">${dials === null ? '—' : `<span class="count-pill ${active ? 'is-good' : 'is-bad'}">${rate}%</span>`}</span>
-              <span style="font-family: var(--font-mono); font-size: 11px;">${s ? fmtTalk(s.talkTimeSeconds) : '—'}</span>
-              <span style="font-family: var(--font-mono); font-size: 11px; font-weight: 700;">${won}</span>
-            </div>
-          `;
-        }).join('');
-      }
 
       // Callbacks due: follow-up leads that have been called before (oldest first)
       const cbLeads = scopedLeads

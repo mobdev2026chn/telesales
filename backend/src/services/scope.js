@@ -33,21 +33,38 @@ function matchesRef(emp, ref) {
   return (emp.name || '').trim().toLowerCase() === term.toLowerCase();
 }
 
-// Employees a manager / jr manager is responsible for: assigned to them, or on their team (never admins),
-// plus the manager themself.
-async function teamOf(mgr) {
-  const or = [{ id: mgr.id }, { managerId: mgr.id }, { managerId: String(mgr._id) }];
-  if (mgr.name) or.push({ managerName: exactNameRegex(mgr.name) });
-  if (mgr.team && mgr.team.trim()) or.push({ team: exactNameRegex(mgr.team) });
-  return Employee.find({ $or: or, $and: [{ $or: [{ role: { $ne: 'admin' } }, { id: mgr.id }] }] })
-    .select(EMP_FIELDS).lean();
-}
-
-async function assignedTo(mgr) {
+// Direct reports of one manager: assigned to them (by id, _id or name) or, for the top manager
+// only, on their team. Deeper levels follow explicit links only, so a sub-manager on the default
+// team never pulls in the whole company. Admins are never included.
+// The default team every new user gets is not a real team, so it never links anyone.
+const DEFAULT_TEAM = 'telesales team';
+function reportsQuery(mgr, withTeam) {
   const or = [{ managerId: mgr.id }, { managerId: String(mgr._id) }];
   if (mgr.name) or.push({ managerName: exactNameRegex(mgr.name) });
-  if (mgr.team && mgr.team.trim()) or.push({ team: exactNameRegex(mgr.team) });
-  return Employee.find({ $or: or, role: { $ne: 'admin' } }).select(EMP_FIELDS).lean();
+  const team = (mgr.team || '').trim();
+  if (withTeam && team && team.toLowerCase() !== DEFAULT_TEAM) or.push({ team: exactNameRegex(team) });
+  return { $or: or, role: { $ne: 'admin' } };
+}
+
+// Everyone under a manager, down the whole reporting tree (manager -> jr manager -> callers),
+// the same tree the admin web walks. Cycles in bad data are ignored.
+async function assignedTo(mgr) {
+  const seen = new Set([mgr.id]);
+  const out = [];
+  let level = [mgr];
+  for (let depth = 0; level.length && depth < 10; depth++) {
+    const found = await Employee.find({ $or: level.map(m => reportsQuery(m, depth === 0)) }).select(EMP_FIELDS).lean();
+    level = found.filter(e => !seen.has(e.id));
+    level.forEach(e => { seen.add(e.id); out.push(e); });
+    // Only people who manage others can have reports of their own
+    level = level.filter(e => e.role === 'manager' || e.role === 'jr_manager');
+  }
+  return out;
+}
+
+// Employees a manager / jr manager is responsible for: their whole reporting tree plus themself.
+async function teamOf(mgr) {
+  return [mgr, ...(await assignedTo(mgr))];
 }
 
 // params: merged query/body. Returns { role, me, all, employees, empty }.

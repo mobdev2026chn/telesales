@@ -5,7 +5,7 @@ const router = express.Router();
 const CallLog = require('../models/CallLog');
 const Employee = require('../models/Employee');
 const Lead = require('../models/Lead');
-const { hashPassword } = require('../middleware/auth');
+const { hashPassword, forgetProfile } = require('../middleware/auth');
 const { getPeriodRange, aggregateCallStats, findCallerStats, buildDedupKey } = require('../services/callStats');
 const { resolveScope, callLogQueryFor, leadQueryFor, MANAGER_ROLES } = require('../services/scope');
 const { isOnline } = require('../services/presence');
@@ -397,6 +397,7 @@ router.put('/users/:id', async (req, res) => {
     const updated = Object.keys(update).length
       ? await Employee.findOneAndUpdate({ _id: target._id }, update, { new: true, runValidators: true })
       : await Employee.findById(target._id);
+    forgetProfile(target.id); // new role / team applies to their open sessions straight away
 
     res.json({ success: true, user: updated, message: 'User updated successfully' });
   } catch (err) {
@@ -418,6 +419,7 @@ router.delete('/users/:id', async (req, res) => {
       return res.status(400).json({ success: false, message: 'The last admin account cannot be deleted.' });
     }
     await Employee.deleteOne({ _id: target._id });
+    forgetProfile(target.id);
     res.json({ success: true, message: 'User deleted successfully' });
   } catch (err) {
     serverError(res, err, 'admin.users.delete');
