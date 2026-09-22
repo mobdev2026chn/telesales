@@ -1218,7 +1218,18 @@
 
         <!-- MIDDLE ROW: CONVERSION FUNNEL -->
         <div class="neo-card" style="margin-bottom: 18px;">
-          <div style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em; margin-bottom: 16px; font-weight: 700;">03 · CONVERSION FUNNEL</div>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px;">
+            <div style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em; font-weight: 700;">03 · CONVERSION FUNNEL <span id="funnelPeriodLabel" style="color: var(--text-muted);">· TODAY</span></div>
+            <div class="pill-group" id="funnelPeriodChips">
+              <button type="button" class="filter-chip active" onclick="setFunnelPeriod('today', this)">TODAY</button>
+              <button type="button" class="filter-chip" onclick="setFunnelPeriod('week', this)">WEEK</button>
+              <button type="button" class="filter-chip" onclick="setFunnelPeriod('month', this)">MONTH</button>
+              <div style="display: flex; align-items: center; gap: 6px; background: #fff; border: 1.5px solid var(--ink-900); border-radius: 999px; padding: 4px 12px;">
+                <span style="font-family: var(--font-mono); font-size: 10px; color: var(--text-muted);">DATE:</span>
+                <input type="date" id="funnelDateInput" min="2020-01-01" max="2030-12-31" title="Show one day (2020-2030)" style="border: none; font-family: var(--font-mono); font-size: 11px; background: transparent; cursor: pointer;" aria-label="Conversion funnel date" onchange="onFunnelDateSelect(this.value)" />
+              </div>
+            </div>
+          </div>
           <div id="funnelRowsContainer" style="display: flex; flex-direction: column; gap: 8px;">
             <!-- Populated via JS -->
           </div>
@@ -1969,6 +1980,8 @@
     const Store = Object.assign({
       tab: 'dash',
       dashPeriod: 'today',
+      funnelPeriod: 'today',  // Lead Calling conversion funnel: today / week / month
+      funnelDate: null,       // or one picked day (YYYY-MM-DD), which wins over the period
       dashCustomDate: null,
       lbPeriod: 'today',
       lbCustomDate: null,
@@ -3117,6 +3130,49 @@
       renderDashboard();
     }
 
+    // Conversion funnel period, same periods as the dashboard (India time; week from Monday, month from the 1st)
+    function setFunnelPeriod(p, btn) {
+      Store.funnelPeriod = p;
+      Store.funnelDate = null;
+      const dateInput = $('funnelDateInput');
+      if (dateInput) dateInput.value = '';
+      document.querySelectorAll('#funnelPeriodChips .filter-chip').forEach(c => c.classList.remove('active'));
+      if (btn) btn.classList.add('active');
+      renderLeadCalling();
+    }
+    function onFunnelDateSelect(val) {
+      if (val && !validPickerDate(val)) {
+        pop('PLEASE SELECT A VALID YEAR (2020 - 2030)');
+        $('funnelDateInput').value = '';
+        val = '';
+      }
+      if (!val) {
+        // Cleared: back to TODAY
+        const todayBtn = document.querySelector('#funnelPeriodChips .filter-chip');
+        setFunnelPeriod('today', todayBtn);
+        return;
+      }
+      Store.funnelDate = val;
+      document.querySelectorAll('#funnelPeriodChips .filter-chip').forEach(c => c.classList.remove('active'));
+      renderLeadCalling();
+    }
+    // [start, end) of the funnel period in India time
+    function funnelRange() {
+      if (Store.funnelDate) {
+        const [y, m, d] = Store.funnelDate.split('-').map(Number);
+        return { start: istMidnight(Store.funnelDate), end: istMidnight(new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10)) };
+      }
+      const today = istDateStr(new Date());
+      let start = istMidnight(today);
+      if (Store.funnelPeriod === 'week') {
+        const [y, m, d] = today.split('-').map(Number);
+        start = istMidnight(istDaysAgoStr((new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7));
+      } else if (Store.funnelPeriod === 'month') {
+        start = istMidnight(today.slice(0, 8) + '01');
+      }
+      return { start, end: null };
+    }
+
     function onDashDateSelect(val) {
       if (!val) {
         Store.dashCustomDate = null;
@@ -3848,14 +3904,26 @@
       // Conversion funnel from lead statuses
       const REACHED = new Set(['interested', 'followUp', 'bookDemo', 'demoReschedule', 'demoDone', 'newFollowUp', 'renewalFollowUp', 'warned', 'won', 'notInterested']);
       const INTEREST = new Set(['interested', 'followUp', 'bookDemo', 'demoReschedule', 'demoDone', 'newFollowUp', 'renewalFollowUp', 'won']);
+      // Period (today / week / month or a picked day): UPLOADED counts leads uploaded in it; the other
+      // steps count leads whose latest call (and so their current outcome) falls in it.
+      const fRange = funnelRange();
+      const inPeriod = (d) => d instanceof Date && !isNaN(d.getTime()) && d >= fRange.start && (!fRange.end || d < fRange.end);
+      const workedAt = (l) => l.lastCallDate || l.updatedAt;
+      const worked = scopedLeads.filter(l => !isFreshLead(l) && inPeriod(workedAt(l)));
       const fCounts = [
-        ['UPLOADED', scopedLeads.length, '#10180C', '#EFECE3'],
-        ['DIALED', scopedLeads.filter(l => !isFreshLead(l)).length, '#3DC838', '#10180C'],
-        ['REACHED', scopedLeads.filter(l => REACHED.has(l.status)).length, '#7FD63B', '#10180C'],
-        ['INTERESTED', scopedLeads.filter(l => INTEREST.has(l.status)).length, '#C8FF4A', '#10180C'],
-        ['CONVERTED', scopedLeads.filter(l => l.status === 'won').length, '#fff', '#10180C'],
+        ['UPLOADED', scopedLeads.filter(l => inPeriod(l.createdAt)).length, '#10180C', '#EFECE3'],
+        ['DIALED', worked.length, '#3DC838', '#10180C'],
+        ['REACHED', worked.filter(l => REACHED.has(l.status)).length, '#7FD63B', '#10180C'],
+        ['INTERESTED', worked.filter(l => INTEREST.has(l.status)).length, '#C8FF4A', '#10180C'],
+        ['CONVERTED', worked.filter(l => l.status === 'won').length, '#fff', '#10180C'],
       ];
-      const maxF = Math.max(1, scopedLeads.length);
+      const fLabel = $('funnelPeriodLabel');
+      if (fLabel) {
+        fLabel.textContent = Store.funnelDate
+          ? `· ${istMidnight(Store.funnelDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }).toUpperCase()}`
+          : `· ${({ today: 'TODAY', week: 'THIS WEEK', month: 'THIS MONTH' })[Store.funnelPeriod] || 'TODAY'}`;
+      }
+      const maxF = Math.max(1, ...fCounts.map(c => c[1]));
       $('funnelRowsContainer').innerHTML = fCounts.map(([label, n, bg, color]) => {
         const barW = Math.max(14, Math.round(n / maxF * 100));
         return `
