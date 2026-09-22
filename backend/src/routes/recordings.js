@@ -251,6 +251,14 @@ router.get(['/api/recordings', '/api/admin/recordings'], async (req, res) => {
       const re = new RegExp(escapeRegex(String(search).trim()), 'i');
       conditions.push({ $or: [{ callerName: re }, { contactName: re }, { phoneNumber: re }] });
     }
+    // ?from=&to= : call time in this range (call start; upload time for older rows without it)
+    const from = parseDate(req.query.from);
+    const to = parseDate(req.query.to);
+    const rangeApplied = !!(from || to);
+    if (rangeApplied) {
+      const range = { ...(from ? { $gte: from } : {}), ...(to ? { $lte: to } : {}) };
+      conditions.push({ $or: [{ callStartedAt: range }, { callStartedAt: null, createdAt: range }] });
+    }
     const scopeQuery = conditions.length === 1 ? conditions[0] : { $and: conditions };
 
     const beforeDate = parseDate(before);
@@ -287,6 +295,7 @@ router.get(['/api/recordings', '/api/admin/recordings'], async (req, res) => {
       success: true,
       count: recordings.length,
       total: agg ? agg.count : 0,
+      rangeApplied,
       hasMore,
       storage: { usedBytes, usedGB: +(usedBytes / (1024 ** 3)).toFixed(3), count: agg ? agg.count : 0 },
       recordings,
