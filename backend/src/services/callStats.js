@@ -307,8 +307,10 @@ async function findLeadsByLast10(numbers) {
   found.forEach(l => { if (!map.has(l.phoneLast10)) map.set(l.phoneLast10, l); });
   const missing = list.filter(n => !map.has(n));
   if (missing.length) {
-    for (let i = 0; i < missing.length; i += 200) {
-      const chunk = missing.slice(i, i + 200);
+    // Small chunks: each number becomes a flexible regex and MongoDB rejects one regex over ~32 KB
+    // (a 1000-lead upload failed with 200 numbers per query)
+    for (let i = 0; i < missing.length; i += 20) {
+      const chunk = missing.slice(i, i + 20);
       const legacy = await Lead.find({ phoneLast10: { $in: [null, ''] }, phone: anyPhoneRegex(chunk) }).sort({ createdAt: 1 }).lean();
       const backfill = [];
       legacy.forEach(l => {

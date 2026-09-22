@@ -158,6 +158,8 @@ function leadQueryFor(scope) {
   const or = [];
   if (ids.length) or.push({ assignedCallerId: { $in: ids } });
   if (names.length) or.push({ assignedCallerId: { $in: [null, ''] }, assignedCaller: { $in: names.map(exactNameRegex) } });
+  // Not yet split: batches owned by a manager in scope (only managers appear as owners)
+  if (ids.length) or.push({ assignedCallerId: { $in: [null, ''] }, managerId: { $in: ids } });
   return or.length ? { $or: or } : NOTHING;
 }
 

@@ -77,8 +77,8 @@ const ROUTE_RULES = [
   { test: (m, p) => /recordings/.test(p), rule: requireAuth({ roles: ANY, legacy: true }) },
   { test: (m, p) => /notifications/.test(p), rule: requireAuth({ roles: ANY, legacy: true }) },
   { test: (m, p) => /^\/(admin\/)?dashboard|^\/dashboard\/stats|leaderboard/.test(p), rule: requireAuth({ roles: ANY, legacy: true }) },
-  // Lead writes: create / import are for managers; PUT /admin/leads/:id checks per-lead permissions itself
-  { test: (m, p) => m === 'POST' && /^\/admin\/leads(\/import)?\/?$/.test(p), rule: requireAuth({ roles: MANAGERS }) },
+  // Lead writes: create / import / distribute are for managers; PUT /admin/leads/:id checks per-lead permissions itself
+  { test: (m, p) => m === 'POST' && /^\/admin\/leads(\/import|\/distribute)?\/?$/.test(p), rule: requireAuth({ roles: MANAGERS }) },
   { test: (m, p) => m === 'PUT' && /^\/admin\/leads\/[^/]+\/?$/.test(p) && !/\/status\/?$/.test(p), rule: requireAuth({ roles: ANY }) },
   { test: (m, p) => /leads|contacts/.test(p), rule: requireAuth({ roles: ANY, legacy: true }) },
 ];

@@ -17,6 +17,9 @@ const LeadSchema = new mongoose.Schema({
   assignedCaller: { type: String, default: 'Unassigned' },
   notes: { type: String, default: '' },
   batchName: { type: String, default: '' },
+  // Manager who owns an uploaded batch; the manager splits its unassigned leads among their callers
+  managerId: { type: String, default: '' },
+  managerName: { type: String, default: '' },
   source: { type: String, default: '' },
   lastCallDate: { type: Date, default: null },
   dateAdded: { type: Date, default: Date.now },

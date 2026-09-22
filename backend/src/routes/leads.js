@@ -20,6 +20,8 @@ function toLeadDTO(l) {
     assignedCaller: l.assignedCaller || '',
     notes: l.notes || '',
     batchName: l.batchName || '',
+    managerId: l.managerId || '',
+    managerName: l.managerName || '',
     source: l.source || '',
     lastCallDate: l.lastCallDate || null,
     createdAt: l.createdAt || null,
@@ -37,7 +39,11 @@ async function canTouchLead(req, lead, scope = null) {
   const s = scope || await resolveScope(req, req.user ? {} : null);
   if (s.empty) return false;
   const owner = { id: lead.assignedCallerId || '', name: lead.assignedCaller || '' };
-  if (!owner.id && (!owner.name || owner.name === 'Unassigned')) return MANAGER_ROLES.includes(s.role); // unassigned: managers only
+  if (!owner.id && (!owner.name || owner.name === 'Unassigned')) {
+    // Unassigned: managers only, and for a batch owned by a manager only that manager's side of the tree
+    if (!MANAGER_ROLES.includes(s.role)) return false;
+    return !lead.managerId || s.employees.some(e => e.id === lead.managerId);
+  }
   return ownerInScope(s, owner);
 }
 
@@ -148,6 +154,17 @@ router.post('/api/admin/leads/import', async (req, res) => {
 
     // Assignees must be in the importer's scope
     const scope = await resolveScope(req, {});
+
+    // Owning manager (optional): the upload belongs to that manager, who then splits it among their callers
+    let owner = null;
+    if (req.body.managerId) {
+      const m = scope.employees.find(e => e.id === String(req.body.managerId)) ||
+        (scope.all ? await Employee.findOne({ id: String(req.body.managerId) }).lean() : null);
+      if (!m || !MANAGER_ROLES.includes(m.role || '')) {
+        return res.status(400).json({ success: false, message: 'Choose a manager in your team to assign this upload to.' });
+      }
+      owner = { id: m.id, name: m.name || '' };
+    }
     const assigneeCache = new Map();
     const assigneeFor = async (ref) => {
       if (!ref) return { id: '', name: 'Unassigned' };
@@ -178,6 +195,8 @@ router.post('/api/admin/leads/import', async (req, res) => {
         assignedCaller: assignee.name,
         notes: cleanText(raw.notes, 2000),
         batchName,
+        managerId: owner ? owner.id : '',
+        managerName: owner ? owner.name : '',
         source: 'import',
         lastCallDate: null,
       });
@@ -194,6 +213,56 @@ router.post('/api/admin/leads/import', async (req, res) => {
     res.status(201).json({ success: true, created: created.length, skipped, leads: created.map(l => toLeadDTO(l.toObject ? l.toObject() : l)) });
   } catch (err) {
     serverError(res, err, 'leads.import');
+  }
+});
+
+// ---- POST distribute (managers): split an upload's unassigned leads among callers ------------------
+// body: { batchName, allocations: [{ callerId, count }] }. Oldest unassigned, never-dialled leads of
+// the batch go first. Only leads the requester may manage and callers in the requester's team.
+router.post('/api/admin/leads/distribute', async (req, res) => {
+  try {
+    if (!isManager(req)) return res.status(403).json({ success: false, message: 'You do not have permission for this action.' });
+    const batchName = cleanText(req.body && req.body.batchName, 120);
+    const allocations = Array.isArray(req.body && req.body.allocations) ? req.body.allocations : [];
+    if (!batchName) return res.status(400).json({ success: false, message: 'batchName is required' });
+
+    const scope = await resolveScope(req, {});
+    const wanted = [];
+    for (const a of allocations) {
+      const count = Math.max(0, Math.floor(Number(a && a.count) || 0));
+      if (!count) continue;
+      const emp = scope.employees.find(e => e.id === String(a.callerId)) ||
+        (scope.all ? await Employee.findOne({ id: String(a.callerId) }).lean() : null);
+      if (!emp || (emp.role || 'caller') === 'admin') {
+        return res.status(400).json({ success: false, message: 'One of the callers is not in your team.' });
+      }
+      wanted.push({ emp, count });
+    }
+    if (!wanted.length) return res.status(400).json({ success: false, message: 'Enter how many leads each caller should get.' });
+
+    const unassigned = { assignedCallerId: { $in: [null, ''] }, status: 'new', attempts: { $lte: 0 } };
+    const managerIds = scope.employees.filter(e => MANAGER_ROLES.includes(e.role || '')).map(e => e.id);
+    const ownerCond = scope.all ? {} : { $or: [{ managerId: { $in: managerIds } }, { managerId: { $in: [null, ''] } }] };
+    const pool = await Lead.find({ batchName, ...unassigned, ...ownerCond })
+      .sort({ createdAt: 1, _id: 1 }).select('_id').lean();
+
+    const needed = wanted.reduce((s, w) => s + w.count, 0);
+    if (needed > pool.length) {
+      return res.status(400).json({ success: false, message: `Only ${pool.length} unassigned leads are left in this file (you entered ${needed}).` });
+    }
+
+    let offset = 0;
+    const assigned = [];
+    for (const w of wanted) {
+      const ids = pool.slice(offset, offset + w.count).map(p => p._id);
+      offset += w.count;
+      // Re-check "still unassigned" so a concurrent split never hands the same lead to two callers
+      const r = await Lead.updateMany({ _id: { $in: ids }, ...unassigned }, { $set: { assignedCallerId: w.emp.id, assignedCaller: w.emp.name || '' } });
+      assigned.push({ callerId: w.emp.id, name: w.emp.name || '', count: r.modifiedCount || 0 });
+    }
+    res.json({ success: true, assigned, remaining: pool.length - offset });
+  } catch (err) {
+    serverError(res, err, 'leads.distribute');
   }
 });
 
