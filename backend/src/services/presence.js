@@ -21,7 +21,20 @@ function touch(userId) {
 async function markLoggedOut(userId) {
   if (!userId) return;
   lastWrite.delete(userId);
-  await Employee.updateOne({ id: userId }, { $set: { loggedOutAt: new Date() } }, { timestamps: false });
+  // Logging out also ends any break
+  await Employee.updateOne({ id: userId }, { $set: { loggedOutAt: new Date(), breakType: '', breakStartedAt: null } }, { timestamps: false });
+}
+
+// A break shown on the portal: started from the app, not older than MAX_BREAK_MS (a phone that
+// never sent "break over" does not stay on break forever) and not ended by a logout.
+const MAX_BREAK_MS = 4 * 60 * 60 * 1000;
+function breakInfo(emp, now = Date.now()) {
+  if (!emp || !emp.breakStartedAt) return { onBreak: false, breakType: '', breakStartedAt: null };
+  const started = new Date(emp.breakStartedAt).getTime();
+  const stale = !Number.isFinite(started) || now - started > MAX_BREAK_MS ||
+    (emp.loggedOutAt && new Date(emp.loggedOutAt).getTime() > started);
+  if (stale) return { onBreak: false, breakType: '', breakStartedAt: null };
+  return { onBreak: true, breakType: emp.breakType || 'Break', breakStartedAt: new Date(started).toISOString() };
 }
 
 function isOnline(emp, now = Date.now()) {
@@ -31,4 +44,4 @@ function isOnline(emp, now = Date.now()) {
   return !emp.loggedOutAt || seen > new Date(emp.loggedOutAt).getTime();
 }
 
-module.exports = { touch, markLoggedOut, isOnline, ONLINE_WINDOW_MS };
+module.exports = { touch, markLoggedOut, isOnline, breakInfo, ONLINE_WINDOW_MS, MAX_BREAK_MS };

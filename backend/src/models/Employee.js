@@ -25,6 +25,9 @@ const EmployeeSchema = new mongoose.Schema({
   // Presence (services/presence.js): last signed-in request, last explicit logout
   lastSeenAt: { type: Date, default: null },
   loggedOutAt: { type: Date, default: null },
+  // Break started from the app (Tea break / Lunch); empty / null = working (services/presence.js)
+  breakType: { type: String, default: '' },
+  breakStartedAt: { type: Date, default: null },
 }, { timestamps: true });
 
 // Belt and braces: even a document loaded with +password never serialises it

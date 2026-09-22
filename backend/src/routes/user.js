@@ -6,6 +6,7 @@ const Lead = require('../models/Lead');
 const Employee = require('../models/Employee');
 const { syncCallsForCaller, findLeadsByLast10 } = require('../services/callStats');
 const { findEmployeeByRef } = require('../services/scope');
+const { breakInfo } = require('../services/presence');
 const { last10, byIdQuery, phoneRegex, serverError } = require('../utils/common');
 
 const router = express.Router();
@@ -129,6 +130,33 @@ router.post(['/api/users/photo', '/api/user/photo', '/api/admin/users/photo', '/
     res.json({ success: true, message: 'Profile photo updated successfully', user: summary, employee: summary });
   } catch (err) {
     serverError(res, err, 'users.photo');
+  }
+});
+
+// POST /api/user/break — the signed-in user started ({onBreak:true, type, startedAt?}) or ended
+// ({onBreak:false}) a break in the app; the admin / manager dashboard shows it.
+router.post('/api/user/break', async (req, res) => {
+  try {
+    if (!req.user) return res.status(401).json({ success: false, message: 'Please log in again.', code: 'AUTH_REQUIRED' });
+    const b = req.body || {};
+    const onBreak = b.onBreak === true || b.onBreak === 'true';
+    let set;
+    if (onBreak) {
+      const type = String(b.type || '').trim().slice(0, 40) || 'Break';
+      // The phone's start time (re-sent on app open) keeps the break clock; never in the future or too old
+      const now = Date.now();
+      const sent = b.startedAt ? new Date(b.startedAt).getTime() : NaN;
+      const startedAt = Number.isFinite(sent) && sent <= now + 60 * 1000 && now - sent <= 12 * 60 * 60 * 1000 ? new Date(Math.min(sent, now)) : new Date(now);
+      set = { breakType: type, breakStartedAt: startedAt };
+    } else {
+      set = { breakType: '', breakStartedAt: null };
+    }
+    const emp = await Employee.findOneAndUpdate({ id: req.user.id }, { $set: set }, { new: true, timestamps: false })
+      .select('id breakType breakStartedAt loggedOutAt').lean();
+    if (!emp) return res.status(404).json({ success: false, message: 'User not found' });
+    res.json({ success: true, ...breakInfo(emp) });
+  } catch (err) {
+    serverError(res, err, 'user.break');
   }
 });
 

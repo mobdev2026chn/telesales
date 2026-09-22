@@ -206,6 +206,19 @@ class ApiService {
     await _request('POST', '/auth/logout', timeout: const Duration(seconds: 5));
   }
 
+  /// POST /user/break: tells the admin / manager portal this user started ([onBreak] true, with
+  /// [type] e.g. "Tea break" / "Lunch") or ended a break. Returns false when it did not reach the server.
+  static Future<bool> setBreak({required bool onBreak, String type = '', DateTime? startedAt}) async {
+    if (_token.isEmpty) return false;
+    final res = await _request('POST', '/user/break', body: {
+      'onBreak': onBreak,
+      'type': type,
+      if (onBreak && startedAt != null) 'startedAt': startedAt.toUtc().toIso8601String(),
+    },
+        timeout: const Duration(seconds: 8));
+    return res != null && _ok(res);
+  }
+
   static Future<Map<String, dynamic>?> fetchMe() async {
     final res = await _request('GET', '/auth/me');
     if (res == null) return null;

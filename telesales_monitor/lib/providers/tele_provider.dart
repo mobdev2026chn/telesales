@@ -384,6 +384,11 @@ class TeleProvider extends ChangeNotifier {
       _isOnDuty = prefs.getBool('is_on_duty') ?? false;
       final dutyMs = prefs.getInt('duty_start_ms');
       _dutyStartTime = dutyMs != null ? DateTime.fromMillisecondsSinceEpoch(dutyMs) : null;
+      // A break survives an app restart, so the phone and the portal keep showing the same thing
+      final breakMs = prefs.getInt('break_start_ms');
+      _isOnBreak = breakMs != null;
+      _breakStartTime = breakMs != null ? DateTime.fromMillisecondsSinceEpoch(breakMs) : null;
+      _currentBreakType = breakMs != null ? (prefs.getString('break_type') ?? 'Break') : '';
       final syncAckMs = prefs.getInt(_syncAckKey(_currentUserId));
       _lastCallSyncAck = syncAckMs != null ? DateTime.fromMillisecondsSinceEpoch(syncAckMs) : null;
       await _migrateLegacyPendingUploads(prefs);
@@ -511,6 +516,7 @@ class TeleProvider extends ChangeNotifier {
   void _startPeriodicSyncTimer() {
     _syncPollingTimer?.cancel();
     if (!_appInForeground) return;
+    if (_isLoggedIn) ApiService.setBreak(onBreak: _isOnBreak, type: _currentBreakType, startedAt: _breakStartTime); // portal catches up on app open
     _syncPollingTimer = Timer.periodic(const Duration(seconds: 60), (_) {
       if (_isLoggedIn && _appInForeground) {
         refreshProfile();
@@ -648,6 +654,13 @@ class TeleProvider extends ChangeNotifier {
         await prefs.setInt('duty_start_ms', _dutyStartTime!.millisecondsSinceEpoch);
       } else {
         await prefs.remove('duty_start_ms');
+      }
+      if (_isOnBreak && _breakStartTime != null) {
+        await prefs.setInt('break_start_ms', _breakStartTime!.millisecondsSinceEpoch);
+        await prefs.setString('break_type', _currentBreakType);
+      } else {
+        await prefs.remove('break_start_ms');
+        await prefs.remove('break_type');
       }
     } catch (e) {
       debugPrint('Error saving preferences: $e');
@@ -2640,7 +2653,23 @@ class TeleProvider extends ChangeNotifier {
     _isOnBreak = true;
     _currentBreakType = type;
     _breakStartTime = DateTime.now();
+    _savePreferences();
     notifyListeners();
+    _reportBreak();
+  }
+
+  // Sends the current break state to the server (admin / manager portal). Retried once if offline;
+  // the state is also re-sent with every app start, so the portal catches up.
+  Future<void> _reportBreak() async {
+    final onBreak = _isOnBreak;
+    final type = _currentBreakType;
+    final startedAt = _breakStartTime;
+    if (!isLoggedIn) return;
+    final ok = await ApiService.setBreak(onBreak: onBreak, type: type, startedAt: startedAt);
+    if (!ok) {
+      await Future.delayed(const Duration(seconds: 20));
+      if (_isOnBreak == onBreak && isLoggedIn) await ApiService.setBreak(onBreak: onBreak, type: type, startedAt: startedAt);
+    }
   }
 
   void endBreak() {
@@ -2660,10 +2689,13 @@ class TeleProvider extends ChangeNotifier {
         'mins': mins,
       });
     }
+    final wasOnBreak = _isOnBreak;
     _isOnBreak = false;
     _currentBreakType = '';
     _breakStartTime = null;
+    _savePreferences();
     notifyListeners();
+    if (wasOnBreak) _reportBreak();
   }
 
   // ================= CALL SESSION ORCHESTRATION =================

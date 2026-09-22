@@ -841,6 +841,24 @@
     .presence-dot.is-online { background: #3DC838; }
     .presence-dot.is-offline { background: #D0453A; }
 
+    /* Tea / lunch break started from the app */
+    .break-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--ink-900);
+      background: #F5A524;
+      color: #10180C;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      white-space: nowrap;
+    }
+
     /* A user's name anywhere in the portal: opens their details page */
     .user-link {
       color: inherit;
@@ -2229,6 +2247,18 @@
       return !!n && n !== '—' && n === String(u.name || '').trim().toLowerCase();
     }
 
+    // "☕ TEA BREAK · 12M" when the agent started a break in the app (row from the dashboard data)
+    function breakBadge(row) {
+      if (!row || !row.onBreak) return '';
+      const type = String(row.breakType || 'Break');
+      const lunch = /lunch/i.test(type);
+      const started = row.breakStartedAt ? new Date(row.breakStartedAt).getTime() : NaN;
+      const mins = Number.isFinite(started) ? Math.max(0, Math.floor((Date.now() - started) / 60000)) : null;
+      const label = `${lunch ? '🍽️' : '☕'} ${lunch ? 'LUNCH' : type.toUpperCase()}${mins === null ? '' : ` · ${mins}M`}`;
+      const since = Number.isFinite(started) ? ` since ${new Date(started).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' })}` : '';
+      return `<span class="break-pill" title="${esc(`On ${type.toLowerCase()}${since}`)}">${esc(label)}</span>`;
+    }
+
     function statsFor(list, u) {
       if (!Array.isArray(list) || !u) return null;
       const byId = list.find(t => String(t.id || '') === u.id);
@@ -2632,6 +2662,7 @@
                 <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px;">
                   <span class="role-badge ${roleBadgeClass(u.role)}">${esc(roleLabel(u.role))}</span>
                   ${isAgent && data ? `<span style="display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: ${active ? '#2E9E2B' : '#D0453A'};"><span class="presence-dot ${active ? 'is-online' : 'is-offline'}" aria-hidden="true"></span>${active ? `${connected} CONNECTED ${esc(periodTxt)}` : `NO CONNECTED CALLS ${esc(periodTxt)}`}</span>` : ''}
+                  ${isAgent ? breakBadge(todayRow) : ''}
                 </div>
               </div>
             </div>
@@ -3024,7 +3055,7 @@
       Store.dashLiveTimer = setInterval(() => {
         if (!Store.authUser || document.hidden || Store.syncing) return;
         if (Store.tab === 'dash') fetchDashboardData();
-        else if (Store.tab === 'user') fetchUserDetail();
+        else if (Store.tab === 'user') { fetchUserDetail(); fetchTodayStats().then(() => { if (Store.tab === 'user') renderActive(); }); }
         else if (Store.tab === 'lb') fetchLeaderboardData();   // places follow new connected calls
         else if (Store.tab === 'calls') {
           if (isTyping() || anyModalOpen() || isAudioPlaying()) return;
@@ -3250,7 +3281,7 @@
           const pct = Math.min(100, attain);
           return `
             <div class="table-body-row" data-open-user="${esc(u.id)}" title="Open ${esc(u.name)}'s details" style="grid-template-columns: 1.3fr 1.3fr 1.1fr 0.8fr 0.9fr 0.9fr 1.4fr; cursor: pointer;">
-              <strong style="display: flex; align-items: center; gap: 8px; min-width: 0;"><span class="presence-dot ${active ? 'is-online' : 'is-offline'}" role="img" aria-label="${esc(statusTitle)}" title="${esc(statusTitle)}"></span><span style="overflow: hidden; text-overflow: ellipsis;">${userLink(u)}</span></strong>
+              <strong style="display: flex; align-items: center; gap: 8px; min-width: 0;"><span class="presence-dot ${active ? 'is-online' : 'is-offline'}" role="img" aria-label="${esc(statusTitle)}" title="${esc(statusTitle)}"></span><span style="overflow: hidden; text-overflow: ellipsis;">${userLink(u)}</span>${breakBadge(row)}</strong>
               <span style="font-family: var(--font-mono); font-size: 11px; color: #5A6352; font-weight: 700;">${esc(mgrDisplay)}</span>
               <span style="font-family: var(--font-mono); font-size: 12px;">${esc(formatPhone(u.phone))}</span>
               ${countCell(uTotal)}
@@ -4417,7 +4448,9 @@
           const statusTitle = active ? `${uConnected} connected call${uConnected === 1 ? '' : 's'} today` : 'No connected calls today';
           const todayCell = !isAgent ? '—'
             : (statsReady ? `<span class="count-pill ${todayTotal > 0 ? 'is-good' : 'is-bad'}">${todayTotal}</span> calls` : `${todayCallsText(u)} calls`);
-          const statusCell = !isAgent || !statsReady ? '—'
+          const onBreakBadge = isAgent && statsReady ? breakBadge(todayRow(u)) : '';
+          const statusCell = onBreakBadge ? onBreakBadge
+            : !isAgent || !statsReady ? '—'
             : `<span style="display: inline-flex; align-items: center; gap: 6px; color: ${active ? '#2E9E2B' : '#D0453A'};" title="${esc(statusTitle)}"><span class="presence-dot ${active ? 'is-online' : 'is-offline'}" aria-hidden="true"></span>${active ? 'ACTIVE' : 'NO CALLS'}</span>`;
           return `
             <div class="table-body-row" style="grid-template-columns: 1fr 1.6fr 1.2fr 1fr 1fr 0.9fr 0.8fr 0.8fr 1.4fr;">

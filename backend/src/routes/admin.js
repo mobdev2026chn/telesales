@@ -8,7 +8,7 @@ const Lead = require('../models/Lead');
 const { hashPassword, forgetProfile } = require('../middleware/auth');
 const { getPeriodRange, aggregateCallStats, findCallerStats, buildDedupKey } = require('../services/callStats');
 const { resolveScope, callLogQueryFor, leadQueryFor, MANAGER_ROLES } = require('../services/scope');
-const { isOnline } = require('../services/presence');
+const { isOnline, breakInfo } = require('../services/presence');
 const { escapeRegex, last10, byIdQuery, phoneRegex, serverError, parseLimit, parseDate } = require('../utils/common');
 
 const DEFAULT_TEAM = 'Telesales Team';
@@ -89,6 +89,7 @@ router.get('/dashboard', async (req, res) => {
         dailyTarget: target,
         online: isOnline(emp),
         lastSeenAt: emp.lastSeenAt || null,
+        ...breakInfo(emp),
         ...m,
         talkTimeFormatted: fmtHM(m.talkTimeSeconds),
         progressPercent: Math.min(Math.round((m.totalCalls / target) * 100), 100),
@@ -132,8 +133,11 @@ router.get('/dashboard', async (req, res) => {
         name: emp.name,
         phone: emp.phone,
         managerName: emp.managerName,
-        status: active ? 'ON CALL' : (emp.online ? 'ONLINE' : 'OFFLINE'),
-        statusColor: active ? '#FF3B30' : (emp.online ? '#34C759' : '#8E8E93'),
+        status: active ? 'ON CALL' : (emp.onBreak ? 'ON BREAK' : (emp.online ? 'ONLINE' : 'OFFLINE')),
+        statusColor: active ? '#FF3B30' : (emp.onBreak ? '#F5A524' : (emp.online ? '#34C759' : '#8E8E93')),
+        onBreak: emp.onBreak,
+        breakType: emp.breakType,
+        breakStartedAt: emp.breakStartedAt,
         totalCalls: emp.totalCalls,
       };
     });
