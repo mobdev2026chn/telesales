@@ -456,7 +456,8 @@ router.get('/leaderboard', async (req, res) => {
       };
     });
 
-    employees.sort((a, b) => b.talkTimeSeconds - a.talkTimeSeconds || b.totalCalls - a.totalCalls || (a.name || '').localeCompare(b.name || ''));
+    // Places by connected calls, then talk time, then total calls
+    employees.sort((a, b) => b.connectedCalls - a.connectedCalls || b.talkTimeSeconds - a.talkTimeSeconds || b.totalCalls - a.totalCalls || (a.name || '').localeCompare(b.name || ''));
     employees.forEach((emp, i) => { emp.rank = i + 1; });
 
     res.json({ success: true, count: employees.length, employees });
