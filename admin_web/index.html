@@ -1379,7 +1379,7 @@
         <div class="section-header">
           <div class="section-title">
             <span class="green-square"></span>
-            <span class="section-title-text" id="lbTitleText">LEADERBOARD · RANKED BY TALK TIME</span>
+            <span class="section-title-text" id="lbTitleText">LEADERBOARD · RANKED BY CONNECTED CALLS</span>
           </div>
           <div class="pill-group" id="lbPeriodChips">
             <button type="button" class="filter-chip active" id="lbChipToday" onclick="setLeaderboardPeriod('today', this)">TODAY</button>
@@ -1433,6 +1433,17 @@
           <button type="button" class="filter-chip" onclick="setRecordingFilter('OUT', this)">OUTBOUND</button>
           <button type="button" class="filter-chip" onclick="setRecordingFilter('5+', this)">OVER 5 MIN</button>
           <button type="button" class="filter-chip" onclick="setRecordingFilter('-5', this)">UNDER 5 MIN</button>
+          <label for="recRangeSelect" class="visually-hidden">Date range</label>
+          <select id="recRangeSelect" class="toolbar-select" onchange="onRecRangeChange(this.value)" style="margin-left: auto;">
+            <option value="today" selected>TODAY</option>
+            <option value="7d">LAST 7 DAYS</option>
+            <option value="30d">LAST 30 DAYS</option>
+            <option value="90d">LAST 90 DAYS</option>
+          </select>
+          <label for="recAgentFilter" class="visually-hidden">Agent</label>
+          <select id="recAgentFilter" class="toolbar-select" onchange="onRecAgentFilterChange(this.value)">
+            <option value="ALL">ALL AGENTS</option>
+          </select>
         </div>
 
         <div id="recordingsCardsList" style="display: flex; flex-direction: column; gap: 18px;">
@@ -1950,6 +1961,8 @@
       udPrevTab: 'dash',
       udFromApp: false,     // opened from inside the portal, so BACK can use the browser history
       recFilter: 'ALL',
+      recAgent: 'ALL',      // Call Recordings: one agent's recordings (loaded from the server for that agent)
+      recRange: 'today',    // Call Recordings date range, same choices and default as the Call Log
       recPage: 1,
       authUser: null,     // the real signed-in account (from /auth/me) — never changed by "view as"
       viewAsId: null,     // admin-only, in-memory "view as" scope; never persisted
@@ -2696,6 +2709,8 @@
       Store.viewAsId = null;
       Store.editingUserId = null;
       Store.detailUserId = null;
+      Store.recAgent = 'ALL';
+      Store.recRange = 'today';
       Store.dialCurrentLead = null;
       document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active'));
       ['dashTeamRows', 'callTableRows', 'leadQueueRows', 'userTableRows', 'teamTreeNodesBody', 'leaderboardTableRows',
@@ -2866,10 +2881,24 @@
 
     const REC_FETCH_LIMIT = 200;
 
+    // One agent picked on the Call Recordings page: the server returns that agent's recordings only
+    // (narrowed inside the viewer's scope); otherwise everyone in the current scope.
+    function recsQueryKey() {
+      return Store.recAgent && Store.recAgent !== 'ALL' ? `&callerIds=${encodeURIComponent(Store.recAgent)}` : scopeParam();
+    }
+
+    // Call time range of the Call Recordings page (India time, same as the Call Log's range)
+    function recRangeBounds() {
+      const days = CALL_RANGE_DAYS[Store.recRange] ?? 0;
+      return { from: istMidnight(istDaysAgoStr(days)), to: new Date() };
+    }
+
     async function fetchRecordings(append) {
+      const reqId = (Store.recsReq = (Store.recsReq || 0) + 1);
       try {
-        const scopeKey = scopeParam();
-        let qs = `?limit=${REC_FETCH_LIMIT}${scopeKey}`;
+        const scopeKey = recsQueryKey() + `|${Store.recRange}`;
+        const { from, to } = recRangeBounds();
+        let qs = `?limit=${REC_FETCH_LIMIT}${recsQueryKey()}&from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`;
         if (append && Store.recordings.length) {
           const oldest = Store.recordings.reduce((min, r) => {
             const t = r.createdAt ? new Date(r.createdAt).getTime() : Infinity;
@@ -2878,6 +2907,7 @@
           if (isFinite(oldest)) qs += `&before=${encodeURIComponent(new Date(oldest).toISOString())}`;
         }
         const json = await apiFetch(`/admin/recordings${qs}`);
+        if (reqId !== Store.recsReq) return; // another agent was picked meanwhile
         const raw = json.recordings || [];
         const list = raw.map(mapRecording).filter(r => r.id);
         if (append) {
@@ -2889,7 +2919,8 @@
         Store.recordings.sort((a, b) => (b.ts ? b.ts.getTime() : 0) - (a.ts ? a.ts.getTime() : 0));
         Store.recsHasMore = raw.length >= REC_FETCH_LIMIT;
         if (!append) {
-          Store.recsTotal = Number(json.total) || list.length;
+          // An older server ignores the date range: its total then covers all time, so it is not shown
+          Store.recsTotal = json.rangeApplied ? (Number(json.total) || list.length) : 0;
           Store.recsScopeKey = scopeKey;
         }
         Store.errors.recs = null;
@@ -2946,6 +2977,7 @@
         if (!Store.authUser || document.hidden || Store.syncing) return;
         if (Store.tab === 'dash') fetchDashboardData();
         else if (Store.tab === 'user') fetchUserDetail();
+        else if (Store.tab === 'lb') fetchLeaderboardData();   // places follow new connected calls
         else if (Store.tab === 'calls') {
           if (isTyping() || anyModalOpen() || isAudioPlaying()) return;
           fetchCalls(false).then(() => { if (Store.tab === 'calls') renderCallLog(); });
@@ -3320,7 +3352,9 @@
       const shownCount = unfiltered ? Math.max(Store.callsMeta.total || 0, fc.length) : fc.length;
       const rangeTxt = { today: 'TODAY', '7d': 'LAST 7 DAYS', '30d': 'LAST 30 DAYS', '90d': 'LAST 90 DAYS' }[Store.callRange] || '';
       const moreTxt = Store.callsMeta.hasMore ? ` · ${Store.calls.length} LOADED` : '';
-      $('callPageLabel').textContent = `PAGE ${page} / ${totalPages} · ${shownCount} CALLS ${rangeTxt}${moreTxt}`;
+      // Talk time of exactly the calls listed (follows the agent / search / type filters)
+      const talkSec = fc.reduce((sum, c) => sum + (c.dur > 0 ? c.dur : 0), 0);
+      $('callPageLabel').textContent = `PAGE ${page} / ${totalPages} · ${shownCount} CALLS ${rangeTxt} · ${fmtTalk(talkSec)} TALK TIME${moreTxt}`;
       const prevBtn = $('callPrevBtn');
       const nextBtn = $('callNextBtn');
       if (prevBtn) { prevBtn.disabled = page === 1; prevBtn.style.opacity = page === 1 ? '0.4' : '1'; }
@@ -3549,22 +3583,27 @@
       if (bar) bar.style.display = 'none';
     }
 
+    // Player clock: m:ss (e.g. 0:00, 1:28, 12:05)
+    function fmtClock(s) {
+      s = Math.max(0, Math.floor(Number(s) || 0));
+      return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    }
+
+    // Recording card time: "current / total" from the start (0:00 / 1:28), counting up while it plays.
+    // Total = the audio file's length once known, else the call's talk time.
+    function audioTotalSeconds(audioEl) {
+      if (audioEl && audioEl.duration && isFinite(audioEl.duration) && audioEl.duration > 0) return audioEl.duration;
+      return Number(audioEl && audioEl.dataset.dur) || 0;
+    }
+
     function updateCardAudioDuration(audioEl) {
       if (!audioEl || !audioEl.dataset.recId) return;
-      if (audioEl.duration && isFinite(audioEl.duration) && audioEl.duration > 0) {
-        const el = $(`dur_text_${domKey(audioEl.dataset.recId)}`);
-        if (el) el.textContent = fmtDur(audioEl.duration);
-      }
+      const el = $(`dur_text_${domKey(audioEl.dataset.recId)}`);
+      if (el) el.textContent = `${fmtClock(audioEl.currentTime)} / ${fmtClock(audioTotalSeconds(audioEl))}`;
     }
 
     function updateCardAudioProgress(audioEl) {
-      if (!audioEl || !audioEl.dataset.recId) return;
-      const cur = Math.round(audioEl.currentTime || 0);
-      const dur = (audioEl.duration && isFinite(audioEl.duration) && audioEl.duration > 0) ? Math.round(audioEl.duration) : 0;
-      const el = $(`dur_text_${domKey(audioEl.dataset.recId)}`);
-      if (!el) return;
-      if (dur > 0 && cur > 0) el.textContent = `${fmtDur(cur)} / ${fmtDur(dur)}`;
-      else if (dur > 0) el.textContent = fmtDur(dur);
+      updateCardAudioDuration(audioEl);
     }
 
     // Escape: close an open dialog first; otherwise stop audio — but never while typing
@@ -4448,11 +4487,18 @@
         return;
       }
 
-      const rows = data.slice().sort((a, b) => (Number(a.rank) || 999) - (Number(b.rank) || 999)).map((e, i) => {
+      // Places are decided by connected calls (then talk time, then total calls), recomputed on every live refresh
+      const n = (v) => Number(v) || 0;
+      const rows = data.slice().sort((a, b) =>
+        (n(b.connectedCalls) - n(a.connectedCalls)) ||
+        (n(b.talkTimeSeconds) - n(a.talkTimeSeconds)) ||
+        (n(b.totalCalls) - n(a.totalCalls)) ||
+        String(a.name || '').localeCompare(String(b.name || ''))
+      ).map((e, i) => {
         const total = Number(e.totalCalls) || 0;
         const target = Number(e.dailyTarget) || 0;
         return {
-          rank: Number(e.rank) || i + 1,
+          rank: i + 1,
           id: e.id ? String(e.id) : '',
           name: e.name || '—',
           phone: e.phone || '',
@@ -4500,8 +4546,8 @@
           <span style="font-family: var(--font-display); font-size: 20px;">#${s.rank}</span>
           <strong>${userLink({ id: s.id, phone: s.phone, name: s.name }, s.name)}</strong>
           <span style="font-family: var(--font-mono); font-size: 12px;">${esc(formatPhone(s.phone))}</span>
-          <span style="font-family: var(--font-mono); font-weight: 700;">${s.total} calls</span>
-          <span style="font-family: var(--font-mono); font-weight: 700; color: #2E9E2B;">${s.conn} connected</span>
+          <span style="font-family: var(--font-mono); font-weight: 700;"><span class="count-pill ${s.total > 0 ? 'is-good' : 'is-bad'}">${s.total}</span> calls</span>
+          <span style="font-family: var(--font-mono); font-weight: 700;"><span class="count-pill ${s.conn > 0 ? 'is-good' : 'is-bad'}">${s.conn}</span> connected</span>
           <span style="font-family: var(--font-mono);">${fmtTalk(s.talk)}</span>
           <div style="display: flex; align-items: center; gap: 10px;">
             <div style="flex: 1; height: 12px; background: #E3DFD2; border-radius: 999px; border: 1px solid var(--ink-900); overflow: hidden;">
@@ -4546,6 +4592,26 @@
         Store.recMeta[id] = { crit: EMPTY_CRIT(), status: 'PENDING', comments: [], draft: '', saveState: '', saveTimer: null };
       }
       return Store.recMeta[id];
+    }
+
+    async function onRecRangeChange(val) {
+      Store.recRange = CALL_RANGE_DAYS[val] !== undefined ? val : 'today';
+      Store.recPage = 1;
+      Store.recordings = [];
+      Store.loaded.recs = false;
+      renderRecordings(true);
+      await fetchRecordings(false);
+      if (Store.tab === 'recs') renderRecordings(true);
+    }
+
+    async function onRecAgentFilterChange(val) {
+      Store.recAgent = val || 'ALL';
+      Store.recPage = 1;
+      Store.recordings = [];
+      Store.loaded.recs = false;
+      renderRecordings(true);
+      await fetchRecordings(false);
+      if (Store.tab === 'recs') renderRecordings(true);
     }
 
     function setRecordingFilter(f, btn) {
@@ -4638,7 +4704,13 @@
     function isShortRecording(c) { return !(c.dur > MIN_RECORDING_SECONDS); }
 
     function filteredRecordings() {
-      let recs = Store.recordings.filter(isCallInScope).filter(c => !isShortRecording(c));
+      const { from: rangeFrom } = recRangeBounds();
+      let recs = Store.recordings.filter(isCallInScope).filter(c => !isShortRecording(c))
+        .filter(c => c.ts && c.ts >= rangeFrom);  // date range (also applied by the server)
+      if (Store.recAgent !== 'ALL') {
+        const agent = Store.users.find(u => u.id === Store.recAgent);
+        recs = agent ? recs.filter(c => callBelongsTo(c, agent)) : [];
+      }
       if (Store.recFilter === 'IN') recs = recs.filter(c => c.dir === 'IN');
       if (Store.recFilter === 'OUT') recs = recs.filter(c => c.dir === 'OUT');
       if (Store.recFilter === '5+') recs = recs.filter(c => c.dur >= 300);
@@ -4731,9 +4803,9 @@
             <div class="rec-audio-wrap">
               <div style="background: #10180C; color: #3DC838; font-family: var(--font-mono); font-size: 12px; font-weight: 700; padding: 7px 14px; border-radius: 999px; border: 1.5px solid #10180C; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; box-shadow: 2px 2px 0 #10180C; letter-spacing: 0.05em;">
                 <span aria-hidden="true">⏱️</span>
-                <span id="dur_text_${dk}">${fmtDur(c.dur)}</span>
+                <span id="dur_text_${dk}" aria-label="Played / total length">0:00 / ${fmtClock(c.dur)}</span>
               </div>
-              <audio data-rec-id="${esc(c.id)}" controls preload="none" aria-label="Recording: ${esc(c.agent)} and ${esc(c.client || formatPhone(c.phone))}" style="height: 40px; border-radius: 999px; background: #F7F5EC; border: 1.5px solid #10180C; box-shadow: 2px 2px 0 #10180C;" src="${esc(recordingAudioUrl(c.id))}" onplay="onAnyAudioPlay(this)" onpause="syncAudioControls()" onended="syncAudioControls()" onloadedmetadata="updateCardAudioDuration(this)" ontimeupdate="updateCardAudioProgress(this)"></audio>
+              <audio data-rec-id="${esc(c.id)}" data-dur="${c.dur}" controls preload="metadata" aria-label="Recording: ${esc(c.agent)} and ${esc(c.client || formatPhone(c.phone))}" style="height: 40px; border-radius: 999px; background: #F7F5EC; border: 1.5px solid #10180C; box-shadow: 2px 2px 0 #10180C;" src="${esc(recordingAudioUrl(c.id))}" onplay="onAnyAudioPlay(this)" onpause="syncAudioControls()" onended="syncAudioControls()" onloadedmetadata="updateCardAudioDuration(this)" ontimeupdate="updateCardAudioProgress(this)"></audio>
             </div>
           </div>
           <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; border: 1px solid #10180C; border-radius: 10px; background: #F7F5EC; padding: 10px 14px; margin-top: 14px; font-family: var(--font-mono); font-size: 11px;">
@@ -4753,6 +4825,22 @@
       if (playingCard && !force) return;
       const resume = playingCard ? { id: playingCard.dataset.recId, time: playingCard.currentTime } : null;
 
+      // Agent filter: the same people as the Call Log's agent filter
+      const scopedAgents = getScopedCallers();
+      if (Store.recAgent !== 'ALL' && !scopedAgents.some(u => u.id === Store.recAgent)) {
+        Store.recAgent = 'ALL';
+        Store.recordings = [];
+        Store.loaded.recs = false;
+        fetchRecordings(false).then(() => { if (Store.tab === 'recs') renderRecordings(true); });
+      }
+      const rangeSel = $('recRangeSelect');
+      if (rangeSel && rangeSel.value !== Store.recRange) rangeSel.value = Store.recRange;
+      const agentSel = $('recAgentFilter');
+      if (agentSel) {
+        agentSel.innerHTML = '<option value="ALL">ALL AGENTS</option>' + scopedAgents.map(u =>
+          `<option value="${esc(u.id)}"${u.id === Store.recAgent ? ' selected' : ''}>${esc(u.name.toUpperCase())}</option>`).join('');
+      }
+
       const recs = filteredRecordings();
       Store.lastRecRows = recs;
       Store.recPlaylist = recs.map(c => c.id);
@@ -4764,7 +4852,7 @@
       // Only part of the list is loaded at a time: unfiltered, show the server's full count for this scope
       // (the server's count includes the hidden 1-second files, so those loaded are taken off)
       const shortLoaded = Store.recordings.filter(c => isCallInScope(c) && isShortRecording(c)).length;
-      const recTotal = Store.recFilter === 'ALL' && Store.recsScopeKey === scopeParam() ? Math.max((Store.recsTotal || 0) - shortLoaded, recs.length) : recs.length;
+      const recTotal = Store.recFilter === 'ALL' && Store.recsScopeKey === `${recsQueryKey()}|${Store.recRange}` ? Math.max((Store.recsTotal || 0) - shortLoaded, recs.length) : recs.length;
       $('recsHeaderCount').textContent = `CALL RECORDINGS · ${recTotal} FILES${recTotal > recs.length ? ` (${recs.length} LOADED)` : ''}`;
       $('recReviewerName').textContent = (Store.authUser && Store.authUser.name ? Store.authUser.name : '—').toUpperCase();
       const listEl = $('recordingsCardsList');

@@ -39,7 +39,15 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     int r = 1;
     final currentMgrId = tele.currentUserId;
 
-    for (var emp in tele.employees) {
+    // Places by connected calls, then talk time, then total calls (same order as the admin web)
+    final ranked = [...tele.employees]..sort((a, b) {
+        final c = b.connectedCalls.compareTo(a.connectedCalls);
+        if (c != 0) return c;
+        final t = b.totalTalkTime.compareTo(a.totalTalkTime);
+        if (t != 0) return t;
+        return b.totalCalls.compareTo(a.totalCalls);
+      });
+    for (var emp in ranked) {
       if (emp.role.toLowerCase() == 'caller') {
         // Scope strictly to callers reporting to this manager
         if (emp.reportingManagerId != null && emp.reportingManagerId!.isNotEmpty) {
