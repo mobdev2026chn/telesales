@@ -1,5 +1,5 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import '../../providers/tele_provider.dart';
 import '../../services/call_recording_setup.dart';
@@ -62,7 +62,7 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel> with 
   }
 
   Future<void> _refresh() async {
-    if (!Platform.isAndroid) {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
       setState(() => _loading = false);
       return;
     }
@@ -87,7 +87,7 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel> with 
 
   @override
   Widget build(BuildContext context) {
-    if (!Platform.isAndroid) {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
       return _infoCard(
         Icons.info_outline,
         'Call recording is available on Android phones only. iPhones do not allow apps to record or read call recordings.',

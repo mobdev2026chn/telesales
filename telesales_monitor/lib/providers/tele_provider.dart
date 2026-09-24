@@ -130,6 +130,7 @@ class TeleProvider extends ChangeNotifier {
       _startPeriodicSyncTimer();
       if (_isLoggedIn) {
         fetchNotifications();
+        fetchBackendData();
         // (Re)start call tracking while we are allowed to: after a reboot, an update or a kill
         syncCallMonitor();
         CallRecordingChannel.retryUploads();
@@ -520,6 +521,7 @@ class TeleProvider extends ChangeNotifier {
     _syncPollingTimer = Timer.periodic(const Duration(seconds: 60), (_) {
       if (_isLoggedIn && _appInForeground) {
         refreshProfile();
+        fetchBackendData();
         _refreshLiveNumbers();
         fetchNotifications();
       }
@@ -815,6 +817,12 @@ class TeleProvider extends ChangeNotifier {
       );
       if (!_isCurrentSession(gen)) return;
       if (backendLeads != null) {
+        // The server response is authoritative: remove deleted/import-replaced CRM leads
+        // before merging the current rows, while retaining local call-log contacts.
+        final serverIds = backendLeads.map((lead) => lead.id).where((id) => id.isNotEmpty).toSet();
+        _leads.removeWhere((lead) =>
+            !lead.id.startsWith('local_') &&
+          !serverIds.contains(lead.id));
         for (var bl in backendLeads) {
           if (bl.id.isEmpty) continue;
           // Apply a local status/note the server has not confirmed yet
@@ -826,7 +834,8 @@ class TeleProvider extends ChangeNotifier {
             bl.note = _leadNotes[bl.phone]!;
           }
 
-          final existingIdx = _leads.indexWhere((l) => l.id == bl.id || samePhone(l.phone, bl.phone));
+            final existingIdx = _leads.indexWhere((l) =>
+              l.id == bl.id || (l.id.startsWith('local_') && samePhone(l.phone, bl.phone)));
           if (existingIdx != -1) {
             _leads[existingIdx] = bl;
           } else {
@@ -2043,7 +2052,7 @@ class TeleProvider extends ChangeNotifier {
     // 1. First keep existing leads in memory
     for (var l in _leads) {
       if (l.phone.isNotEmpty) {
-        uniqueClients[l.phone] = l;
+        uniqueClients[l.id] = l;
       }
     }
 
@@ -2052,11 +2061,14 @@ class TeleProvider extends ChangeNotifier {
     for (var call in _callLogs) {
       if (call.phoneNumber.isNotEmpty) {
         final phone = call.phoneNumber;
-        final existingKey = uniqueClients.keys.firstWhere(
-          (k) => k == phone || samePhone(k, phone),
-          orElse: () => '',
-        );
-        if (existingKey.isEmpty) {
+        LeadModel? existing;
+        for (final candidate in uniqueClients.values) {
+          if (samePhone(candidate.phone, phone)) {
+            existing = candidate;
+            break;
+          }
+        }
+        if (existing == null) {
           LeadStatus status = LeadStatus.other;
           if (_leadStatusOverrides.containsKey(phone)) {
             final stName = _leadStatusOverrides[phone]!;
@@ -2065,7 +2077,7 @@ class TeleProvider extends ChangeNotifier {
             status = LeadStatus.followUp;
           }
 
-          uniqueClients[phone] = LeadModel(
+          final localLead = LeadModel(
             id: 'local_${call.id}',
             name: call.contactName,
             phone: phone,
@@ -2077,17 +2089,18 @@ class TeleProvider extends ChangeNotifier {
             assignedTo: _callerName,
             assignedCallerId: _currentUserId,
           );
+          uniqueClients[localLead.id] = localLead;
         } else {
-          final existing = uniqueClients[existingKey]!;
-          if (call.contactName != 'Unknown' && call.contactName.isNotEmpty && (existing.name == 'Unknown' || existing.name.isEmpty)) {
-            existing.name = call.contactName;
+          final matched = existing;
+          if (call.contactName != 'Unknown' && call.contactName.isNotEmpty && (matched.name == 'Unknown' || matched.name.isEmpty)) {
+            matched.name = call.contactName;
           }
-          if (_leadStatusOverrides.containsKey(existing.phone)) {
-            final stName = _leadStatusOverrides[existing.phone]!;
-            existing.status = LeadStatus.values.firstWhere((e) => e.name == stName, orElse: () => existing.status);
+          if (_leadStatusOverrides.containsKey(matched.phone)) {
+            final stName = _leadStatusOverrides[matched.phone]!;
+            matched.status = LeadStatus.values.firstWhere((e) => e.name == stName, orElse: () => matched.status);
           }
-          if (_leadNotes.containsKey(existing.phone)) {
-            existing.note = _leadNotes[existing.phone]!;
+          if (_leadNotes.containsKey(matched.phone)) {
+            matched.note = _leadNotes[matched.phone]!;
           }
         }
       }
