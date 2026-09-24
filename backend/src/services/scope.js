@@ -6,7 +6,7 @@ const Employee = require('../models/Employee');
 const { last10, isObjectId, exactNameRegex, anyPhoneRegex, phoneRegex } = require('../utils/common');
 
 const EMP_FIELDS = '-photoBase64 -avatarUrl';
-const MANAGER_ROLES = ['admin', 'manager', 'jr_manager'];
+const MANAGER_ROLES = ['admin', 'manager', 'jr_manager', 'team_leader'];
 const ALL_VALUES = new Set(['', 'ALL', 'ALL TEAMS', 'ALL MANAGERS', 'ALL USERS', 'ALL CALLERS']);
 const isAllValue = (v) => v === undefined || v === null || ALL_VALUES.has(String(v).trim().toUpperCase());
 
@@ -57,7 +57,7 @@ async function assignedTo(mgr) {
     level = found.filter(e => !seen.has(e.id));
     level.forEach(e => { seen.add(e.id); out.push(e); });
     // Only people who manage others can have reports of their own
-    level = level.filter(e => e.role === 'manager' || e.role === 'jr_manager');
+    level = level.filter(e => e.role === 'manager' || e.role === 'jr_manager' || e.role === 'team_leader');
   }
   return out;
 }
@@ -95,7 +95,7 @@ async function resolveScope(req, params = null) {
   }
 
   const isAdmin = role === 'admin';
-  // Base: admin -> everyone, manager/jr_manager -> own team
+  // Base: admin -> everyone, manager/jr_manager/team_leader -> own team
   const base = isAdmin ? await Employee.find({}).select(EMP_FIELDS).lean() : await teamOf(me);
   const inBase = (list) => {
     if (isAdmin) return list;

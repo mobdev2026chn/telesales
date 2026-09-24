@@ -11,7 +11,7 @@ const EmployeeSchema = new mongoose.Schema({
   // bcrypt hash (legacy plaintext values are upgraded on next login). Never returned unless
   // explicitly requested with .select('+password').
   password: { type: String, default: '', select: false },
-  role: { type: String, enum: ['caller', 'jr_manager', 'manager', 'admin'], default: 'caller' },
+  role: { type: String, enum: ['caller', 'team_leader', 'jr_manager', 'manager', 'admin'], default: 'caller' },
   team: { type: String, default: 'Telesales Team' },
   totalCalls: { type: Number, default: 0 },
   connectedCalls: { type: Number, default: 0 },

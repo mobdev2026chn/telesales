@@ -672,6 +672,15 @@
     .role-badge-admin { background: #10180C; color: #C8FF4A; }
     .role-badge-manager { background: #3DC838; color: #10180C; }
     .role-badge-jrmanager { background: #C88A2E; color: #FFFFFF; }
+    .role-badge-teamleader { background: #3A7BD5; color: #FFFFFF; }
+    .mgr-filter-cell { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+    .mgr-filter-select {
+      width: 100%; max-width: 100%; background: transparent; color: var(--paper);
+      border: 1px solid rgba(239, 236, 227, 0.45); border-radius: 8px; padding: 3px 6px;
+      font-family: var(--font-mono); font-size: 9.5px; font-weight: 700; letter-spacing: 0.04em; cursor: pointer;
+    }
+    .mgr-filter-select option { color: #10180C; background: #FFFFFF; }
+    .mgr-filter-select.is-active { background: var(--lime-400); color: #10180C; border-color: var(--lime-400); }
     .role-badge-caller { background: #FFFFFF; color: #10180C; }
 
     /* AUDIO PLAYER SCRUBBER */
@@ -1084,7 +1093,7 @@
         <button type="button" class="nav-pill" data-tab="lb" onclick="switchNavTab('lb', this)">LEADERBOARD</button>
         <button type="button" class="nav-pill" data-tab="recs" onclick="switchNavTab('recs', this)">CALL RECORDINGS</button>
         <button type="button" class="nav-pill" data-tab="leads" onclick="switchNavTab('leads', this)">LEADS PIPELINE</button>
-        <button type="button" class="nav-pill" data-tab="demos" onclick="switchNavTab('demos', this)">DEMO BOOKINGS</button>
+        <button type="button" class="nav-pill" data-tab="demos" id="navDemosPill" onclick="switchNavTab('demos', this)">DEMO BOOKINGS</button>
       </nav>
 
       <div class="sidebar-footer">
@@ -1219,7 +1228,7 @@
         <!-- BOTTOM CARD: TEAM CALLER METRICS WITH MANAGED BY COLUMN -->
         <div class="neo-table-card table-scroll-wrap">
           <div class="table-head-row" style="grid-template-columns: 1.3fr 1.3fr 1.1fr 0.8fr 0.9fr 0.9fr 1.4fr;">
-            <span>AGENT</span><span>MANAGED BY</span><span>PHONE / SIM</span><span>CALLS</span><span>CONNECTED</span><span>TALK TIME</span><span>DAILY TARGET</span>
+            <span>AGENT</span><span class="mgr-filter-cell">MANAGED BY<label for="dashMgrFilter" class="visually-hidden">Filter by manager</label><select id="dashMgrFilter" class="mgr-filter-select" onchange="onMgrFilter('dash', this.value)"><option value="ALL">ALL MANAGERS</option></select></span><span>PHONE / SIM</span><span>CALLS</span><span>CONNECTED</span><span>TALK TIME</span><span>DAILY TARGET</span>
           </div>
           <div id="dashTeamRows">
             <!-- Dynamically Injected via JS -->
@@ -1468,6 +1477,7 @@
               <label class="user-form-label" for="fUserRole">ROLE</label>
               <select id="fUserRole" style="width: 100%; border: 1.5px solid var(--ink-900); border-radius: 10px; padding: 9px 10px; font-family: var(--font-mono); font-size: 11px; background: #fff;">
                 <option value="CALLER">CALLER</option>
+                <option value="TEAM_LEADER">TEAM LEADER</option>
                 <option value="JR_MANAGER">JUNIOR MANAGER</option>
                 <option value="MANAGER" id="fUserRoleManagerOpt">MANAGER</option>
                 <option value="ADMIN" id="fUserRoleAdminOpt">ADMIN</option>
@@ -1508,7 +1518,7 @@
         <!-- View B: Team Tree Hierarchy (With Working Role Filters: ALL, MANAGERS, CALLERS) -->
         <div id="userTreeViewWrap" class="neo-table-card table-scroll-wrap" style="display: none; margin-bottom: 22px;">
           <div class="table-head-row" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-            <span>REPORTING TREE · SUPER ADMIN → MANAGERS → JR MANAGERS → CALLERS</span>
+            <span>REPORTING TREE · SUPER ADMIN → MANAGERS → JR MANAGERS → TEAM LEADERS → CALLERS</span>
             <!-- TEAM TREE FILTER OPTIONS (WORKING) -->
             <div style="display: flex; gap: 6px; align-items: center;">
               <button type="button" class="filter-chip active" id="treeFilterAll" onclick="setTreeFilter('ALL', this)" style="padding: 4px 12px; font-size: 10px;">ALL USERS</button>
@@ -1580,8 +1590,8 @@
 
         <!-- Leaderboard Table (With Consistent +91 Phone Format) -->
         <div class="neo-table-card table-scroll-wrap">
-          <div class="table-head-row" style="grid-template-columns: 0.5fr 1.4fr 1.3fr 0.9fr 1fr 0.9fr 1.3fr;">
-            <span>RANK</span><span>AGENT</span><span>PHONE / SIM</span><span>TOTAL</span><span>CONNECTED</span><span>TALK TIME</span><span>TARGET ATTAINMENT</span>
+          <div class="table-head-row" style="grid-template-columns: 0.5fr 1.3fr 1.6fr 1.2fr 0.9fr 1fr 0.9fr 1.3fr;">
+            <span>RANK</span><span>AGENT</span><span class="mgr-filter-cell">MANAGED BY<label for="lbMgrFilter" class="visually-hidden">Filter by manager</label><select id="lbMgrFilter" class="mgr-filter-select" onchange="onMgrFilter('lb', this.value)"><option value="ALL">ALL MANAGERS</option></select></span><span>PHONE / SIM</span><span>TOTAL</span><span>CONNECTED</span><span>TALK TIME</span><span>TARGET ATTAINMENT</span>
           </div>
           <div id="leaderboardTableRows">
             <!-- Dynamically Injected via JS -->
@@ -2160,6 +2170,8 @@
       callSearch: '',
       callPage: 1,
       dashTeamPage: 1,
+      dashMgrFilter: 'ALL',   // Dashboard "Managed by" filter (person id or ALL)
+      lbMgrFilter: 'ALL',     // Leaderboard "Managed by" filter
       callRange: 'today',   // same default period as the dashboard, so the counts match on first view
       callsScopeKey: null,
       callsReq: 0,
@@ -2219,7 +2231,7 @@
       raw.forEach(r => { if (r && r._id) byOid.set(String(r._id), String(r.id || r._id)); });
       const ids = new Set(users.map(u => u.id));
       const managersByName = new Map();
-      users.filter(u => u.role === 'MANAGER' || u.role === 'JR_MANAGER' || u.role === 'ADMIN').forEach(m => {
+      users.filter(u => u.role === 'MANAGER' || u.role === 'JR_MANAGER' || u.role === 'TEAM_LEADER' || u.role === 'ADMIN').forEach(m => {
         const k = m.name.trim().toLowerCase();
         managersByName.set(k, managersByName.has(k) ? null : m.id);   // ambiguous names are not guessed
       });
@@ -2486,8 +2498,13 @@
       return r === 'ADMIN' || r === 'MANAGER';
     }
 
+    function canSeeDemosTab() {
+      return getActiveUser().role !== 'CALLER';
+    }
+
     function switchNavTab(tabName, el) {
       if (tabName === 'users' && !canSeeUsersTab()) tabName = 'dash';
+      if (tabName === 'demos' && !canSeeDemosTab()) tabName = 'dash';
       // Leaving a user's page clears #user/<id>, so clicking the same name again opens it again
       if (tabName !== 'user' && /^#user\//.test(location.hash)) {
         try { history.replaceState(null, '', location.pathname + location.search); } catch (_) {}
@@ -2995,7 +3012,7 @@
         const json = await apiFetch('/auth/me');
         const user = json.user;
         const role = String((user && user.role) || '').toLowerCase();
-        if (!user || !['admin', 'manager', 'jr_manager'].includes(role)) {
+        if (!user || !['admin', 'manager', 'jr_manager', 'team_leader'].includes(role)) {
           clearSession();
           showLogin('This portal is for admins and managers only.');
           return;
@@ -3278,6 +3295,9 @@
 
       const usersPill = $('navUsersPill');
       if (usersPill) usersPill.style.display = canSeeUsersTab() ? 'block' : 'none';
+      const demosPill = $('navDemosPill');
+      if (demosPill) demosPill.style.display = canSeeDemosTab() ? 'block' : 'none';
+      if (Store.tab === 'demos' && !canSeeDemosTab()) switchNavTab('dash');
     }
 
     // ==========================================
@@ -3476,7 +3496,13 @@
         const connectedOf = (u) => { const r = statsFor(server.teamMembers, u); return r ? Number(r.connectedCalls) || 0 : 0; };
         const ordered = callers.map((u, i) => ({ u, i, c: connectedOf(u) }))
           .sort((a, b) => ((b.c > 0) - (a.c > 0)) || (b.c - a.c) || (a.i - b.i))
-          .map(x => x.u);
+          .map(x => x.u)
+          .filter(u => { const set = mgrFilterSet('dash'); return !set || set.has(u.id); });
+        syncMgrFilterSelect('dash');
+        if (!ordered.length) {
+          teamContainer.innerHTML = '<div class="empty-state">NOBODY UNDER THIS MANAGER IN THIS VIEW</div>';
+          return;
+        }
         const countCell = (n) => `<span style="font-family: var(--font-mono); font-weight: 700;"><span class="count-pill ${n > 0 ? 'is-good' : 'is-bad'}">${n}</span></span>`;
         // Days in the selected period (India time), so WEEK / MONTH compare against daily target × days
         const targetDays = (() => {
@@ -3512,7 +3538,7 @@
           return `
             <div class="table-body-row" data-open-user="${esc(u.id)}" title="Open ${esc(u.name)}'s details" style="grid-template-columns: 1.3fr 1.3fr 1.1fr 0.8fr 0.9fr 0.9fr 1.4fr; cursor: pointer;">
               <strong style="display: flex; align-items: center; gap: 8px; min-width: 0;"><span class="presence-dot ${active ? 'is-online' : 'is-offline'}" role="img" aria-label="${esc(statusTitle)}" title="${esc(statusTitle)}"></span><span style="overflow: hidden; text-overflow: ellipsis;">${userLink(u)}</span></strong>
-              <span style="font-family: var(--font-mono); font-size: 11px; color: #5A6352; font-weight: 700;">${esc(mgrDisplay)}</span>
+              <span style="font-family: var(--font-mono); font-size: 10.5px; line-height: 1.5; overflow-wrap: anywhere;" title="${esc(managerChainText(u))}">${managerChainHtml(u)}</span>
               <span style="font-family: var(--font-mono); font-size: 12px;">${esc(formatPhone(u.phone))}</span>
               ${countCell(uTotal)}
               ${countCell(uConnected)}
@@ -3644,7 +3670,7 @@
       const scoped = getScopedCallers();
       if (Store.callAgent !== 'ALL' && !scoped.some(u => u.id === Store.callAgent)) Store.callAgent = 'ALL';
       $('callAgentFilter').innerHTML = '<option value="ALL">ALL AGENTS</option>' + scoped.map(u =>
-        `<option value="${esc(u.id)}"${u.id === Store.callAgent ? ' selected' : ''}>${esc(u.name.toUpperCase())}</option>`).join('');
+        `<option value="${esc(u.id)}"${u.id === Store.callAgent ? ' selected' : ''}>${esc(u.name.toUpperCase())} (${esc(roleLabel(u.role))})</option>`).join('');
       const rangeSel = $('callRangeSelect');
       if (rangeSel) rangeSel.value = Store.callRange;
 
@@ -4038,7 +4064,7 @@
     }
 
     function dialableCallers() {
-      return getScopedCallers().filter(u => u.role === 'CALLER' || u.role === 'JR_MANAGER');
+      return getScopedCallers().filter(u => u.role === 'CALLER' || u.role === 'JR_MANAGER' || u.role === 'TEAM_LEADER');
     }
 
     function fillSelect(sel, firstOption, users, labelFn) {
@@ -4348,9 +4374,9 @@
           fileName: file.name,
           rows,
           withPhone,
-          managerId: selectedUser && ['MANAGER', 'JR_MANAGER'].includes(String(selectedUser.role || '').toUpperCase()) ? selectedUser.id : '',
-          managerName: selectedUser && ['MANAGER', 'JR_MANAGER'].includes(String(selectedUser.role || '').toUpperCase()) ? selectedUser.name : '',
-          assignedCallerId: selectedUser && ['CALLER', 'JR_MANAGER'].includes(String(selectedUser.role || '').toUpperCase()) ? selectedUser.id : '',
+          managerId: selectedUser && ['MANAGER', 'JR_MANAGER', 'TEAM_LEADER'].includes(String(selectedUser.role || '').toUpperCase()) ? selectedUser.id : '',
+          managerName: selectedUser && ['MANAGER', 'JR_MANAGER', 'TEAM_LEADER'].includes(String(selectedUser.role || '').toUpperCase()) ? selectedUser.name : '',
+          assignedCallerId: selectedUser && ['CALLER', 'JR_MANAGER', 'TEAM_LEADER'].includes(String(selectedUser.role || '').toUpperCase()) ? selectedUser.id : '',
           assignedCallerName: selectedUser ? selectedUser.name : '',
           targetCallerId: selectedId && selectedId !== ROUND_ROBIN ? selectedId : '',
         };
@@ -4372,16 +4398,16 @@
     // A round-robin upload belongs to the manager in view (none when an admin uploads, as before)
     function roundRobinOwnerId() {
       const me = getActiveUser();
-      return ['MANAGER', 'JR_MANAGER'].includes(me.role) ? me.id : '';
+      return ['MANAGER', 'JR_MANAGER', 'TEAM_LEADER'].includes(me.role) ? me.id : '';
     }
 
     function resolveUploadOwnerManagerId(selectedId) {
       const chosen = Store.users.find(u => u.id === selectedId);
       if (!chosen) return '';
-      if (['MANAGER', 'JR_MANAGER'].includes(chosen.role)) return chosen.id;
+      if (['MANAGER', 'JR_MANAGER', 'TEAM_LEADER'].includes(chosen.role)) return chosen.id;
       const fallbackManager = chosen.mgr ? Store.users.find(u => u.id === chosen.mgr) : null;
-      if (fallbackManager && ['MANAGER', 'JR_MANAGER'].includes(fallbackManager.role)) return fallbackManager.id;
-      const visibleManager = visibleUsers().find(u => ['MANAGER', 'JR_MANAGER'].includes(u.role));
+      if (fallbackManager && ['MANAGER', 'JR_MANAGER', 'TEAM_LEADER'].includes(fallbackManager.role)) return fallbackManager.id;
+      const visibleManager = visibleUsers().find(u => ['MANAGER', 'JR_MANAGER', 'TEAM_LEADER'].includes(u.role));
       return visibleManager ? visibleManager.id : '';
     }
 
@@ -4438,7 +4464,7 @@
       const valid = [];
       let noPhone = 0;
       const selection = Store.users.find(u => u.id === selectedId) || Store.users.find(u => u.id === managerId);
-      const directCallerId = selection && ['CALLER', 'JR_MANAGER'].includes(String(selection.role || '').toUpperCase()) ? selection.id : '';
+      const directCallerId = selection && ['CALLER', 'JR_MANAGER', 'TEAM_LEADER'].includes(String(selection.role || '').toUpperCase()) ? selection.id : '';
       const auto = selectedId === ROUND_ROBIN;
       const rrCallers = auto ? dialableCallers() : [];
 
@@ -4616,7 +4642,9 @@
     }
 
     function managerOptionsFor(excludeId) {
-      return visibleUsers().filter(u => u.id !== excludeId && (u.role === 'MANAGER' || u.role === 'JR_MANAGER' || u.role === 'ADMIN'));
+      return visibleUsers()
+        .filter(u => u.id !== excludeId && (u.role === 'MANAGER' || u.role === 'JR_MANAGER' || u.role === 'TEAM_LEADER' || u.role === 'ADMIN'))
+        .sort((a, b) => roleRank(a.role) - roleRank(b.role) || String(a.name).localeCompare(String(b.name)));
     }
 
     function toggleUserForm(editUserId) {
@@ -4775,7 +4803,7 @@
       Store.callAgent = 'ALL';
       Store.pipelineAgent = 'ALL';
       pop(Store.viewAsId ? `VIEWING AS ${u.name.toUpperCase()} (${roleLabel(u.role)})` : 'BACK TO YOUR OWN VIEW');
-      switchNavTab(u.role === 'CALLER' || u.role === 'JR_MANAGER' ? 'leads' : 'dash');
+      switchNavTab(u.role === 'CALLER' || u.role === 'JR_MANAGER' || u.role === 'TEAM_LEADER' ? 'leads' : 'dash');
     }
 
     function quickJumpToUser(uid) {
@@ -4789,7 +4817,83 @@
       if (role === 'ADMIN') return 'role-badge-admin';
       if (role === 'MANAGER') return 'role-badge-manager';
       if (role === 'JR_MANAGER') return 'role-badge-jrmanager';
+      if (role === 'TEAM_LEADER') return 'role-badge-teamleader';
       return 'role-badge-caller';
+    }
+
+    // "Managed by" cell: the reporting chain from the top down to the direct manager (bold)
+    function managerChainHtml(u) {
+      const chain = [];
+      const seen = new Set([u && u.id]);
+      let m = u ? Store.users.find(x => x.id === u.mgr) : null;
+      while (m && !seen.has(m.id) && chain.length < 8) {
+        seen.add(m.id);
+        chain.unshift(m);
+        m = Store.users.find(x => x.id === m.mgr);
+      }
+      if (!chain.length) return '<span style="color: #8A8574;">Top Level / Admin</span>';
+      return chain.map((m, i) => {
+        const last = i === chain.length - 1;
+        return `<span style="${last ? 'color: #10180C; font-weight: 700;' : 'color: #8A8574; font-weight: 400;'}">${esc(m.name)} (${esc(roleLabel(m.role))})</span>`;
+      }).join('<span style="color: #B9B3A2;"> → </span>');
+    }
+    // Managed-by filter: every manager-level person in view who has people under them, with head counts
+    const MGR_FILTER_PLURAL = { MANAGER: 'MANAGERS', JR_MANAGER: 'JR MANAGERS', TEAM_LEADER: 'TEAM LEADERS', CALLER: 'CALLERS' };
+    function mgrFilterOptionsHtml(selected) {
+      const visible = new Set(visibleUsers().map(u => u.id));
+      const heads = visibleUsers()
+        .filter(u => ['ADMIN', 'MANAGER', 'JR_MANAGER', 'TEAM_LEADER'].includes(u.role))
+        .sort((a, b) => roleRank(a.role) - roleRank(b.role) || String(a.name).localeCompare(String(b.name)));
+      const opts = heads.map(h => {
+        const under = descendantsOf(h.id).filter(u => visible.has(u.id) && u.role !== 'ADMIN');
+        if (!under.length) return '';
+        const counts = ['MANAGER', 'JR_MANAGER', 'TEAM_LEADER', 'CALLER'].map(r => {
+          const n = under.filter(u => (u.role === r) || (r === 'CALLER' && !MGR_FILTER_PLURAL[u.role])).length;
+          return n ? `${n} ${n === 1 ? roleLabel(r) : MGR_FILTER_PLURAL[r]}` : '';
+        }).filter(Boolean).join(' · ');
+        return `<option value="${esc(h.id)}"${h.id === selected ? ' selected' : ''}>${esc(h.name.toUpperCase())} (${esc(roleLabel(h.role))}) · ${esc(counts)}</option>`;
+      }).join('');
+      return `<option value="ALL"${selected === 'ALL' ? ' selected' : ''}>ALL MANAGERS</option>` + opts;
+    }
+    // Ids of everyone under the chosen person, or null for "all"
+    function mgrFilterSet(key) {
+      const id = key === 'dash' ? Store.dashMgrFilter : Store.lbMgrFilter;
+      if (!id || id === 'ALL') return null;
+      if (!Store.users.some(u => u.id === id)) return null;
+      return new Set(descendantsOf(id).map(u => u.id));
+    }
+    function syncMgrFilterSelect(key) {
+      const sel = $(key === 'dash' ? 'dashMgrFilter' : 'lbMgrFilter');
+      if (!sel) return;
+      let cur = (key === 'dash' ? Store.dashMgrFilter : Store.lbMgrFilter) || 'ALL';
+      sel.innerHTML = mgrFilterOptionsHtml(cur);
+      if (!Array.from(sel.options).some(o => o.value === cur)) {
+        cur = 'ALL';
+        if (key === 'dash') Store.dashMgrFilter = 'ALL'; else Store.lbMgrFilter = 'ALL';
+        sel.value = 'ALL';
+      }
+      sel.classList.toggle('is-active', cur !== 'ALL');
+    }
+    function onMgrFilter(key, val) {
+      if (key === 'dash') {
+        Store.dashMgrFilter = val || 'ALL';
+        Store.dashTeamPage = 1;
+      } else {
+        Store.lbMgrFilter = val || 'ALL';
+      }
+      renderActive();
+    }
+
+    function managerChainText(u) {
+      const div = document.createElement('div');
+      div.innerHTML = managerChainHtml(u);
+      return div.textContent;
+    }
+
+    // Hierarchy: SUPER ADMIN → MANAGER → JR MANAGER → TEAM LEADER → CALLER
+    const ROLE_RANK = { ADMIN: 0, MANAGER: 1, JR_MANAGER: 2, TEAM_LEADER: 3, CALLER: 4 };
+    function roleRank(role) {
+      return ROLE_RANK[role] !== undefined ? ROLE_RANK[role] : 4;
     }
 
     function todayCallsText(u) {
@@ -4869,13 +4973,15 @@
         if (!u || visited.has(u.id)) return;
         visited.add(u.id);
         treeRows.push({ u, depth });
-        users.filter(x => x.mgr === u.id).forEach(k => walk(k, depth + 1));
+        users.filter(x => x.mgr === u.id)
+          .sort((a, b) => roleRank(a.role) - roleRank(b.role) || String(a.name).localeCompare(String(b.name)))
+          .forEach(k => walk(k, depth + 1));
       };
       roots.forEach(r => walk(r, 0));
-      users.forEach(u => { if (!visited.has(u.id)) walk(u, u.role === 'MANAGER' ? 1 : 2); });
+      users.forEach(u => { if (!visited.has(u.id)) walk(u, Math.max(1, roleRank(u.role))); });
 
       let filteredTree = treeRows;
-      if (Store.treeFilter === 'MGR') filteredTree = treeRows.filter(t => ['ADMIN', 'MANAGER', 'JR_MANAGER'].includes(t.u.role));
+      if (Store.treeFilter === 'MGR') filteredTree = treeRows.filter(t => ['ADMIN', 'MANAGER', 'JR_MANAGER', 'TEAM_LEADER'].includes(t.u.role));
       else if (Store.treeFilter === 'CALLER') filteredTree = treeRows.filter(t => t.u.role === 'CALLER');
 
       if (!filteredTree.length) {
@@ -5028,10 +5134,19 @@
         rowsEl.innerHTML = '<div class="empty-state">NO CALLERS IN THIS VIEW</div>';
         return;
       }
-      rowsEl.innerHTML = rows.map(s => `
-        <div class="table-body-row" style="grid-template-columns: 0.5fr 1.4fr 1.3fr 0.9fr 1fr 0.9fr 1.3fr;">
+      syncMgrFilterSelect('lb');
+      const lbSet = mgrFilterSet('lb');
+      const shownRows = lbSet ? rows.filter(s => { const u = findUserRef({ id: s.id, phone: s.phone, name: s.name }); return u && lbSet.has(u.id); }) : rows;
+      Store.lbRowsShown = shownRows;
+      if (!shownRows.length) {
+        rowsEl.innerHTML = '<div class="empty-state">NOBODY UNDER THIS MANAGER ON THE LEADERBOARD</div>';
+        return;
+      }
+      rowsEl.innerHTML = shownRows.map(s => `
+        <div class="table-body-row" style="grid-template-columns: 0.5fr 1.3fr 1.6fr 1.2fr 0.9fr 1fr 0.9fr 1.3fr;">
           <span style="font-family: var(--font-display); font-size: 20px;">#${s.rank}</span>
           <strong>${userLink({ id: s.id, phone: s.phone, name: s.name }, s.name)}</strong>
+          <span style="font-family: var(--font-mono); font-size: 10.5px; line-height: 1.5; overflow-wrap: anywhere;">${managerChainHtml(findUserRef({ id: s.id, phone: s.phone, name: s.name }))}</span>
           <span style="font-family: var(--font-mono); font-size: 12px;">${esc(formatPhone(s.phone))}</span>
           <span style="font-family: var(--font-mono); font-weight: 700;"><span class="count-pill ${s.total > 0 ? 'is-good' : 'is-bad'}">${s.total}</span> calls</span>
           <span style="font-family: var(--font-mono); font-weight: 700;"><span class="count-pill ${s.conn > 0 ? 'is-good' : 'is-bad'}">${s.conn}</span> connected</span>
@@ -5048,9 +5163,10 @@
 
     function exportLeaderboard() {
       const period = Store.lbCustomDate || Store.lbPeriod;
-      const rows = (Store.lbRows || []).map(s => ({
+      const rows = (Store.lbRowsShown || Store.lbRows || []).map(s => ({
         Rank: s.rank,
         Agent: s.name,
+        'Managed by': managerChainText(findUserRef({ id: s.id, phone: s.phone, name: s.name })),
         Phone: s.phone,
         'Total calls': s.total,
         Connected: s.conn,
@@ -5389,7 +5505,7 @@
       const agentSel = $('recAgentFilter');
       if (agentSel) {
         agentSel.innerHTML = '<option value="ALL">ALL AGENTS</option>' + scopedAgents.map(u =>
-          `<option value="${esc(u.id)}"${u.id === Store.recAgent ? ' selected' : ''}>${esc(u.name.toUpperCase())}</option>`).join('');
+          `<option value="${esc(u.id)}"${u.id === Store.recAgent ? ' selected' : ''}>${esc(u.name.toUpperCase())} (${esc(roleLabel(u.role))})</option>`).join('');
       }
 
       const recs = filteredRecordings();
@@ -5676,7 +5792,7 @@
     function batchSplitCallers(ownerId) {
       const visible = new Set(visibleUsers().map(u => u.id));
       const pool = ownerId ? descendantsOf(ownerId) : dialableCallers();
-      return pool.filter(u => (u.role === 'CALLER' || u.role === 'JR_MANAGER') && visible.has(u.id))
+      return pool.filter(u => (u.role === 'CALLER' || u.role === 'JR_MANAGER' || u.role === 'TEAM_LEADER') && visible.has(u.id))
         .sort((a, b) => a.name.localeCompare(b.name));
     }
 
@@ -5685,7 +5801,7 @@
       if (!el) return;
       const role = getActiveUser().role;
       const unassigned = leads.filter(l => !l.agentId && isFreshLead(l)).length;
-      if (!['ADMIN', 'MANAGER', 'JR_MANAGER'].includes(role) || (!unassigned && !Store.batchSplitMsg)) { el.innerHTML = ''; return; }
+      if (!['ADMIN', 'MANAGER', 'JR_MANAGER', 'TEAM_LEADER'].includes(role) || (!unassigned && !Store.batchSplitMsg)) { el.innerHTML = ''; return; }
       const ownerId = batchOwnerId(leads);
       const owner = ownerId ? Store.users.find(u => u.id === ownerId) : null;
       const callers = batchSplitCallers(ownerId);
@@ -5838,7 +5954,7 @@
       const callers = getScopedCallers();
       if (Store.pipelineAgent !== 'ALL' && !callers.some(u => u.id === Store.pipelineAgent)) Store.pipelineAgent = 'ALL';
       agentSel.innerHTML = '<option value="ALL">ALL AGENTS</option>' + callers.map(u =>
-        `<option value="${esc(u.id)}"${Store.pipelineAgent === u.id ? ' selected' : ''}>${esc(u.name.toUpperCase())}</option>`).join('');
+        `<option value="${esc(u.id)}"${Store.pipelineAgent === u.id ? ' selected' : ''}>${esc(u.name.toUpperCase())} (${esc(roleLabel(u.role))})</option>`).join('');
 
       let scopedLeads = Store.leads.filter(isLeadInScope);
       if (Store.pipelineAgent !== 'ALL') {
@@ -5996,7 +6112,7 @@
       const callers = getScopedCallers();
       if (Store.demoAgent && Store.demoAgent !== 'ALL' && !callers.some(u => u.id === Store.demoAgent)) Store.demoAgent = 'ALL';
       agentSel.innerHTML = '<option value="ALL">ALL AGENTS</option>' + callers.map(u =>
-        `<option value="${esc(u.id)}"${Store.demoAgent === u.id ? ' selected' : ''}>${esc(u.name.toUpperCase())}</option>`).join('');
+        `<option value="${esc(u.id)}"${Store.demoAgent === u.id ? ' selected' : ''}>${esc(u.name.toUpperCase())} (${esc(roleLabel(u.role))})</option>`).join('');
 
       const base = baseDemos();
       ['UPCOMING', 'TODAY', 'PAST', 'ALL'].forEach(r => {
@@ -6058,7 +6174,7 @@
     function canEditProfile(me) {
       if (isRealAdmin()) return true;
       const r = realRole();
-      return (r === 'MANAGER' || r === 'JR_MANAGER') && me.role !== 'ADMIN';
+      return (r === 'MANAGER' || r === 'JR_MANAGER' || r === 'TEAM_LEADER') && me.role !== 'ADMIN';
     }
 
     async function updateUserFields(user, fields, okMsg) {
@@ -6160,7 +6276,7 @@
       } else {
         mgrTextEl.textContent = mgr ? `${mgr.name} (${roleLabel(mgr.role)})` : 'TOP LEVEL (ADMIN)';
         mgrSelEl.style.display = editable ? 'inline-block' : 'none';
-        const choices = (isRealAdmin() ? Store.users : visibleUsers()).filter(u => u.id !== me.id && (u.role === 'ADMIN' || u.role === 'MANAGER' || u.role === 'JR_MANAGER'));
+        const choices = (isRealAdmin() ? Store.users : visibleUsers()).filter(u => u.id !== me.id && (u.role === 'ADMIN' || u.role === 'MANAGER' || u.role === 'JR_MANAGER' || u.role === 'TEAM_LEADER'));
         mgrSelEl.innerHTML = '<option value="">TOP LEVEL (ADMIN)</option>' +
           choices.map(u => `<option value="${esc(u.id)}"${u.id === me.mgr ? ' selected' : ''}>${esc(u.name)} (${esc(roleLabel(u.role))})</option>`).join('');
       }

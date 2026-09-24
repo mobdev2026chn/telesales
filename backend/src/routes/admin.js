@@ -12,7 +12,7 @@ const { isOnline, breakInfo } = require('../services/presence');
 const { escapeRegex, last10, byIdQuery, phoneRegex, serverError, parseLimit, parseDate } = require('../utils/common');
 
 const DEFAULT_TEAM = 'Telesales Team';
-const ROLES = ['caller', 'jr_manager', 'manager', 'admin'];
+const ROLES = ['caller', 'team_leader', 'jr_manager', 'manager', 'admin'];
 const and = (...conds) => {
   const list = conds.filter(c => c && Object.keys(c).length > 0);
   if (list.length === 0) return {};

@@ -164,7 +164,7 @@ function requireAuth({ roles = null, legacy = false } = {}) {
   };
 }
 
-const MANAGERS = ['admin', 'manager', 'jr_manager'];
+const MANAGERS = ['admin', 'manager', 'jr_manager', 'team_leader'];
 
 module.exports = {
   signToken,
