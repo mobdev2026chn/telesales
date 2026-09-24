@@ -27,6 +27,7 @@ const recordingRoutes = require('./routes/recordings');
 const leadRoutes = require('./routes/leads');
 const notificationRoutes = require('./routes/notifications');
 const diagnosticsRoutes = require('./routes/diagnostics');
+const demoRoutes = require('./routes/demos');
 
 // Connect to MongoDB, then create the first admin if (and only if) there is none
 connectDB().then((connected) => {
@@ -138,6 +139,7 @@ app.use(recordingRoutes);
 app.use(leadRoutes);
 app.use(notificationRoutes);
 app.use(diagnosticsRoutes);
+app.use(demoRoutes);
 app.use(userRoutes);
 
 // Aliases used by the mobile app

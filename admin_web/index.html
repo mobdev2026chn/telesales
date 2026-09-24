@@ -1084,6 +1084,7 @@
         <button type="button" class="nav-pill" data-tab="lb" onclick="switchNavTab('lb', this)">LEADERBOARD</button>
         <button type="button" class="nav-pill" data-tab="recs" onclick="switchNavTab('recs', this)">CALL RECORDINGS</button>
         <button type="button" class="nav-pill" data-tab="leads" onclick="switchNavTab('leads', this)">LEADS PIPELINE</button>
+        <button type="button" class="nav-pill" data-tab="demos" onclick="switchNavTab('demos', this)">DEMO BOOKINGS</button>
       </nav>
 
       <div class="sidebar-footer">
@@ -1522,6 +1523,38 @@
       </div>
 
       <!-- ================= 5. LEADERBOARD TAB ================= -->
+      <!-- ================= DEMO BOOKINGS TAB (booked by callers in the app after a call) ================= -->
+      <div id="tab-demos" class="tab-view">
+        <div class="section-header">
+          <div class="section-title">
+            <span class="section-title-text"><span id="demosHeaderCount">DEMO BOOKINGS · 0</span></span>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+            <label for="demoSearchInput" class="visually-hidden">Search demo bookings</label>
+            <input type="text" id="demoSearchInput" placeholder="Search client, phone, agent, reason…" style="border: 1.5px solid var(--ink-900); border-radius: 999px; padding: 8px 16px; font-family: var(--font-body); font-size: 12px; background: #fff; width: 240px;" oninput="onDemoSearch(this.value)" />
+            <label for="demoAgentFilter" class="visually-hidden">Agent</label>
+            <select id="demoAgentFilter" class="toolbar-select" onchange="onDemoAgentFilter(this.value)">
+              <option value="ALL">ALL AGENTS</option>
+            </select>
+            <button type="button" class="filter-chip" onclick="exportDemos()" title="Export the listed demo bookings to Excel">⬇ EXPORT</button>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; align-items: center;" id="demoRangeChips">
+          <button type="button" class="filter-chip active" data-demo-range="UPCOMING" onclick="setDemoRange('UPCOMING')">UPCOMING · <span id="demoCountUPCOMING">0</span></button>
+          <button type="button" class="filter-chip" data-demo-range="TODAY" onclick="setDemoRange('TODAY')">TODAY · <span id="demoCountTODAY">0</span></button>
+          <button type="button" class="filter-chip" data-demo-range="PAST" onclick="setDemoRange('PAST')">PAST · <span id="demoCountPAST">0</span></button>
+          <button type="button" class="filter-chip" data-demo-range="ALL" onclick="setDemoRange('ALL')">ALL · <span id="demoCountALL">0</span></button>
+        </div>
+
+        <div class="neo-table-card table-scroll-wrap">
+          <div class="table-head-row" style="grid-template-columns: 1.3fr 1.2fr 1.1fr 1.1fr 2fr 1fr;">
+            <span>DEMO DATE · SLOT</span><span>CLIENT</span><span>PHONE</span><span>AGENT</span><span>REASON</span><span>BOOKED ON</span>
+          </div>
+          <div id="demoTableRows"></div>
+        </div>
+      </div>
+
       <div id="tab-lb" class="tab-view">
         <div class="section-header">
           <div class="section-title">
@@ -2484,6 +2517,7 @@
         case 'lb': renderLeaderboard(); break;
         case 'recs': renderRecordings(!!opts.force); break;
         case 'leads': renderLeadsPipeline(); break;
+        case 'demos': renderDemos(); break;
         case 'profile': renderProfile(); break;
         case 'user': renderUserDetail(); break;
       }
@@ -2934,7 +2968,7 @@
       Store.dialCurrentLead = null;
       document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active'));
       ['dashTeamRows', 'callTableRows', 'leadQueueRows', 'userTableRows', 'teamTreeNodesBody', 'leaderboardTableRows',
-       'leaderboardPodium', 'recordingsCardsList', 'uploadHistoryList', 'digestRowsContainer', 'agentQuotaCards'].forEach(id => {
+       'leaderboardPodium', 'demoTableRows', 'recordingsCardsList', 'uploadHistoryList', 'digestRowsContainer', 'agentQuotaCards'].forEach(id => {
         const el = $(id);
         if (el) el.innerHTML = '';
       });
@@ -3172,6 +3206,7 @@
           fetchLeads().then(() => { if (['dial', 'leads', 'calls'].includes(Store.tab)) renderActive(); }),
           fetchRecordings(false).then(() => { if (Store.tab === 'recs') renderRecordings(false); if (Store.tab === 'calls') renderCallLog(); }),
           fetchTodayStats().then(() => { if (['users', 'dial'].includes(Store.tab)) renderActive(); }),
+          fetchDemos().then(() => { if (Store.tab === 'demos') renderDemos(); }),
           fetchDashboardData(),
         ];
         if (Store.tab === 'lb') jobs.push(fetchLeaderboardData());
@@ -5867,6 +5902,148 @@
           <button type="button" class="filter-chip" onclick="loadMorePipelineStage('${cid}')" style="width: 100%; margin-top: 2px;">VIEW MORE · ${colLeads.length - visibleLeads.length} MORE ↓</button>
         ` : '');
       });
+    }
+
+    // ==========================================
+    // DEMO BOOKINGS (booked by callers in the app)
+    // ==========================================
+    function mapDemo(d) {
+      const at = d.scheduledAt ? new Date(d.scheduledAt) : null;
+      return {
+        id: String(d.id || ''),
+        clientName: d.clientName || '',
+        clientPhone: d.clientPhone || '',
+        callerId: d.callerId || '',
+        agent: d.callerName || '',
+        at: at && !isNaN(at.getTime()) ? at : null,
+        slot: d.slot || '',
+        reason: d.reason || '',
+        bookedAt: d.createdAt ? new Date(d.createdAt) : null,
+      };
+    }
+
+    async function fetchDemos() {
+      Store.demosPending = true;
+      try {
+        const json = await apiFetch(`/admin/demos?limit=5000${scopeParam()}`);
+        Store.demos = (json.demos || []).map(mapDemo).filter(d => d.id);
+        Store.errors.demos = null;
+        Store.loaded.demos = true;
+      } catch (e) {
+        Store.errors.demos = e.message;
+      } finally {
+        Store.demosPending = false;
+      }
+    }
+
+    function fmtDemoDay(d) {
+      if (!d) return '—';
+      return new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }).format(d).toUpperCase();
+    }
+
+    function demoInRange(d, range) {
+      if (range === 'ALL') return true;
+      if (!d.at) return false;
+      if (range === 'TODAY') return istDateStr(d.at) === istDateStr(new Date());
+      return range === 'UPCOMING' ? d.at.getTime() >= Date.now() : d.at.getTime() < Date.now();
+    }
+
+    // Bookings for the agent filter and search, before the date range
+    function baseDemos() {
+      let list = Store.demos || [];
+      if (Store.demoAgent && Store.demoAgent !== 'ALL') {
+        const au = Store.users.find(u => u.id === Store.demoAgent);
+        list = list.filter(d => d.callerId ? d.callerId === Store.demoAgent : (au && d.agent.trim().toLowerCase() === au.name.trim().toLowerCase()));
+      }
+      const q = Store.demoSearch;
+      if (q) {
+        const qd = q.replace(/\D/g, '');
+        list = list.filter(d =>
+          d.clientName.toLowerCase().includes(q) || d.agent.toLowerCase().includes(q) || d.reason.toLowerCase().includes(q) ||
+          (qd && d.clientPhone.replace(/\D/g, '').includes(qd)));
+      }
+      return list;
+    }
+
+    function filteredDemos() {
+      const range = Store.demoRange || 'UPCOMING';
+      const list = baseDemos().filter(d => demoInRange(d, range));
+      const t = d => (d.at ? d.at.getTime() : 0);
+      // Upcoming / today: soonest first; past / all: latest first
+      return list.sort((a, b) => (range === 'UPCOMING' || range === 'TODAY') ? t(a) - t(b) : t(b) - t(a));
+    }
+
+    function setDemoRange(range) {
+      Store.demoRange = range;
+      renderDemos();
+    }
+    function onDemoSearch(val) {
+      Store.demoSearch = (val || '').trim().toLowerCase();
+      renderDemos();
+    }
+    function onDemoAgentFilter(val) {
+      Store.demoAgent = val || 'ALL';
+      renderDemos();
+    }
+
+    function renderDemos() {
+      if (!Store.loaded.demos && !Store.demosPending && !Store.errors.demos) {
+        fetchDemos().then(() => { if (Store.tab === 'demos') renderDemos(); });
+      }
+      const range = Store.demoRange || 'UPCOMING';
+
+      const agentSel = $('demoAgentFilter');
+      const callers = getScopedCallers();
+      if (Store.demoAgent && Store.demoAgent !== 'ALL' && !callers.some(u => u.id === Store.demoAgent)) Store.demoAgent = 'ALL';
+      agentSel.innerHTML = '<option value="ALL">ALL AGENTS</option>' + callers.map(u =>
+        `<option value="${esc(u.id)}"${Store.demoAgent === u.id ? ' selected' : ''}>${esc(u.name.toUpperCase())}</option>`).join('');
+
+      const base = baseDemos();
+      ['UPCOMING', 'TODAY', 'PAST', 'ALL'].forEach(r => {
+        const el = $(`demoCount${r}`);
+        if (el) el.textContent = base.filter(d => demoInRange(d, r)).length;
+      });
+      document.querySelectorAll('#demoRangeChips [data-demo-range]').forEach(b => b.classList.toggle('active', b.dataset.demoRange === range));
+
+      const list = filteredDemos();
+      $('demosHeaderCount').textContent = `DEMO BOOKINGS · ${list.length}`;
+      const rowsEl = $('demoTableRows');
+      if (!Store.loaded.demos) {
+        rowsEl.innerHTML = `<div class="empty-state">${Store.errors.demos ? `COULD NOT LOAD DEMO BOOKINGS — ${esc(Store.errors.demos)}` : 'LOADING DEMO BOOKINGS…'}</div>`;
+        return;
+      }
+      if (!list.length) {
+        rowsEl.innerHTML = '<div class="empty-state">NO DEMO BOOKINGS IN THIS VIEW</div>';
+        return;
+      }
+      rowsEl.innerHTML = list.map(d => {
+        const isPast = d.at && d.at.getTime() < Date.now();
+        return `
+        <div class="table-body-row" style="grid-template-columns: 1.3fr 1.2fr 1.1fr 1.1fr 2fr 1fr;${isPast ? ' opacity: 0.75;' : ''}">
+          <div style="min-width: 0;">
+            <div style="font-family: var(--font-mono); font-size: 11px; font-weight: 700;">${esc(fmtDemoDay(d.at))}</div>
+            <span style="display: inline-block; margin-top: 4px; background: ${isPast ? '#EFECE3' : 'var(--lime-400)'}; border: 1px solid var(--ink-900); border-radius: 999px; padding: 2px 10px; font-family: var(--font-mono); font-size: 10px; font-weight: 700;">${esc(d.slot || (d.at ? fmtTs(d.at) : '—'))}</span>
+          </div>
+          <strong style="overflow-wrap: anywhere;">${esc(d.clientName || '—')}</strong>
+          <span style="font-family: var(--font-mono); font-size: 12px;">${esc(d.clientPhone ? formatPhone(d.clientPhone) : '—')}</span>
+          <span>${d.agent ? userLink({ id: d.callerId, name: d.agent }, d.agent) : '—'}</span>
+          <span style="font-size: 12px; color: #3A4234; overflow-wrap: anywhere; white-space: pre-line;">${esc(d.reason || '—')}</span>
+          <span style="font-family: var(--font-mono); font-size: 11px; color: #5A6352;">${d.bookedAt ? fmtTs(d.bookedAt) : '—'}</span>
+        </div>`;
+      }).join('');
+    }
+
+    function exportDemos() {
+      const rows = filteredDemos().map(d => ({
+        'Demo date': fmtDemoDay(d.at),
+        'Time slot': d.slot,
+        Client: d.clientName,
+        Phone: d.clientPhone,
+        Agent: d.agent,
+        Reason: d.reason,
+        'Booked on': d.bookedAt ? fmtTs(d.bookedAt) : '',
+      }));
+      exportRows(rows, 'Demo bookings', `demo-bookings-${(Store.demoRange || 'UPCOMING').toLowerCase()}.xlsx`);
     }
 
     // ==========================================

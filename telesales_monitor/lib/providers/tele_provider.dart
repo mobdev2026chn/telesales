@@ -1041,11 +1041,105 @@ class TeleProvider extends ChangeNotifier {
         notifyListeners();
         if (_callLogs.isNotEmpty) {
           _syncCallsToServer();
+          await _checkDemoPrompt();
         }
       }
     } catch (e) {
       debugPrint('Error fetching device call logs: $e');
     }
+  }
+
+  // ---------------------------------------------------------------- Post-call demo prompt
+  // After every call on the work SIM (outgoing, or an answered incoming call) the app offers to
+  // book a demo, dialing-session calls included.
+  static const String _demoPromptKey = 'demoPromptWatermarkMs';
+  final int _appStartedMs = DateTime.now().millisecondsSinceEpoch;
+  int? _demoPromptWatermarkMs; // start time of the newest call already considered
+  CallLogModel? _pendingDemoPromptCall;
+  CallLogModel? get pendingDemoPromptCall => _pendingDemoPromptCall;
+
+  Future<void> _checkDemoPrompt() async {
+    if (_callLogs.isEmpty || !_isCallerContext) return;
+    final prefs = await SharedPreferences.getInstance();
+    // First run: only calls made from now on
+    final mark = _demoPromptWatermarkMs ?? prefs.getInt(_demoPromptKey) ?? _appStartedMs;
+    var newest = _callLogs.first;
+    for (final c in _callLogs) {
+      if (c.timestamp.isAfter(newest.timestamp)) newest = c;
+    }
+    final newestMs = newest.timestamp.millisecondsSinceEpoch;
+    if (newestMs <= mark) {
+      _demoPromptWatermarkMs = mark;
+      return;
+    }
+    _demoPromptWatermarkMs = newestMs;
+    await prefs.setInt(_demoPromptKey, newestMs);
+
+    final talked = newest.type == CallType.outgoing || (newest.type == CallType.incoming && newest.duration.inSeconds > 0);
+    if (!talked || last10Digits(newest.phoneNumber).length < 8) return;
+    _pendingDemoPromptCall = newest;
+    notifyListeners();
+  }
+
+  // Demos booked from the pop-up, by number (booked when, demo time): the outcome screen of a
+  // dialing session shows them as already booked.
+  final Map<String, (DateTime, DateTime)> _demoBookings = {};
+
+  /// Demo time booked for [phone] from the pop-up in the last 3 hours, if any.
+  DateTime? recentDemoBookingFor(String phone) {
+    final b = _demoBookings[last10Digits(phone)];
+    return b != null && DateTime.now().difference(b.$1).inHours < 3 ? b.$2 : null;
+  }
+
+  @visibleForTesting
+  void debugShowDemoPrompt(CallLogModel call) {
+    _pendingDemoPromptCall = call;
+    notifyListeners();
+  }
+
+  void clearDemoPrompt() {
+    if (_pendingDemoPromptCall == null) return;
+    _pendingDemoPromptCall = null;
+    notifyListeners();
+  }
+
+  /// The lead a call belongs to (same number), or a temporary one for an unknown number.
+  LeadModel leadForCall(CallLogModel call) {
+    LeadModel? match;
+    for (final l in _leads) {
+      if (!samePhone(l.phone, call.phoneNumber)) continue;
+      if (_isServerLeadId(l.id)) return l;
+      match ??= l;
+    }
+    if (match != null) return match;
+    final name = call.contactName.trim();
+    return LeadModel(
+      id: '',
+      name: name.toLowerCase() == 'unknown' ? '' : name,
+      phone: call.phoneNumber,
+      status: LeadStatus.other,
+      attempts: 0,
+      dateAdded: DateTime.now(),
+      lastCallDate: call.timestamp,
+      note: '',
+      assignedTo: _callerName,
+      assignedCallerId: _currentUserId,
+    );
+  }
+
+  /// After a demo was booked from the post-call prompt: the lead moves to Book Demo
+  /// and the caller gets a reminder at the demo time.
+  Future<void> markDemoBooked(LeadModel lead, DateTime demoAt, String clientName) async {
+    final name = clientName.trim().isNotEmpty ? clientName.trim() : lead.name;
+    _demoBookings[last10Digits(lead.phone)] = (DateTime.now(), demoAt);
+    addScheduledCallback(name: name.isNotEmpty ? name : lead.phone, phone: lead.phone, scheduledTime: demoAt, note: 'Demo booked');
+    await updateLeadStatus(
+      lead.id.isNotEmpty ? lead.id : lead.phone,
+      LeadStatus.bookDemo,
+      phone: lead.phone,
+      name: name.isNotEmpty ? name : null,
+      scheduleDefaultCallback: false,
+    );
   }
 
   // Uploads device calls to the server. Only calls newer than the last timestamp the server

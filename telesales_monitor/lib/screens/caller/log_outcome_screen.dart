@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/tele_provider.dart';
 import '../../models/lead_model.dart';
+import '../../widgets/book_demo_sheet.dart';
 import 'call_session_screen.dart';
 
 class LogOutcomeScreen extends StatefulWidget {
@@ -20,6 +21,7 @@ class _LogOutcomeScreenState extends State<LogOutcomeScreen> {
   final TextEditingController _notesCtrl = TextEditingController();
   bool _sendWhatsAppBrochure = false; // opt-in
   DateTime? _selectedCallbackTime; // optional
+  DateTime? _demoBookedAt; // set once the demo form was saved on the server
   bool _saving = false;
 
   static const Set<LeadStatus> _closedStatuses = {LeadStatus.notInterested, LeadStatus.lost, LeadStatus.won};
@@ -31,6 +33,42 @@ class _LogOutcomeScreenState extends State<LogOutcomeScreen> {
       _selectedStatus = s;
       if (_closedStatuses.contains(s)) _selectedCallbackTime = null;
     });
+  }
+
+  bool _checkedPopupBooking = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_checkedPopupBooking) return;
+    _checkedPopupBooking = true;
+    // A demo already booked from the post-call pop-up for this number
+    final tele = Provider.of<TeleProvider>(context, listen: false);
+    final lead = widget.lead ?? tele.activeCallLead;
+    final bookedAt = lead == null ? null : tele.recentDemoBookingFor(lead.phone);
+    if (bookedAt != null) {
+      _demoBookedAt = bookedAt;
+      _selectedStatus = LeadStatus.bookDemo;
+      _selectedCallbackTime = bookedAt.isAfter(DateTime.now()) ? bookedAt : null;
+    }
+  }
+
+  /// BOOK DEMO opens the demo form; the outcome is only selected once the demo is booked.
+  Future<void> _openDemoForm(TeleProvider tele, LeadModel lead) async {
+    final bookedAt = await showBookDemoSheet(context, lead: lead, agentName: tele.callerName);
+    if (bookedAt == null || !mounted) return;
+    setState(() {
+      _demoBookedAt = bookedAt;
+      _selectedStatus = LeadStatus.bookDemo;
+      // Reminder for the caller at the demo time
+      _selectedCallbackTime = bookedAt;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: AppTheme.ink900,
+        content: Text('Demo booked. Save the outcome to continue.', style: AppTheme.bodyBold(size: 12, color: AppTheme.limeYellow)),
+      ),
+    );
   }
 
   @override
@@ -203,11 +241,27 @@ class _LogOutcomeScreenState extends State<LogOutcomeScreen> {
                       isSelected: _selectedStatus == LeadStatus.bookDemo,
                       activeBg: AppTheme.greenNeon,
                       activeFg: AppTheme.ink900,
-                      onTap: () => _selectStatus(LeadStatus.bookDemo),
+                      onTap: () => _demoBookedAt != null ? _selectStatus(LeadStatus.bookDemo) : _openDemoForm(tele, lead),
                     ),
                   ),
                 ],
               ),
+              if (_demoBookedAt != null) ...[
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.greenNeon,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.ink900, width: 1.2),
+                  ),
+                  child: Text(
+                    'DEMO BOOKED · ${DateFormat('d MMM · h:mm a').format(_demoBookedAt!).toUpperCase()}',
+                    style: AppTheme.mono(size: 10.5, color: AppTheme.ink900, weight: FontWeight.w700),
+                  ),
+                ),
+              ],
               const SizedBox(height: 10),
               Row(
                 children: [

@@ -524,6 +524,32 @@ class ApiService {
     return _ok(res);
   }
 
+  // ------------------------------------------------------------------ Demo bookings
+
+  /// POST /demos: books a demo for the signed-in caller. Returns null when saved,
+  /// otherwise the reason it was not saved.
+  static Future<String?> bookDemo({
+    required String leadId,
+    required String clientName,
+    required String clientPhone,
+    required DateTime scheduledAt,
+    required String slot,
+    required String reason,
+  }) async {
+    final res = await _request('POST', '/demos', body: {
+      'leadId': leadId,
+      'clientName': clientName,
+      'clientPhone': clientPhone,
+      'scheduledAt': scheduledAt.toUtc().toIso8601String(),
+      'slot': slot,
+      'reason': reason,
+    });
+    if (_ok(res)) return null;
+    if (res == null) return 'No connection. Check the internet and try again.';
+    final msg = _decodeMap(res)?['message']?.toString() ?? '';
+    return msg.isNotEmpty ? msg : 'Could not book the demo (error ${res.statusCode}).';
+  }
+
   // ------------------------------------------------------------------ Notifications
 
   static Future<Map<String, dynamic>?> fetchCallerNotifications({String? phone, String? name}) async {
