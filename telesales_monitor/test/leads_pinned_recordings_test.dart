@@ -49,6 +49,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
 
     expect(find.text('PINNED RECORDINGS · 4'), findsOneWidget);
+    // Shown below the search box and the category filter
+    final pinnedY = tester.getTopLeft(find.text('PINNED RECORDINGS · 4')).dy;
+    expect(pinnedY, greaterThan(tester.getTopLeft(find.text('🏷️ ALL CATEGORIES')).dy));
+    expect(pinnedY, greaterThan(tester.getTopLeft(find.text('Search lead or phone...')).dy));
     expect(find.text('Not Pinned Client'), findsNothing);
     // Newest first, three shown until VIEW ALL
     expect(find.text('New Pinned Client'), findsOneWidget);

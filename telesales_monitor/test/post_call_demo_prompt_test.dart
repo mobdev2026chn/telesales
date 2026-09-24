@@ -68,11 +68,34 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
 
+    // Step 1: hourly slots
     expect(find.text('BOOK A DEMO?'), findsNothing);
-    expect(find.text('BOOK A DEMO'), findsOneWidget);
-    expect(find.widgetWithText(TextField, 'Ravi Traders'), findsOneWidget);
-    expect(find.text('BOOK APPOINTMENT →'), findsOneWidget);
+    expect(find.text('BOOK DEMO SLOT'), findsOneWidget);
+    expect(find.textContaining(RegExp(r'^\d{1,2}:00 (AM|PM) - \d{1,2}:00 (AM|PM)$')), findsNWidgets(9));
+    expect(find.text('+ BOOK'), findsWidgets);
     expect(tele.pendingDemoPromptCall, isNull);
+
+    // Step 2: the BOOK DEMO SLOT form, client prefilled from the call
+    await tester.tap(find.text('+ BOOK').first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    for (final label in ['CALLER', 'CLIENT NAME', 'CLIENT PHONE', 'CLASS / COURSE', 'NOTES (OPTIONAL)', 'CLOSE', 'BOOK SLOT']) {
+      expect(find.text(label), findsOneWidget, reason: label);
+    }
+    expect(find.widgetWithText(TextField, 'Ravi Traders'), findsOneWidget);
+    expect(find.widgetWithText(TextField, '9876543210'), findsOneWidget);
+
+    // Class / course is required
+    await tester.tap(find.text('BOOK SLOT'));
+    await tester.pump();
+    expect(find.text('Enter the class / course.'), findsOneWidget);
+
+    // CLOSE goes back to the slot list
+    await tester.tap(find.text('CLOSE'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('CLIENT NAME'), findsNothing);
+    expect(find.text('+ BOOK'), findsWidgets);
     await closeApp(tester, tele);
   });
 

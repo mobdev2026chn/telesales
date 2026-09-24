@@ -20,6 +20,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePass = true;
   bool _isLoading = false;
   UserRole _selectedRole = UserRole.caller;
+  bool _teamLeaderTab = false; // TEAM LEADER tab: manager sign-in for Team Leader accounts
   String? _usernameError;
   String? _passwordError;
   String? _authError;
@@ -34,6 +35,7 @@ class _LoginScreenState extends State<LoginScreen> {
         setState(() {
           _usernameCtrl.text = cleanPhone;
           _selectedRole = UserRole.caller;
+          _teamLeaderTab = false;
         });
       }
     });
@@ -46,9 +48,10 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _selectRole(UserRole role) {
+  void _selectRole(UserRole role, {bool teamLeader = false}) {
     setState(() {
       _selectedRole = role;
+      _teamLeaderTab = teamLeader;
       _usernameError = null;
       _passwordError = null;
       _authError = null;
@@ -93,6 +96,7 @@ class _LoginScreenState extends State<LoginScreen> {
       username: userText,
       password: passText,
       role: _selectedRole,
+      teamLeaderOnly: _teamLeaderTab,
     );
 
     if (mounted) {
@@ -308,15 +312,36 @@ class _LoginScreenState extends State<LoginScreen> {
                                         child: Container(
                                           padding: const EdgeInsets.symmetric(vertical: 10),
                                           decoration: BoxDecoration(
-                                            color: _selectedRole == UserRole.manager ? AppTheme.ink900 : Colors.transparent,
+                                            color: _selectedRole == UserRole.manager && !_teamLeaderTab ? AppTheme.ink900 : Colors.transparent,
                                             borderRadius: BorderRadius.circular(999),
                                           ),
                                           child: Center(
                                             child: Text(
                                               '👔 MANAGER',
                                               style: AppTheme.label(
-                                                size: 9.5,
-                                                color: _selectedRole == UserRole.manager ? AppTheme.limeYellow : AppTheme.ink900,
+                                                size: 9,
+                                                color: _selectedRole == UserRole.manager && !_teamLeaderTab ? AppTheme.limeYellow : AppTheme.ink900,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: GestureDetector(
+                                        onTap: () => _selectRole(UserRole.manager, teamLeader: true),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(vertical: 10),
+                                          decoration: BoxDecoration(
+                                            color: _teamLeaderTab ? AppTheme.ink900 : Colors.transparent,
+                                            borderRadius: BorderRadius.circular(999),
+                                          ),
+                                          child: Center(
+                                            child: Text(
+                                              '🧭 TEAM LEADER',
+                                              style: AppTheme.label(
+                                                size: 9,
+                                                color: _teamLeaderTab ? AppTheme.limeYellow : AppTheme.ink900,
                                               ),
                                             ),
                                           ),
@@ -334,9 +359,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                           ),
                                           child: Center(
                                             child: Text(
-                                              '📱 CALLER AGENT',
+                                              '📱 CALLER',
                                               style: AppTheme.label(
-                                                size: 9.5,
+                                                size: 9,
                                                 color: _selectedRole == UserRole.caller ? AppTheme.limeYellow : AppTheme.ink900,
                                               ),
                                             ),
@@ -459,9 +484,11 @@ class _LoginScreenState extends State<LoginScreen> {
                                           ),
                                         )
                                       : Text(
-                                          _selectedRole == UserRole.manager
-                                              ? 'SIGN IN AS MANAGER →'
-                                              : 'SIGN IN AS CALLER →',
+                                          _teamLeaderTab
+                                              ? 'SIGN IN AS TEAM LEADER →'
+                                              : _selectedRole == UserRole.manager
+                                                  ? 'SIGN IN AS MANAGER →'
+                                                  : 'SIGN IN AS CALLER →',
                                           style: AppTheme.label(size: 11.5, color: AppTheme.limeYellow, letterSpacing: 0.14),
                                         ),
                                 ),

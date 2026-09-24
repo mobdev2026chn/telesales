@@ -186,9 +186,6 @@ class _LeadsScreenState extends State<LeadsScreen> {
               ),
               const SizedBox(height: 12),
 
-              // Recordings pinned by an admin / manager from the portal (old or new)
-              ..._buildPinnedRecordings(tele, isManager: isManager),
-
               // Search Bar: ⚲ Search lead or phone...
               Container(
                 decoration: BoxDecoration(
@@ -334,6 +331,9 @@ class _LeadsScreenState extends State<LeadsScreen> {
               ),
               const SizedBox(height: 16),
 
+              // Recordings pinned by an admin / manager from the portal (old or new), below the filters
+              ..._buildPinnedRecordings(tele, isManager: isManager),
+
               // Leads List Cards
               if (filtered.isEmpty)
                 Container(
@@ -425,8 +425,10 @@ class _LeadsScreenState extends State<LeadsScreen> {
     final client = r.clientName.trim().isNotEmpty && r.clientName != 'Unknown' ? r.clientName : r.clientPhone;
 
     return NeoCard(
-      backgroundColor: AppTheme.limeYellow.withValues(alpha: 0.35),
+      // Solid light colour: a see-through one shows the dark shadow block through it
+      backgroundColor: const Color(0xFFF4FBE6),
       shadowColor: AppTheme.ink900,
+      shadowOffset: 2,
       padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -474,7 +476,7 @@ class _LeadsScreenState extends State<LeadsScreen> {
             borderRadius: BorderRadius.circular(999),
             child: Container(
               height: 5,
-              color: AppTheme.white,
+              color: const Color(0xFFDDE5CF),
               child: FractionallySizedBox(
                 alignment: Alignment.centerLeft,
                 widthFactor: isPlaying ? r.progress.clamp(0.01, 1.0) : 0.0,

@@ -539,19 +539,46 @@ class ApiService {
     required DateTime scheduledAt,
     required String slot,
     required String reason,
+    String course = '',
+    String teamLeaderId = '',
   }) async {
     final res = await _request('POST', '/demos', body: {
+      if (teamLeaderId.isNotEmpty) 'teamLeaderId': teamLeaderId,
       'leadId': leadId,
       'clientName': clientName,
       'clientPhone': clientPhone,
       'scheduledAt': scheduledAt.toUtc().toIso8601String(),
       'slot': slot,
+      'course': course,
       'reason': reason,
     });
     if (_ok(res)) return null;
     if (res == null) return 'No connection. Check the internet and try again.';
     final msg = _decodeMap(res)?['message']?.toString() ?? '';
     return msg.isNotEmpty ? msg : 'Could not book the demo (error ${res.statusCode}).';
+  }
+
+  /// GET /demos/team-leaders: Team Leaders a demo can be booked with, as {id, name}; null when offline.
+  static Future<List<Map<String, String>>?> fetchDemoTeamLeaders() async {
+    final res = await _request('GET', '/demos/team-leaders');
+    if (!_ok(res)) return null;
+    final list = _decodeMap(res)?['teamLeaders'];
+    if (list is! List) return null;
+    return list
+        .whereType<Map>()
+        .map((t) => {'id': t['id']?.toString() ?? '', 'name': t['name']?.toString() ?? ''})
+        .where((t) => t['id']!.isNotEmpty)
+        .toList();
+  }
+
+  /// GET /demos/booked-slots: slot starts already booked for [teamLeaderId] on [day]; null when offline.
+  static Future<Set<DateTime>?> fetchBookedDemoSlots({required String teamLeaderId, required DateTime day}) async {
+    final date = '${day.year.toString().padLeft(4, '0')}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
+    final res = await _request('GET', '/demos/booked-slots${_query({'teamLeaderId': teamLeaderId, 'date': date})}');
+    if (!_ok(res)) return null;
+    final list = _decodeMap(res)?['slots'];
+    if (list is! List) return null;
+    return list.map((v) => DateTime.tryParse(v.toString())?.toLocal()).whereType<DateTime>().toSet();
   }
 
   // ------------------------------------------------------------------ Notifications

@@ -95,7 +95,19 @@ class TeleProvider extends ChangeNotifier {
     if (_verifiedTrackingNumber.isNotEmpty) {
       return _verifiedTrackingNumber;
     }
-    return _currentRole == UserRole.manager ? 'ADMIN' : 'CALLER AGENT';
+    return _currentRole == UserRole.manager ? supervisorLabel : 'CALLER AGENT';
+  }
+
+  /// "TEAM LEADER", "JR MANAGER" or "MANAGER" for the signed-in supervisor (labels in the app).
+  String get supervisorLabel {
+    switch (_currentUserRole.toLowerCase()) {
+      case 'team_leader':
+        return 'TEAM LEADER';
+      case 'jr_manager':
+        return 'JR MANAGER';
+      default:
+        return 'MANAGER';
+    }
   }
 
   void setCallerName(String name) {
@@ -1592,6 +1604,7 @@ class TeleProvider extends ChangeNotifier {
     required String username,
     required String password,
     required UserRole role,
+    bool teamLeaderOnly = false, // the TEAM LEADER tab: manager sign-in, Team Leader accounts only
   }) async {
     try {
       final asManager = role == UserRole.manager;
@@ -1602,7 +1615,12 @@ class TeleProvider extends ChangeNotifier {
         simSlot: asManager ? null : _activeSimSlot,
       );
       if (res == null) {
-        return {'success': false, 'message': 'Could not reach the server. Check your internet connection.'};
+        // Say why (no internet, timeout, DNS / Private DNS, secure-connection failure ...)
+        final why = ApiService.lastNetworkError;
+        return {
+          'success': false,
+          'message': why.isNotEmpty ? 'Could not reach the server: $why' : 'Could not reach the server. Check your internet connection.',
+        };
       }
       if (res['success'] != true || res['user'] is! Map) {
         return {'success': false, 'message': res['message']?.toString() ?? 'Invalid credentials.'};
@@ -1625,6 +1643,12 @@ class TeleProvider extends ChangeNotifier {
           return {
             'success': false,
             'message': 'This account is registered as a Caller Agent. Please switch to the Caller tab to log in.'
+          };
+        }
+        if (teamLeaderOnly && userRole != 'team_leader') {
+          return {
+            'success': false,
+            'message': 'This account is not a Team Leader. Please use the Manager tab to log in.'
           };
         }
         await _beginSession(res, user);

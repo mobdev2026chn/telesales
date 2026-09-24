@@ -4,8 +4,8 @@ import '../models/lead_model.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 
-/// Demo booking form shown after a call. Returns the booked slot start when the
-/// demo was saved on the server, null when the caller closed it.
+/// Demo booking after a call: pick an hourly slot, then fill in the "BOOK DEMO SLOT" form.
+/// Returns the booked slot start when the demo was saved on the server, null when closed.
 /// [onBooked] receives the client name as saved.
 Future<DateTime?> showBookDemoSheet(
   BuildContext context, {
@@ -22,6 +22,23 @@ Future<DateTime?> showBookDemoSheet(
   );
 }
 
+// Working hours 10 AM - 7 PM, one-hour slots
+const int _firstHour = 10;
+const int _lastHour = 19;
+const int _slotMinutes = 60;
+
+String _fmtTime(DateTime d) => DateFormat('h:mm a').format(d).toUpperCase();
+String _slotLabel(DateTime start) => '${_fmtTime(start)} - ${_fmtTime(start.add(const Duration(minutes: _slotMinutes)))}';
+
+/// Small green square used before the section titles ("■ BOOK DEMO SLOT").
+Widget _titleRow(String text, {double size = 13}) => Row(
+      children: [
+        Container(width: 10, height: 10, color: AppTheme.greenNeon),
+        const SizedBox(width: 8),
+        Flexible(child: Text(text, style: AppTheme.mono(size: size, color: AppTheme.ink900, weight: FontWeight.w700))),
+      ],
+    );
+
 class BookDemoSheet extends StatefulWidget {
   final LeadModel lead;
   final String agentName;
@@ -34,57 +51,57 @@ class BookDemoSheet extends StatefulWidget {
 }
 
 class _BookDemoSheetState extends State<BookDemoSheet> {
-  // Working hours 10 AM - 7 PM, 30 minute slots
-  static const int _firstHour = 10;
-  static const int _lastHour = 19;
-  static const int _slotMinutes = 30;
-
-  late final TextEditingController _nameCtrl;
-  final TextEditingController _reasonCtrl = TextEditingController();
   late DateTime _date;
-  TimeOfDay? _slot;
-  bool _saving = false;
-  String? _error;
+  // Team Leader who runs the demo (the booking shows in their portal)
+  List<Map<String, String>>? _teamLeaders; // null while loading
+  bool _teamLeadersFailed = false; // offline / older server: book without a Team Leader
+  String? _teamLeaderId;
+  Set<int> _bookedStarts = {}; // slot starts (ms) already booked for that Team Leader on _date
+  bool _loadingSlots = false;
 
   @override
   void initState() {
     super.initState();
-    final name = widget.lead.name.trim();
-    _nameCtrl = TextEditingController(text: name.toLowerCase() == 'unknown' ? '' : name);
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    // Today while slots are still open, otherwise tomorrow
-    _date = _slotsFor(today).isNotEmpty ? today : today.add(const Duration(days: 1));
-    _nameCtrl.addListener(() => setState(() {}));
-    _reasonCtrl.addListener(() => setState(() {}));
+    // Today while a slot is still open, otherwise tomorrow
+    _date = _slotStarts(today).any((s) => s.isAfter(now)) ? today : today.add(const Duration(days: 1));
+    _loadTeamLeaders();
   }
 
-  @override
-  void dispose() {
-    _nameCtrl.dispose();
-    _reasonCtrl.dispose();
-    super.dispose();
+  Future<void> _loadTeamLeaders() async {
+    final list = await ApiService.fetchDemoTeamLeaders();
+    if (!mounted) return;
+    setState(() {
+      _teamLeaders = list ?? [];
+      _teamLeadersFailed = list == null || list.isEmpty;
+      if (list != null && list.length == 1) _teamLeaderId = list.first['id'];
+    });
+    if (_teamLeaderId != null) _loadBookedSlots();
   }
 
-  /// Slots of [day] that are still in the future.
-  List<TimeOfDay> _slotsFor(DateTime day) {
-    final now = DateTime.now();
-    final out = <TimeOfDay>[];
-    for (int m = _firstHour * 60; m < _lastHour * 60; m += _slotMinutes) {
-      final t = TimeOfDay(hour: m ~/ 60, minute: m % 60);
-      if (_at(day, t).isAfter(now)) out.add(t);
-    }
-    return out;
+  Future<void> _loadBookedSlots() async {
+    final tlId = _teamLeaderId;
+    if (tlId == null) return;
+    final day = _date;
+    setState(() => _loadingSlots = true);
+    final booked = await ApiService.fetchBookedDemoSlots(teamLeaderId: tlId, day: day);
+    if (!mounted || tlId != _teamLeaderId || day != _date) return;
+    setState(() {
+      _bookedStarts = (booked ?? {}).map((d) => d.millisecondsSinceEpoch).toSet();
+      _loadingSlots = false;
+    });
   }
 
-  DateTime _at(DateTime day, TimeOfDay t) => DateTime(day.year, day.month, day.day, t.hour, t.minute);
+  String get _teamLeaderName =>
+      (_teamLeaders ?? const []).firstWhere((t) => t['id'] == _teamLeaderId, orElse: () => const {'name': ''})['name'] ?? '';
 
-  String _fmtTime(DateTime d) => DateFormat('h:mm a').format(d).toUpperCase();
+  /// Slots can be picked once a Team Leader is chosen (or when none can be loaded).
+  bool get _canPickSlots => _teamLeaderId != null || _teamLeadersFailed;
 
-  String _slotLabel(TimeOfDay t) {
-    final start = _at(_date, t);
-    return '${_fmtTime(start)} - ${_fmtTime(start.add(const Duration(minutes: _slotMinutes)))}';
-  }
+  List<DateTime> _slotStarts(DateTime day) => [
+        for (int h = _firstHour; h < _lastHour; h++) DateTime(day.year, day.month, day.day, h),
+      ];
 
   Future<void> _pickDate() async {
     final now = DateTime.now();
@@ -105,20 +122,252 @@ class _BookDemoSheetState extends State<BookDemoSheet> {
         child: child!,
       ),
     );
-    if (picked == null || !mounted) return;
-    setState(() {
-      _date = picked;
-      // Keep the chosen slot only if it is still open on the new date
-      if (_slot != null && !_slotsFor(_date).contains(_slot)) _slot = null;
-    });
+    if (picked != null && mounted) {
+      setState(() {
+        _date = picked;
+        _bookedStarts = {};
+      });
+      _loadBookedSlots();
+    }
   }
 
-  Future<void> _book() async {
+  Future<void> _book(DateTime start) async {
+    final booked = await showDialog<DateTime>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _BookSlotDialog(
+        lead: widget.lead,
+        agentName: widget.agentName,
+        start: start,
+        teamLeaderId: _teamLeaderId ?? '',
+        teamLeaderName: _teamLeaderName,
+        onBooked: widget.onBooked,
+      ),
+    );
+    if (booked != null && mounted) {
+      Navigator.of(context).pop(booked);
+    } else if (mounted) {
+      _loadBookedSlots(); // someone else may have taken the slot meanwhile
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final who = widget.lead.name.trim().isNotEmpty && widget.lead.name.toLowerCase() != 'unknown'
+        ? widget.lead.name.trim()
+        : widget.lead.phone;
+
+    return SafeArea(
+      top: false,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(color: AppTheme.muted, borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            const SizedBox(height: 14),
+            _titleRow('BOOK DEMO SLOT', size: 14),
+            const SizedBox(height: 4),
+            Text('Pick a slot for ${who.isEmpty ? 'this client' : who}', style: AppTheme.mono(size: 11, color: AppTheme.ink700)),
+            const SizedBox(height: 14),
+
+            // Team Leader who runs the demo
+            Text('TEAM LEADER', style: AppTheme.mono(size: 9.5, color: AppTheme.ink900, weight: FontWeight.w700)),
+            const SizedBox(height: 6),
+            if (_teamLeaders == null)
+              Text('Loading team leaders…', style: AppTheme.body(size: 12, color: AppTheme.muted))
+            else if (_teamLeadersFailed)
+              Text('No team leaders found. The demo will be booked without one.', style: AppTheme.body(size: 12, color: AppTheme.muted))
+            else
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: AppTheme.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppTheme.ink900, width: 1.5),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _teamLeaderId,
+                    isExpanded: true,
+                    hint: Text('Select a team leader', style: AppTheme.body(size: 13, color: AppTheme.muted)),
+                    icon: const Icon(Icons.keyboard_arrow_down, color: AppTheme.ink900),
+                    style: AppTheme.bodyBold(size: 13, color: AppTheme.ink900),
+                    items: _teamLeaders!
+                        .map((t) => DropdownMenuItem(value: t['id'], child: Text(t['name']!.isEmpty ? '—' : t['name']!)))
+                        .toList(),
+                    onChanged: (v) {
+                      setState(() {
+                        _teamLeaderId = v;
+                        _bookedStarts = {};
+                      });
+                      _loadBookedSlots();
+                    },
+                  ),
+                ),
+              ),
+            const SizedBox(height: 12),
+
+            // Date
+            GestureDetector(
+              onTap: _pickDate,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: AppTheme.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppTheme.ink900, width: 1.5),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.calendar_today_rounded, size: 16, color: AppTheme.ink900),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        DateFormat('EEEE, MMMM d, yyyy').format(_date),
+                        style: AppTheme.mono(size: 12, color: AppTheme.ink900, weight: FontWeight.w700),
+                      ),
+                    ),
+                    Text('CHANGE', style: AppTheme.mono(size: 10, color: AppTheme.greenDark, weight: FontWeight.w700)),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Hourly slots
+            if (!_canPickSlots && _teamLeaders != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text('Choose a team leader to see their free slots.', style: AppTheme.body(size: 12, color: AppTheme.muted)),
+              ),
+            if (_loadingSlots)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 8),
+                child: LinearProgressIndicator(minHeight: 2, color: AppTheme.greenNeon, backgroundColor: AppTheme.paper),
+              ),
+            if (_canPickSlots) ..._slotStarts(_date).map((start) {
+              final passed = !start.isAfter(now);
+              final taken = !passed && _bookedStarts.contains(start.millisecondsSinceEpoch);
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
+                decoration: BoxDecoration(
+                  color: passed ? AppTheme.paper : AppTheme.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: passed ? AppTheme.lightMuted : AppTheme.ink900, width: 1.2),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _slotLabel(start),
+                        style: AppTheme.mono(size: 12, color: passed ? AppTheme.muted : AppTheme.ink900, weight: FontWeight.w700),
+                      ),
+                    ),
+                    if (passed)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        child: Text('PASSED', style: AppTheme.mono(size: 10, color: AppTheme.muted, weight: FontWeight.w700)),
+                      )
+                    else if (taken)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: AppTheme.paper,
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: AppTheme.lightMuted, width: 1.2),
+                        ),
+                        child: Text('BOOKED', style: AppTheme.mono(size: 10, color: AppTheme.muted, weight: FontWeight.w700)),
+                      )
+                    else
+                      GestureDetector(
+                        onTap: () => _book(start),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: AppTheme.white,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: AppTheme.ink900, width: 1.2),
+                          ),
+                          child: Text('+ BOOK', style: AppTheme.mono(size: 10.5, color: AppTheme.ink900, weight: FontWeight.w700)),
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            }),
+            const SizedBox(height: 4),
+            Text('Pick a slot to book it. A booked slot is locked for that team leader.', style: AppTheme.body(size: 11, color: AppTheme.muted)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The "BOOK DEMO SLOT" form for one slot. Pops the slot start when the demo is saved.
+class _BookSlotDialog extends StatefulWidget {
+  final LeadModel lead;
+  final String agentName;
+  final DateTime start;
+  final String teamLeaderId; // '' when no team leader could be loaded
+  final String teamLeaderName;
+  final ValueChanged<String>? onBooked;
+
+  const _BookSlotDialog({
+    required this.lead,
+    required this.agentName,
+    required this.start,
+    this.teamLeaderId = '',
+    this.teamLeaderName = '',
+    this.onBooked,
+  });
+
+  @override
+  State<_BookSlotDialog> createState() => _BookSlotDialogState();
+}
+
+class _BookSlotDialogState extends State<_BookSlotDialog> {
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _phoneCtrl;
+  final TextEditingController _courseCtrl = TextEditingController();
+  final TextEditingController _notesCtrl = TextEditingController();
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    final name = widget.lead.name.trim();
+    _nameCtrl = TextEditingController(text: name.toLowerCase() == 'unknown' ? '' : name);
+    _phoneCtrl = TextEditingController(text: widget.lead.phone);
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _phoneCtrl.dispose();
+    _courseCtrl.dispose();
+    _notesCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
     final name = _nameCtrl.text.trim();
+    final phone = _phoneCtrl.text.trim();
+    final course = _courseCtrl.text.trim();
     if (name.isEmpty) return setState(() => _error = 'Enter the client name.');
-    if (_slot == null) return setState(() => _error = 'Pick a time slot.');
-    final scheduledAt = _at(_date, _slot!);
-    if (!scheduledAt.isAfter(DateTime.now())) return setState(() => _error = 'That slot has passed. Pick another one.');
+    if (phone.replaceAll(RegExp(r'[^0-9]'), '').length < 10) return setState(() => _error = 'Enter a valid client phone number.');
+    if (course.isEmpty) return setState(() => _error = 'Enter the class / course.');
+    if (!widget.start.isAfter(DateTime.now())) return setState(() => _error = 'This slot has passed. Close and pick another one.');
     setState(() {
       _saving = true;
       _error = null;
@@ -126,10 +375,12 @@ class _BookDemoSheetState extends State<BookDemoSheet> {
     final err = await ApiService.bookDemo(
       leadId: widget.lead.id.startsWith('local_') || widget.lead.id == 'demo' ? '' : widget.lead.id,
       clientName: name,
-      clientPhone: widget.lead.phone,
-      scheduledAt: scheduledAt,
-      slot: _slotLabel(_slot!),
-      reason: _reasonCtrl.text.trim(),
+      clientPhone: phone,
+      scheduledAt: widget.start,
+      slot: _slotLabel(widget.start),
+      course: course,
+      teamLeaderId: widget.teamLeaderId,
+      reason: _notesCtrl.text.trim(),
     );
     if (!mounted) return;
     if (err != null) {
@@ -140,221 +391,124 @@ class _BookDemoSheetState extends State<BookDemoSheet> {
       return;
     }
     widget.onBooked?.call(name);
-    Navigator.of(context).pop(scheduledAt);
+    Navigator.of(context).pop(widget.start);
   }
+
+  Widget _label(String text) => Padding(
+        padding: const EdgeInsets.only(bottom: 6, top: 12),
+        child: Text(text, style: AppTheme.mono(size: 9.5, color: AppTheme.ink900, weight: FontWeight.w700)),
+      );
+
+  Widget _field(TextEditingController ctrl, {String hint = '', TextInputType? keyboard, int maxLines = 1}) =>
+      Container(
+        decoration: BoxDecoration(
+          color: AppTheme.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.ink900, width: 1.5),
+        ),
+        child: TextField(
+          controller: ctrl,
+          keyboardType: keyboard,
+          maxLines: maxLines,
+          textCapitalization: keyboard == null ? TextCapitalization.words : TextCapitalization.none,
+          style: AppTheme.body(size: 13, color: AppTheme.ink900),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: AppTheme.body(size: 12, color: AppTheme.muted),
+            border: InputBorder.none,
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          ),
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
-    final slots = _slotsFor(_date);
-    final summaryRows = <List<String>>[
-      ['CLIENT', _nameCtrl.text.trim().isEmpty ? '—' : _nameCtrl.text.trim()],
-      ['PHONE', widget.lead.phone.isEmpty ? '—' : widget.lead.phone],
-      ['AGENT', widget.agentName.isEmpty ? '—' : widget.agentName],
-      ['DATE', DateFormat('EEE, d MMM yyyy').format(_date).toUpperCase()],
-      ['TIME SLOT', _slot == null ? '—' : _slotLabel(_slot!)],
-      ['REASON', _reasonCtrl.text.trim().isEmpty ? '—' : _reasonCtrl.text.trim()],
-    ];
+    final agent = widget.agentName.trim().isEmpty ? '—' : widget.agentName.trim();
+    final when = '${DateFormat('EEEE, MMMM d, yyyy').format(widget.start)} · ${_slotLabel(widget.start)}';
 
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: SafeArea(
-        top: false,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(color: AppTheme.muted, borderRadius: BorderRadius.circular(2)),
-                ),
-              ),
-              const SizedBox(height: 14),
-              Text('BOOK A DEMO', style: AppTheme.headline(size: 28, color: AppTheme.ink900)),
-              const SizedBox(height: 16),
-
-              _label('CLIENT NAME'),
-              _box(
-                TextField(
-                  controller: _nameCtrl,
-                  textCapitalization: TextCapitalization.words,
-                  style: AppTheme.bodyBold(size: 14, color: AppTheme.ink900),
-                  decoration: const InputDecoration(
-                    hintText: 'Client name',
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              _label('AGENT (CALLER)'),
-              _box(
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                  child: Text(
-                    widget.agentName.isEmpty ? '—' : widget.agentName,
-                    style: AppTheme.bodyBold(size: 14, color: AppTheme.ink900),
-                  ),
-                ),
+    return Dialog(
+      backgroundColor: AppTheme.white,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: AppTheme.ink900, width: 1.5),
+      ),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _titleRow('BOOK DEMO SLOT'),
+            const SizedBox(height: 8),
+            // "Arun · Thursday, September 24, 2026 · 12:00 PM - 1:00 PM": the team leader running the demo
+            Text(
+              '${widget.teamLeaderName.trim().isNotEmpty ? widget.teamLeaderName.trim() : agent} · $when',
+              style: AppTheme.mono(size: 10.5, color: AppTheme.ink700),
+            ),
+            const SizedBox(height: 12),
+            const Divider(height: 1, color: AppTheme.ink900),
+            _label('CALLER'),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              decoration: BoxDecoration(
                 color: AppTheme.paper,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.ink900, width: 1.5),
               ),
-              const SizedBox(height: 12),
-
-              _label('DATE'),
-              GestureDetector(
-                onTap: _pickDate,
-                child: _box(
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.calendar_today_rounded, size: 16, color: AppTheme.ink900),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            DateFormat('EEE, d MMM yyyy').format(_date).toUpperCase(),
-                            style: AppTheme.mono(size: 12, color: AppTheme.ink900, weight: FontWeight.w700),
-                          ),
-                        ),
-                        Text('CHANGE', style: AppTheme.mono(size: 10, color: AppTheme.greenDark, weight: FontWeight.w700)),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              _label('TIME SLOT'),
-              if (slots.isEmpty)
-                Text('No slots left on this day. Pick another date.', style: AppTheme.body(size: 12, color: AppTheme.muted))
-              else
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: slots.map((t) {
-                    final selected = _slot == t;
-                    return GestureDetector(
-                      onTap: () => setState(() {
-                        _slot = t;
-                        _error = null;
-                      }),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: selected ? AppTheme.ink900 : AppTheme.white,
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(color: AppTheme.ink900, width: 1.2),
-                        ),
-                        child: Text(
-                          _fmtTime(_at(_date, t)),
-                          style: AppTheme.mono(size: 11, color: selected ? AppTheme.limeYellow : AppTheme.ink900, weight: FontWeight.w700),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              const SizedBox(height: 12),
-
-              _label('REASON / NOTES'),
-              _box(
-                TextField(
-                  controller: _reasonCtrl,
-                  maxLines: 3,
-                  maxLength: 2000,
-                  style: AppTheme.body(size: 13, color: AppTheme.ink900),
-                  decoration: const InputDecoration(
-                    hintText: 'Why the client wants a demo, what to show...',
-                    border: InputBorder.none,
-                    counterText: '',
-                    contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Summary of everything that will be saved
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: AppTheme.ink900,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppTheme.ink900, width: 1.5),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('SUMMARY', style: AppTheme.mono(size: 10, color: AppTheme.limeYellow, weight: FontWeight.w700)),
-                    const SizedBox(height: 8),
-                    ...summaryRows.map((r) => Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 3),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SizedBox(
-                                width: 84,
-                                child: Text(r[0], style: AppTheme.mono(size: 9.5, color: AppTheme.lightMuted)),
-                              ),
-                              Expanded(
-                                child: Text(r[1], style: AppTheme.bodyBold(size: 12.5, color: AppTheme.white)),
-                              ),
-                            ],
-                          ),
-                        )),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Text(_error!, style: AppTheme.bodyBold(size: 12, color: Colors.red.shade700)),
-                ),
-
-              Opacity(
-                opacity: _saving ? 0.6 : 1,
-                child: GestureDetector(
-                  onTap: _saving ? null : _book,
+              child: Text(agent, style: AppTheme.body(size: 13, color: AppTheme.ink900)),
+            ),
+            _label('CLIENT NAME'),
+            _field(_nameCtrl, hint: 'Client name'),
+            _label('CLIENT PHONE'),
+            _field(_phoneCtrl, hint: 'Client phone', keyboard: TextInputType.phone),
+            _label('CLASS / COURSE'),
+            _field(_courseCtrl, hint: 'Class / course'),
+            _label('NOTES (OPTIONAL)'),
+            _field(_notesCtrl, hint: 'Notes', keyboard: TextInputType.multiline, maxLines: 3),
+            if (_error != null) ...[
+              const SizedBox(height: 10),
+              Text(_error!, style: AppTheme.bodyBold(size: 12, color: Colors.red.shade700)),
+            ],
+            const SizedBox(height: 18),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                GestureDetector(
+                  onTap: _saving ? null : () => Navigator.of(context).pop(),
                   child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.white,
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: AppTheme.ink900, width: 1.5),
+                    ),
+                    child: Text('CLOSE', style: AppTheme.mono(size: 10.5, color: AppTheme.ink900, weight: FontWeight.w700)),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                GestureDetector(
+                  onTap: _saving ? null : _submit,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
                     decoration: BoxDecoration(
                       color: AppTheme.greenNeon,
                       borderRadius: BorderRadius.circular(999),
                       border: Border.all(color: AppTheme.ink900, width: 1.5),
-                      boxShadow: AppTheme.neoShadow(color: AppTheme.ink900, offset: 4),
+                      boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
                     ),
-                    child: Center(
-                      child: _saving
-                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.ink900))
-                          : Text('BOOK APPOINTMENT →', style: AppTheme.label(size: 11.5, color: AppTheme.ink900, letterSpacing: 0.15)),
-                    ),
+                    child: _saving
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.ink900))
+                        : Text('BOOK SLOT', style: AppTheme.mono(size: 10.5, color: AppTheme.ink900, weight: FontWeight.w700)),
                   ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
+          ],
         ),
       ),
     );
   }
-
-  Widget _label(String text) => Padding(
-        padding: const EdgeInsets.only(bottom: 6),
-        child: Text(text, style: AppTheme.label(size: 9.5, color: AppTheme.muted, letterSpacing: 0.14)),
-      );
-
-  Widget _box(Widget child, {Color color = AppTheme.white}) => Container(
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppTheme.ink900, width: 1.5),
-          boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
-        ),
-        child: child,
-      );
 }
