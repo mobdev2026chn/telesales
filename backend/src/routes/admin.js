@@ -133,11 +133,8 @@ router.get('/dashboard', async (req, res) => {
         name: emp.name,
         phone: emp.phone,
         managerName: emp.managerName,
-        status: active ? 'ON CALL' : (emp.onBreak ? 'ON BREAK' : (emp.online ? 'ONLINE' : 'OFFLINE')),
-        statusColor: active ? '#FF3B30' : (emp.onBreak ? '#F5A524' : (emp.online ? '#34C759' : '#8E8E93')),
-        onBreak: emp.onBreak,
-        breakType: emp.breakType,
-        breakStartedAt: emp.breakStartedAt,
+        status: active ? 'ON CALL' : (emp.online ? 'ONLINE' : 'OFFLINE'),
+        statusColor: active ? '#FF3B30' : (emp.online ? '#34C759' : '#8E8E93'),
         totalCalls: emp.totalCalls,
       };
     });
