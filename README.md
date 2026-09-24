@@ -25,7 +25,7 @@ npm install
 npm run dev
 ```
 
-Server runs by default at `http://localhost:5000`. Refer to [`backend/README.md`](file:///backend/README.md) for full API documentation.
+Server runs by default at `http://localhost:5004`. Refer to [`backend/README.md`](file:///backend/README.md) for full API documentation.
 
 ### 2. Flutter App (`/telesales_monitor`)
 The mobile application monitors call logs, records telemetry, and synchronizes call activities with the backend server.
@@ -43,7 +43,7 @@ flutter run
 Make sure to create a `.env` file in the `backend/` directory based on `backend/.env.example`:
 
 ```env
-PORT=5000
+PORT=5004
 MONGODB_URI=mongodb://127.0.0.1:27017/telesales_db
 JWT_SECRET=your_jwt_secret_here
 CORS_ORIGIN=*

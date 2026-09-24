@@ -35,7 +35,7 @@ d:/Projects/Telesales/backend/
    npm install
    npm start
    ```
-2. The server runs at `http://localhost:5000`.
+2. The server runs at `http://localhost:5004`.
 
 ---
 
