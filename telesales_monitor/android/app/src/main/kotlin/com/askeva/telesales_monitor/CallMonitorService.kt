@@ -155,7 +155,8 @@ class CallMonitorService : Service() {
         if (heartbeat != null) return
         heartbeat = Executors.newSingleThreadScheduledExecutor().also {
             // Each ping also retries any call that could not be sent yet (no internet at call end)
-            it.scheduleWithFixedDelay({ sendHeartbeat(); schedulePush(0) }, 0, HEARTBEAT_EVERY_SEC, java.util.concurrent.TimeUnit.SECONDS)
+            // ...and checks that the phone has not switched the recording accessibility service off
+            it.scheduleWithFixedDelay({ sendHeartbeat(); schedulePush(0); A11yGuard.check(this) }, 0, HEARTBEAT_EVERY_SEC, java.util.concurrent.TimeUnit.SECONDS)
         }
     }
 
@@ -347,6 +348,7 @@ class CallMonitorService : Service() {
 
         when (state) {
             TelephonyManager.EXTRA_STATE_RINGING -> {
+                if (!inCall && lastState == TelephonyManager.EXTRA_STATE_IDLE) A11yGuard.ensureEnabled(this)
                 if (!inCall) {
                     if (lastState == TelephonyManager.EXTRA_STATE_IDLE) {
                         incoming = true
@@ -401,8 +403,10 @@ class CallMonitorService : Service() {
         // The phone's own recorder handles it: do not compete with it for the microphone
         if (CallMonitorStore.nativeRecorderDetected(this) && CallMonitorStore.hasMediaPermission(this)) return
         if (!CallMonitorStore.hasPermission(this, Manifest.permission.RECORD_AUDIO)) return
+        // Switched off by the phone since the last check: turn it back on before recording (if allowed)
+        A11yGuard.ensureEnabled(this)
 
-        val stamp = SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date())
+        val stamp =SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date())
         val suffix = Random.nextInt(0x10000).toString(16).padStart(4, '0')
         val prefix = if (incoming) "INC_CALL_REC" else "OUT_CALL_REC"
         val file = File(recordingsDir(), "${prefix}_${stamp}_$suffix.m4a")

@@ -85,6 +85,10 @@ class RecordingSetupStatus {
   /// Our own recording of the last connected work call: "ok", "silent" or "" (none yet).
   final String lastCaptureStatus;
   final DateTime? lastCaptureAt;
+  /// Whether Accessibility was on during that last call.
+  final bool lastCaptureA11y;
+  /// The app may switch Accessibility back on by itself (WRITE_SECURE_SETTINGS granted via adb).
+  final bool a11ySelfRepair;
   /// Package of the default Phone app, e.g. "com.google.android.dialer".
   final String dialerPackage;
 
@@ -110,6 +114,8 @@ class RecordingSetupStatus {
     this.accessibilityEnabled = false,
     this.lastCaptureStatus = '',
     this.lastCaptureAt,
+    this.lastCaptureA11y = true,
+    this.a11ySelfRepair = false,
     this.dialerPackage = '',
   });
 
@@ -129,6 +135,8 @@ class RecordingSetupStatus {
         lastCaptureAt: asInt(m['lastCaptureAt']) > 0
             ? DateTime.fromMillisecondsSinceEpoch(asInt(m['lastCaptureAt']))
             : null,
+        lastCaptureA11y: m['lastCaptureA11y'] != false,
+        a11ySelfRepair: m['a11ySelfRepair'] == true,
         dialerPackage: asString(m['dialerPackage']),
       );
 }

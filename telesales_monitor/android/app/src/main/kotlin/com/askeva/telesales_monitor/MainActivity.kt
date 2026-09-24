@@ -167,6 +167,8 @@ class MainActivity : FlutterActivity() {
                         status["dialerPackage"] = DeviceSetupHelper.defaultDialerPackage(this)
                         status["lastCaptureStatus"] = CallMonitorStore.lastCaptureStatus(this)
                         status["lastCaptureAt"] = CallMonitorStore.lastCaptureAt(this)
+                        status["lastCaptureA11y"] = CallMonitorStore.lastCaptureA11y(this)
+                        status["a11ySelfRepair"] = A11yGuard.canSelfRepair(this)
                         status["pendingUploads"] = try { RecordingQueue.countFor(this, userId) } catch (_: Exception) { 0 }
                         mainHandler.post { result.success(status) }
                     }
@@ -497,6 +499,12 @@ class MainActivity : FlutterActivity() {
                 }
             }
         } catch (_: Exception) {}
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Turn the recording accessibility service back on if the phone switched it off (when allowed)
+        A11yGuard.ensureEnabled(this)
     }
 
     override fun onDestroy() {

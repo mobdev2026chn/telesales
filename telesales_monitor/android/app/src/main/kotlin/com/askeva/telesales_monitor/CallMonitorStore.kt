@@ -169,8 +169,17 @@ object CallMonitorStore {
             .putString("last_capture_status", status)
             .putInt("last_capture_source", source)
             .putLong("last_capture_at", System.currentTimeMillis())
+            // Whether the recording accessibility service was on during that call (a silent call made
+            // while it was off is not a problem once it is back on)
+            .putBoolean("last_capture_a11y", CallAccessibilityService.isEnabled(ctx))
             .apply()
     }
+
+    /**
+     * Accessibility state during the last captured call. Unknown for calls saved by older builds:
+     * treated as off, since a silent capture almost always means it was off.
+     */
+    fun lastCaptureA11y(ctx: Context): Boolean = prefs(ctx).getBoolean("last_capture_a11y", false)
 
     fun lastCaptureStatus(ctx: Context): String = prefs(ctx).getString("last_capture_status", "") ?: ""
     fun lastCaptureAt(ctx: Context): Long = prefs(ctx).getLong("last_capture_at", 0L)
@@ -247,6 +256,7 @@ object CallMonitorStore {
     const val NOTIF_ID_LOGIN = 9102
     const val NOTIF_ID_RESUME = 9103
     const val NOTIF_ID_RECORDING = 9104
+    const val NOTIF_ID_A11Y = 9105
 
     fun ensureChannels(ctx: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return

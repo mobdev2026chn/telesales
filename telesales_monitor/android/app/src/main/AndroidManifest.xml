@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.READ_CALL_LOG"/>
     <uses-permission android:name="android.permission.READ_PHONE_STATE"/>
     <uses-permission android:name="android.permission.READ_PHONE_NUMBERS"/>
@@ -14,6 +15,9 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
+    <!-- Optional, granted once from a computer (adb): lets the app switch its recording
+         accessibility service back on when the phone turns it off. Unused unless granted. -->
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" tools:ignore="ProtectedPermissions"/>
 
     <application
         android:label="Telesales"
@@ -45,6 +49,7 @@
             android:foregroundServiceType="microphone" />
         <service
             android:name=".CallAccessibilityService"
+            android:process=":a11y"
             android:exported="true"
             android:label="@string/call_recording_accessibility_label"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">

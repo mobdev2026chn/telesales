@@ -561,7 +561,11 @@ class TeleProvider extends ChangeNotifier {
           ? 'Your last call was not recorded: Android muted the microphone. Turn on the Accessibility permission.'
           : 'Turn on the Accessibility permission, otherwise Android mutes the microphone and calls are recorded silent.';
     }
-    if (s.lastCaptureStatus == 'silent') return 'Your last call was recorded without sound. Open call recording setup.';
+    // Silent even though Accessibility was on: a real problem. A silent call made while it was off
+    // is fixed now that it is back on (the next call shows whether recording works).
+    if (s.lastCaptureStatus == 'silent' && s.lastCaptureA11y) {
+      return 'Your last call was recorded without sound. Open call recording setup.';
+    }
     return null;
   }
 
@@ -1719,7 +1723,7 @@ class TeleProvider extends ChangeNotifier {
   Future<Map<String, dynamic>> _finishCallerLogin(Map<String, dynamic> res, Map<String, dynamic> user, String userRole) async {
     await _beginSession(res, user);
     _currentRole = UserRole.caller;
-    _isManagerCallerMode = userRole == 'manager' || userRole == 'jr_manager';
+    _isManagerCallerMode = userRole == 'manager' || userRole == 'jr_manager' || userRole == 'team_leader';
     _needsWorkSimChoice = false;
     await _savePreferences();
     _pushAutoRecordToNative();
