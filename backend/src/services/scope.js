@@ -53,7 +53,8 @@ async function assignedTo(mgr) {
   const out = [];
   let level = [mgr];
   for (let depth = 0; level.length && depth < 10; depth++) {
-    const found = await Employee.find({ $or: level.map(m => reportsQuery(m, depth === 0)) }).select(EMP_FIELDS).lean();
+    // A Team Leader sees only the people assigned to them, never the rest of the team they share
+    const found = await Employee.find({ $or: level.map(m => reportsQuery(m, depth === 0 && m.role !== 'team_leader')) }).select(EMP_FIELDS).lean();
     level = found.filter(e => !seen.has(e.id));
     level.forEach(e => { seen.add(e.id); out.push(e); });
     // Only people who manage others can have reports of their own

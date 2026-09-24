@@ -20,7 +20,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw" crossorigin="anonymous"></script>
 
   <!-- Design system: every colour, font, spacing and component style of the portal lives here -->
-  <link rel="stylesheet" href="design-system.css">
+  <link rel="stylesheet" href="/design-system.css">
 </head>
 <body>
 
@@ -73,7 +73,7 @@
         <img src="/ask_eva_logo_192.png" onerror="if(!this.dataset.tried){this.dataset.tried=1;this.src='ask_eva_logo_192.png';}else if(this.dataset.tried==1){this.dataset.tried=2;this.src='/ask_eva_logo.png';}" alt="AskEva">
       </div>
       <div class="login-title">Telesales Monitor</div>
-      <div class="login-subtitle">Admin &amp; manager portal</div>
+      <div class="login-subtitle">Admin, manager &amp; team leader portal</div>
 
       <div id="webLoginError" class="alert-error" role="alert"></div>
       <form id="webLoginForm" onsubmit="event.preventDefault(); handleWebLogin(event); return false;" novalidate>
@@ -573,8 +573,12 @@
             <div class="search-field">
               <svg class="ico ico-sm"><use href="#i-search"></use></svg>
               <label for="demoSearchInput" class="visually-hidden">Search demo bookings</label>
-              <input type="text" id="demoSearchInput" placeholder="Search client, phone, agent, reason…" oninput="onDemoSearch(this.value)" />
+              <input type="text" id="demoSearchInput" placeholder="Search client, phone, course, team leader…" oninput="onDemoSearch(this.value)" />
             </div>
+            <label for="demoTlFilter" class="visually-hidden">Team leader</label>
+            <select id="demoTlFilter" class="toolbar-select" style="height: 34px;" onchange="onDemoTlFilter(this.value)">
+              <option value="ALL">ALL TEAM LEADERS</option>
+            </select>
             <label for="demoAgentFilter" class="visually-hidden">Agent</label>
             <select id="demoAgentFilter" class="toolbar-select" style="height: 34px;" onchange="onDemoAgentFilter(this.value)">
               <option value="ALL">ALL AGENTS</option>
@@ -595,8 +599,8 @@
         <div class="neo-table-card">
           <div class="table-scroll-wrap">
             <div>
-              <div class="table-head-row" style="grid-template-columns: 1.3fr 1.2fr 1.1fr 1.1fr 2fr 1fr;">
-                <span>Demo date · slot</span><span>Client</span><span>Phone</span><span>Agent</span><span>Reason</span><span>Booked on</span>
+              <div class="table-head-row" style="grid-template-columns: 1.25fr 1.15fr 1.05fr 0.95fr 1fr 1fr 1.5fr 0.95fr;">
+                <span>Demo date · slot</span><span>Client</span><span>Phone</span><span>Course</span><span>Team leader</span><span>Agent</span><span>Notes</span><span>Booked on</span>
               </div>
               <div id="demoTableRows"></div>
             </div>
@@ -1508,7 +1512,7 @@
       const seen = new Set([rootId]);
       const root = Store.users.find(u => u.id === rootId);
       const team = String((root && root.team) || '').trim().toLowerCase();
-      if (team && team !== 'telesales team') {
+      if (team && team !== 'telesales team' && !(root && root.role === 'TEAM_LEADER')) {
         Store.users.forEach(u => {
           if (u.role !== 'ADMIN' && !seen.has(u.id) && String(u.team || '').trim().toLowerCase() === team) {
             seen.add(u.id);
@@ -2080,7 +2084,7 @@
         const role = String((user && user.role) || '').toLowerCase();
         if (!user || !['admin', 'manager', 'jr_manager', 'team_leader'].includes(role)) {
           clearSession();
-          showLogin('This portal is for admins and managers only.');
+          showLogin('This portal is for admins, managers and team leaders only.');
           return;
         }
         Store.authUser = user;
@@ -5063,8 +5067,11 @@
         clientPhone: d.clientPhone || '',
         callerId: d.callerId || '',
         agent: d.callerName || '',
+        teamLeaderId: d.teamLeaderId || '',
+        teamLeaderName: d.teamLeaderName || '',
         at: at && !isNaN(at.getTime()) ? at : null,
         slot: d.slot || '',
+        course: d.course || '',
         reason: d.reason || '',
         bookedAt: d.createdAt ? new Date(d.createdAt) : null,
       };
@@ -5103,11 +5110,12 @@
         const au = Store.users.find(u => u.id === Store.demoAgent);
         list = list.filter(d => d.callerId ? d.callerId === Store.demoAgent : (au && d.agent.trim().toLowerCase() === au.name.trim().toLowerCase()));
       }
+      if (Store.demoTl && Store.demoTl !== 'ALL') list = list.filter(d => d.teamLeaderId === Store.demoTl);
       const q = Store.demoSearch;
       if (q) {
         const qd = q.replace(/\D/g, '');
         list = list.filter(d =>
-          d.clientName.toLowerCase().includes(q) || d.agent.toLowerCase().includes(q) || d.reason.toLowerCase().includes(q) ||
+          d.clientName.toLowerCase().includes(q) || d.agent.toLowerCase().includes(q) || d.reason.toLowerCase().includes(q) || d.course.toLowerCase().includes(q) || d.teamLeaderName.toLowerCase().includes(q) ||
           (qd && d.clientPhone.replace(/\D/g, '').includes(qd)));
       }
       return list;
@@ -5129,6 +5137,10 @@
       Store.demoSearch = (val || '').trim().toLowerCase();
       renderDemos();
     }
+    function onDemoTlFilter(val) {
+      Store.demoTl = val || 'ALL';
+      renderDemos();
+    }
     function onDemoAgentFilter(val) {
       Store.demoAgent = val || 'ALL';
       renderDemos();
@@ -5146,6 +5158,17 @@
       agentSel.innerHTML = '<option value="ALL">ALL AGENTS</option>' + callers.map(u =>
         `<option value="${esc(u.id)}"${Store.demoAgent === u.id ? ' selected' : ''}>${esc(u.name.toUpperCase())} (${esc(roleLabel(u.role))})</option>`).join('');
 
+      // Team leader filter: every team leader in view plus any named on a booking
+      const tlSel = $('demoTlFilter');
+      if (tlSel) {
+        const tls = new Map();
+        visibleUsers().filter(u => u.role === 'TEAM_LEADER').forEach(u => tls.set(u.id, u.name));
+        (Store.demos || []).forEach(d => { if (d.teamLeaderId && !tls.has(d.teamLeaderId)) tls.set(d.teamLeaderId, d.teamLeaderName || '—'); });
+        if (Store.demoTl && Store.demoTl !== 'ALL' && !tls.has(Store.demoTl)) Store.demoTl = 'ALL';
+        tlSel.innerHTML = '<option value="ALL">ALL TEAM LEADERS</option>' + Array.from(tls.entries())
+          .sort((a, b) => String(a[1]).localeCompare(String(b[1])))
+          .map(([id, name]) => `<option value="${esc(id)}"${Store.demoTl === id ? ' selected' : ''}>${esc(String(name).toUpperCase())} (TEAM LEADER)</option>`).join('');
+      }
       const base = baseDemos();
       ['UPCOMING', 'TODAY', 'PAST', 'ALL'].forEach(r => {
         const el = $(`demoCount${r}`);
@@ -5167,13 +5190,15 @@
       rowsEl.innerHTML = list.map(d => {
         const isPast = d.at && d.at.getTime() < Date.now();
         return `
-        <div class="table-body-row" style="grid-template-columns: 1.3fr 1.2fr 1.1fr 1.1fr 2fr 1fr;${isPast ? ' opacity: 0.7;' : ''}">
+        <div class="table-body-row" style="grid-template-columns: 1.25fr 1.15fr 1.05fr 0.95fr 1fr 1fr 1.5fr 0.95fr;${isPast ? ' opacity: 0.7;' : ''}">
           <div style="min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 4px;">
             <span class="cell-primary" style="font-size: 13px;">${esc(fmtDemoDay(d.at))}</span>
             ${UI.badge(d.slot || (d.at ? fmtTs(d.at) : '—'), isPast ? 'neutral' : 'lime')}
           </div>
           <span class="cell-primary" style="overflow-wrap: anywhere;">${esc(d.clientName || '—')}</span>
           <span class="cell-mono">${esc(d.clientPhone ? formatPhone(d.clientPhone) : '—')}</span>
+          <span style="overflow-wrap: anywhere;">${esc(d.course || '—')}</span>
+          <span>${d.teamLeaderName ? userLink({ id: d.teamLeaderId, name: d.teamLeaderName }, d.teamLeaderName) : '<span class="muted">—</span>'}</span>
           <span>${d.agent ? userLink({ id: d.callerId, name: d.agent }, d.agent) : '—'}</span>
           <span class="cell-muted" style="overflow-wrap: anywhere; white-space: pre-line;">${esc(d.reason || '—')}</span>
           <span class="cell-muted">${d.bookedAt ? fmtTs(d.bookedAt) : '—'}</span>
@@ -5187,8 +5212,10 @@
         'Time slot': d.slot,
         Client: d.clientName,
         Phone: d.clientPhone,
+        Course: d.course,
+        'Team leader': d.teamLeaderName,
         Agent: d.agent,
-        Reason: d.reason,
+        Notes: d.reason,
         'Booked on': d.bookedAt ? fmtTs(d.bookedAt) : '',
       }));
       exportRows(rows, 'Demo bookings', `demo-bookings-${(Store.demoRange || 'UPCOMING').toLowerCase()}.xlsx`);
