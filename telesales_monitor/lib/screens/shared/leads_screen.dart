@@ -7,6 +7,7 @@ import '../../widgets/lead_detail_sheet.dart';
 import '../../widgets/create_lead_dialog.dart';
 import '../../providers/tele_provider.dart';
 import '../../models/lead_model.dart';
+import '../../models/recording_model.dart';
 import '../caller/call_session_screen.dart';
 
 class LeadsScreen extends StatefulWidget {
@@ -19,6 +20,7 @@ class LeadsScreen extends StatefulWidget {
 class _LeadsScreenState extends State<LeadsScreen> {
   String _selectedCategory = 'ALL';
   String _selectedTeamMember = 'ALL';
+  bool _showAllPinned = false;
   final TextEditingController _searchCtrl = TextEditingController();
 
   final List<String> _categoryOptions = [
@@ -183,6 +185,9 @@ class _LeadsScreenState extends State<LeadsScreen> {
                 ],
               ),
               const SizedBox(height: 12),
+
+              // Recordings pinned by an admin / manager from the portal (old or new)
+              ..._buildPinnedRecordings(tele, isManager: isManager),
 
               // Search Bar: ⚲ Search lead or phone...
               Container(
@@ -356,6 +361,130 @@ class _LeadsScreenState extends State<LeadsScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  static String _fmtDuration(Duration d) => '${d.inMinutes}m ${(d.inSeconds % 60).toString().padLeft(2, '0')}s';
+
+  /// "PINNED RECORDINGS" section: every recording pinned from the admin portal that this user may
+  /// see (the server scopes the list). Nothing is shown when there are none.
+  List<Widget> _buildPinnedRecordings(TeleProvider tele, {required bool isManager}) {
+    var pinned = tele.recordings.where((r) => r.pinned).toList();
+    if (isManager && _selectedTeamMember != 'ALL') {
+      final who = _selectedTeamMember.toLowerCase();
+      pinned = pinned.where((r) => r.agentName.toLowerCase() == who).toList();
+    }
+    if (pinned.isEmpty) return const [];
+    pinned.sort((a, b) => b.date.compareTo(a.date));
+    const collapsedCount = 3;
+    final visible = _showAllPinned ? pinned : pinned.take(collapsedCount).toList();
+
+    return [
+      Row(
+        children: [
+          const Icon(Icons.push_pin_rounded, size: 16, color: AppTheme.ink900),
+          const SizedBox(width: 6),
+          Text('PINNED RECORDINGS · ${pinned.length}', style: AppTheme.label(size: 10.5, color: AppTheme.ink900, letterSpacing: 0.14)),
+        ],
+      ),
+      const SizedBox(height: 8),
+      ...visible.map((r) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _buildPinnedRecordingCard(tele, r),
+          )),
+      if (pinned.length > collapsedCount)
+        GestureDetector(
+          onTap: () => setState(() => _showAllPinned = !_showAllPinned),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              color: AppTheme.white,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: AppTheme.ink900, width: 1.2),
+            ),
+            child: Center(
+              child: Text(
+                _showAllPinned ? 'SHOW LESS ↑' : 'VIEW ALL ${pinned.length} PINNED ↓',
+                style: AppTheme.label(size: 9.5, color: AppTheme.ink900, letterSpacing: 0.12),
+              ),
+            ),
+          ),
+        ),
+      const SizedBox(height: 16),
+    ];
+  }
+
+  Widget _buildPinnedRecordingCard(TeleProvider tele, RecordingModel r) {
+    final isPlaying = r.isPlaying;
+    final total = r.playbackDuration ?? (r.duration.inSeconds > 0 ? r.duration : null);
+    final timeLabel = isPlaying
+        ? '${_fmtDuration(r.playbackPosition)} / ${total != null ? _fmtDuration(total) : '—'}'
+        : (r.duration.inSeconds > 0 ? _fmtDuration(r.duration) : '—');
+    final client = r.clientName.trim().isNotEmpty && r.clientName != 'Unknown' ? r.clientName : r.clientPhone;
+
+    return NeoCard(
+      backgroundColor: AppTheme.limeYellow.withValues(alpha: 0.35),
+      shadowColor: AppTheme.ink900,
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      client.isNotEmpty ? client : '—',
+                      style: AppTheme.bodyBold(size: 14, color: AppTheme.ink900),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${r.agentName.toUpperCase()} · ${DateFormat('d MMM yyyy · h:mm a').format(r.date).toUpperCase()}',
+                      style: AppTheme.mono(size: 9.5, color: AppTheme.ink700),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () => tele.toggleRecordingPlayback(r.id),
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: isPlaying ? AppTheme.greenNeon : AppTheme.white,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppTheme.ink900, width: 1.2),
+                  ),
+                  child: Icon(isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded, size: 22, color: AppTheme.ink900),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: Container(
+              height: 5,
+              color: AppTheme.white,
+              child: FractionallySizedBox(
+                alignment: Alignment.centerLeft,
+                widthFactor: isPlaying ? r.progress.clamp(0.01, 1.0) : 0.0,
+                child: Container(color: AppTheme.greenNeon),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(timeLabel, style: AppTheme.mono(size: 9.5, color: isPlaying ? AppTheme.greenDark : AppTheme.muted)),
+        ],
       ),
     );
   }

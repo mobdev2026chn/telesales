@@ -871,16 +871,25 @@ class TeleProvider extends ChangeNotifier {
         userIdParam = _selectedUserFilter;
       }
     }
-    final recs = await ApiService.fetchRecordings(
-      callerPhone: phoneParam,
-      callerName: nameParam,
-      team: teamParam,
-      userId: userIdParam,
-      loggedInRole: _isManagerCallerMode ? 'caller' : _currentUserRole,
-      loggedInTeam: _currentUserTeam,
-      loggedInUserId: _currentUserId,
-    );
+    Future<List<RecordingModel>?> fetch({bool pinnedOnly = false}) => ApiService.fetchRecordings(
+          callerPhone: phoneParam,
+          callerName: nameParam,
+          team: teamParam,
+          userId: userIdParam,
+          loggedInRole: _isManagerCallerMode ? 'caller' : _currentUserRole,
+          loggedInTeam: _currentUserTeam,
+          loggedInUserId: _currentUserId,
+          pinnedOnly: pinnedOnly,
+        );
+    // The main list is the newest recordings only; pinned ones are fetched separately so an old
+    // pinned recording is never missing.
+    final results = await Future.wait([fetch(), fetch(pinnedOnly: true)]);
+    final recs = results[0];
     if (recs == null || !_isCurrentSession(gen)) return;
+    final loadedIds = recs.map((r) => r.id).toSet();
+    for (final p in results[1] ?? const <RecordingModel>[]) {
+      if (p.pinned && loadedIds.add(p.id)) recs.add(p);
+    }
     // Keep the playing state of a recording that is still in the list
     final playingId = _recordings.where((r) => r.isPlaying).map((r) => r.id).firstOrNull;
     for (final r in recs) {
@@ -1089,6 +1098,14 @@ class TeleProvider extends ChangeNotifier {
   DateTime? recentDemoBookingFor(String phone) {
     final b = _demoBookings[last10Digits(phone)];
     return b != null && DateTime.now().difference(b.$1).inHours < 3 ? b.$2 : null;
+  }
+
+  @visibleForTesting
+  void debugSetRecordings(List<RecordingModel> recs) {
+    _recordings
+      ..clear()
+      ..addAll(recs);
+    notifyListeners();
   }
 
   @visibleForTesting

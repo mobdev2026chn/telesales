@@ -254,6 +254,8 @@ router.get(['/api/recordings', '/api/admin/recordings'], async (req, res) => {
       const re = new RegExp(escapeRegex(String(search).trim()), 'i');
       conditions.push({ $or: [{ callerName: re }, { contactName: re }, { phoneNumber: re }] });
     }
+    // ?pinned=1 : only recordings pinned from the portal, however old (the app lists them separately)
+    if (['1', 'true'].includes(String(req.query.pinned || '').toLowerCase())) conditions.push({ pinned: true });
     // ?from=&to= : call time in this range (call start; upload time for older rows without it)
     const from = parseDate(req.query.from);
     const to = parseDate(req.query.to);

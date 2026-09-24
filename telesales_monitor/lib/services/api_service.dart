@@ -448,16 +448,20 @@ class ApiService {
     String? loggedInRole,
     String? loggedInTeam,
     String? loggedInUserId,
+    bool pinnedOnly = false, // only recordings pinned from the portal, however old
   }) async {
-    final q = _query(_scopeQuery(
-      callerPhone: callerPhone,
-      callerName: callerName,
-      team: team,
-      userId: userId,
-      loggedInRole: loggedInRole,
-      loggedInTeam: loggedInTeam,
-      loggedInUserId: loggedInUserId,
-    ));
+    final q = _query({
+      ..._scopeQuery(
+        callerPhone: callerPhone,
+        callerName: callerName,
+        team: team,
+        userId: userId,
+        loggedInRole: loggedInRole,
+        loggedInTeam: loggedInTeam,
+        loggedInUserId: loggedInUserId,
+      ),
+      if (pinnedOnly) 'pinned': '1',
+    });
     final res = await _request('GET', '/recordings$q');
     if (!_ok(res)) return null;
     final data = _decodeMap(res);
