@@ -104,7 +104,7 @@ app.use('/api', (req, res, next) => {
 // and shortcuts that must never be downloadable from the public site.
 const ADMIN_WEB_DIR = path.join(__dirname, '../../admin_web');
 const ADMIN_WEB_FILES = new Set([
-  'index.html', 'manifest.json', 'favicon.ico', 'apple-touch-icon.png',
+  'index.html', 'design-system.css', 'manifest.json', 'favicon.ico', 'apple-touch-icon.png',
   'ask_eva_logo.png', 'ask_eva_logo.jpg', 'ask_eva_logo_192.png', 'ask_eva_logo_512.png',
 ]);
 function serveAdminWeb(req, res, next) {
