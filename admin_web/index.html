@@ -431,6 +431,100 @@
       overflow: hidden;
     }
 
+    /* Lead-calling workspace polish */
+    #tab-dial {
+      position: relative;
+      isolation: isolate;
+    }
+    #tab-dial::before {
+      content: '';
+      position: absolute;
+      inset: -28px -32px auto;
+      height: 300px;
+      background: linear-gradient(135deg, rgba(61, 200, 56, 0.1), transparent 62%);
+      pointer-events: none;
+      z-index: -1;
+    }
+    .lead-calling-header {
+      background: var(--ink-900);
+      color: var(--paper);
+      border-radius: 18px;
+      padding: 18px 20px;
+      margin-bottom: 20px;
+      box-shadow: 5px 5px 0 rgba(16, 24, 12, 0.22);
+    }
+    .lead-calling-header .section-title-text {
+      color: var(--lime-400);
+      font-size: 16px;
+      letter-spacing: 0.13em;
+    }
+    .lead-calling-header .green-square {
+      background: var(--lime-400);
+      box-shadow: 0 0 0 5px rgba(200, 255, 74, 0.12);
+    }
+    .lead-calling-header input[type="text"] {
+      border-color: var(--lime-400) !important;
+      box-shadow: 2px 2px 0 rgba(200, 255, 74, 0.3);
+    }
+    .lead-upload-grid > div,
+    #tab-dial .neo-card,
+    #tab-dial .neo-table-card {
+      transition: transform 0.18s ease, box-shadow 0.18s ease;
+    }
+    .lead-upload-grid > div:hover,
+    #tab-dial .neo-card:hover,
+    #tab-dial .neo-table-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 5px 6px 0 rgba(16, 24, 12, 0.18);
+    }
+    .lead-upload-card {
+      background: linear-gradient(145deg, #10180C 0%, #172512 100%) !important;
+      border-color: var(--lime-400) !important;
+    }
+    .lead-history-card {
+      background: rgba(255, 255, 255, 0.84) !important;
+    }
+    .lead-queue-card {
+      margin-top: 4px;
+    }
+    .tab-view:not(#tab-dial) > .section-header {
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid rgba(16, 24, 12, 0.12);
+      border-radius: 16px;
+      padding: 16px 18px;
+      box-shadow: 3px 3px 0 rgba(16, 24, 12, 0.12);
+    }
+    .tab-view:not(#tab-dial) > .section-header .section-title-text {
+      letter-spacing: 0.14em;
+    }
+    .tab-view .neo-card,
+    .tab-view .neo-table-card {
+      transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+    }
+    .tab-view .neo-card:hover,
+    .tab-view .neo-table-card:hover {
+      border-color: var(--green-600);
+    }
+    .tab-view .table-body-row:hover {
+      background: #F5F9E9;
+    }
+    .tab-view .toolbar-select,
+    .tab-view input[type="text"],
+    .tab-view input[type="search"] {
+      transition: border-color 0.18s ease, box-shadow 0.18s ease;
+    }
+    .tab-view .toolbar-select:focus,
+    .tab-view input[type="text"]:focus,
+    .tab-view input[type="search"]:focus {
+      border-color: var(--green-600) !important;
+      box-shadow: 0 0 0 3px rgba(61, 200, 56, 0.16);
+      outline: none;
+    }
+    .tab-view .section-header .filter-chip,
+    .tab-view .section-header .toolbar-select {
+      background-color: rgba(255, 255, 255, 0.9);
+    }
+
     .table-head-row {
       background: var(--ink-900);
       color: var(--paper);
@@ -841,23 +935,6 @@
     .presence-dot.is-online { background: #3DC838; }
     .presence-dot.is-offline { background: #D0453A; }
 
-    /* Tea / lunch break started from the app */
-    .break-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      flex-shrink: 0;
-      padding: 2px 8px;
-      border-radius: 999px;
-      border: 1px solid var(--ink-900);
-      background: #F5A524;
-      color: #10180C;
-      font-family: var(--font-mono);
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.06em;
-      white-space: nowrap;
-    }
 
     /* A user's name anywhere in the portal: opens their details page */
     .user-link {
@@ -881,6 +958,52 @@
     }
     .count-pill.is-good { color: #2E9E2B; background: rgba(61, 200, 56, 0.14); }
     .count-pill.is-bad { color: #D0453A; background: rgba(208, 69, 58, 0.10); }
+    .topic-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      margin-right: 8px;
+      border: 1px solid currentColor;
+      border-radius: 6px;
+      font-family: var(--font-body);
+      font-size: 13px;
+      line-height: 1;
+      vertical-align: -2px;
+    }
+    .nav-pill .topic-icon {
+      width: 15px;
+      height: 15px;
+      margin-right: 5px;
+      border: 0;
+      font-size: 14px;
+    }
+    .section-title-text .topic-icon { color: var(--green-600); }
+    .lead-calling-header .topic-icon { color: var(--lime-400); }
+    .kpi-topic-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 17px;
+      height: 17px;
+      margin-right: 6px;
+      border: 1px solid currentColor;
+      border-radius: 5px;
+      font-family: var(--font-body);
+      font-size: 12px;
+      letter-spacing: 0;
+      vertical-align: -3px;
+    }
+    .lead-team-status-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    }
+    @media (max-width: 860px) {
+      .lead-team-status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+    }
+    @media (max-width: 560px) {
+      .lead-team-status-grid { grid-template-columns: 1fr !important; }
+    }
   </style>
 </head>
 <body>
@@ -988,7 +1111,6 @@
       <div id="tab-dash" class="tab-view active">
         <div class="section-header">
           <div class="section-title">
-            <span class="green-square"></span>
             <span class="section-title-text">TEAM PERFORMANCE · CALL METRICS</span>
           </div>
           <div class="pill-group">
@@ -1101,6 +1223,10 @@
           <div id="dashTeamRows">
             <!-- Dynamically Injected via JS -->
           </div>
+          <div id="dashTeamPager" style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 12px 18px; border-top: 1px solid #E3DFD2; background: #F7F5EC;">
+            <span id="dashTeamPageLabel" style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em;">PAGE 1 / 1 · 0 CALLERS</span>
+            <span style="display: flex; gap: 8px;"><button type="button" class="filter-chip" id="dashTeamPrevBtn" onclick="prevDashTeamPage()">← PREV</button><button type="button" class="filter-chip" id="dashTeamNextBtn" onclick="nextDashTeamPage()">NEXT →</button></span>
+          </div>
         </div>
       </div>
 
@@ -1108,7 +1234,6 @@
       <div id="tab-calls" class="tab-view">
         <div class="section-header">
           <div class="section-title">
-            <span class="green-square"></span>
             <span class="section-title-text">CALL LOG · SIM TRACKED</span>
           </div>
           <!-- SEARCH BAR WITH EXPLICIT SEARCH BUTTON & CLEAR BUTTON -->
@@ -1167,9 +1292,8 @@
 
       <!-- ================= 3. LEAD CALLING TAB (STANDALONE CRM) ================= -->
       <div id="tab-dial" class="tab-view">
-        <div class="section-header">
+        <div class="section-header lead-calling-header">
           <div class="section-title">
-            <span class="green-square"></span>
             <span class="section-title-text">TELESALES CRM · LEAD CALLING &amp; DIAL QUEUE</span>
           </div>
           <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
@@ -1184,9 +1308,9 @@
         </div>
 
         <!-- TOP ROW: UPLOAD CARD & UPLOAD HISTORY -->
-        <div class="grid-2-col">
+        <div class="grid-2-col lead-upload-grid">
           <!-- 01 · UPLOAD LEAD SHEET -->
-          <div style="background: #10180C; color: #EFECE3; border: 1.5px solid var(--ink-900); border-radius: 16px; padding: 20px 22px; box-shadow: 4px 4px 0 var(--ink-900);">
+          <div class="lead-upload-card" style="background: #10180C; color: #EFECE3; border: 1.5px solid var(--ink-900); border-radius: 16px; padding: 20px 22px; box-shadow: 4px 4px 0 var(--ink-900);">
             <div style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em; color: #7FD63B; margin-bottom: 14px;">01 · UPLOAD LEAD SHEET (EXCEL / CSV)</div>
             <label role="button" tabindex="0" aria-label="Upload lead sheet (Excel or CSV)" style="display: block; border: 1.5px dashed #7FD63B; border-radius: 12px; padding: 26px 20px; text-align: center; cursor: pointer; transition: background 0.15s ease;" ondragover="event.preventDefault()" ondrop="handleDropFile(event)">
               <input type="file" id="leadFileInput" accept=".csv,.xlsx,.xls" style="display: none;" onchange="handleLeadFileUpload(event)">
@@ -1200,6 +1324,19 @@
               </select>
               <button type="button" onclick="downloadLeadTemplate()" style="margin-left: auto; background: #C8FF4A; color: #10180C; border-radius: 999px; padding: 8px 18px; font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.12em; cursor: pointer; border: none;">⬇ DOWNLOAD TEMPLATE</button>
             </div>
+            <div style="display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; border-top: 1px dashed #3DC838; padding-top: 14px;">
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #B9C4B0;">REASSIGN FRESH LEADS</span>
+              <label for="reassignFromSelect" class="visually-hidden">From agent</label>
+              <select id="reassignFromSelect" style="border: 1.5px solid #3DC838; background: #10180C; color: #EFECE3; border-radius: 999px; padding: 8px 14px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; cursor: pointer; max-width: 100%;">
+                <option value="">FROM…</option>
+              </select>
+              <span style="color: #7FD63B; font-weight: 700;" aria-hidden="true">→</span>
+              <label for="reassignToSelect" class="visually-hidden">To agent</label>
+              <select id="reassignToSelect" style="border: 1.5px solid #3DC838; background: #10180C; color: #EFECE3; border-radius: 999px; padding: 8px 14px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; cursor: pointer; max-width: 100%;">
+                <option value="">TO…</option>
+              </select>
+              <button type="button" onclick="doReassignLeads()" style="background: #3DC838; color: #10180C; border-radius: 999px; padding: 8px 18px; font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.12em; cursor: pointer; border: none;">MOVE</button>
+            </div>
             <!-- The chosen file waits here until ASSIGN: it is then imported for the chosen manager, who splits it among their callers -->
             <div style="display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; border-top: 1px dashed #3DC838; padding-top: 14px;">
               <span id="pendingUploadText" style="flex: 1 1 200px; min-width: 0; font-family: var(--font-mono); font-size: 11px; color: #B9C4B0; overflow-wrap: anywhere;">NO FILE SELECTED</span>
@@ -1208,7 +1345,7 @@
           </div>
 
           <!-- 02 · UPLOAD HISTORY -->
-          <div class="neo-card">
+          <div class="neo-card lead-history-card">
             <div style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em; margin-bottom: 14px; font-weight: 700;">02 · UPLOAD HISTORY</div>
             <div id="uploadHistoryList" style="display: flex; flex-direction: column; gap: 10px;">
               <!-- Populated via JS -->
@@ -1216,43 +1353,47 @@
           </div>
         </div>
 
-        <!-- MIDDLE ROW: CONVERSION FUNNEL -->
-        <div class="neo-card" style="margin-bottom: 18px;">
-          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px;">
-            <div style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em; font-weight: 700;">03 · CONVERSION FUNNEL <span id="funnelPeriodLabel" style="color: var(--text-muted);">· TODAY</span></div>
-            <div class="pill-group" id="funnelPeriodChips">
-              <button type="button" class="filter-chip active" onclick="setFunnelPeriod('today', this)">TODAY</button>
-              <button type="button" class="filter-chip" onclick="setFunnelPeriod('week', this)">WEEK</button>
-              <button type="button" class="filter-chip" onclick="setFunnelPeriod('month', this)">MONTH</button>
-              <div style="display: flex; align-items: center; gap: 6px; background: #fff; border: 1.5px solid var(--ink-900); border-radius: 999px; padding: 4px 12px;">
-                <span style="font-family: var(--font-mono); font-size: 10px; color: var(--text-muted);">DATE:</span>
-                <input type="date" id="funnelDateInput" min="2020-01-01" max="2030-12-31" title="Show one day (2020-2030)" style="border: none; font-family: var(--font-mono); font-size: 11px; background: transparent; cursor: pointer;" aria-label="Conversion funnel date" onchange="onFunnelDateSelect(this.value)" />
+        <!-- MIDDLE ROW: CONVERSION FUNNEL + CALLBACKS -->
+        <div style="display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.9fr); gap: 18px; align-items: start; margin-bottom: 12px;">
+          <div class="neo-card" style="display: flex; flex-direction: column; align-items: stretch; padding-bottom: 12px; min-height: 0;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px;">
+              <div style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em; font-weight: 700;">03 · CONVERSION FUNNEL <span id="funnelPeriodLabel" style="color: var(--text-muted);">· TODAY</span></div>
+              <div class="pill-group" id="funnelPeriodChips">
+                <button type="button" class="filter-chip active" onclick="setFunnelPeriod('today', this)">TODAY</button>
+                <button type="button" class="filter-chip" onclick="setFunnelPeriod('week', this)">WEEK</button>
+                <button type="button" class="filter-chip" onclick="setFunnelPeriod('month', this)">MONTH</button>
+                <div style="display: flex; align-items: center; gap: 6px; background: #fff; border: 1.5px solid var(--ink-900); border-radius: 999px; padding: 4px 12px;">
+                  <span style="font-family: var(--font-mono); font-size: 10px; color: var(--text-muted);">DATE:</span>
+                  <input type="date" id="funnelDateInput" min="2020-01-01" max="2030-12-31" title="Show one day (2020-2030)" style="border: none; font-family: var(--font-mono); font-size: 11px; background: transparent; cursor: pointer;" aria-label="Conversion funnel date" onchange="onFunnelDateSelect(this.value)" />
+                </div>
               </div>
             </div>
+            <div id="funnelRowsContainer" style="display: flex; flex-direction: column; gap: 5px; margin-top: 0;">
+              <!-- Populated via JS -->
+            </div>
           </div>
-          <div id="funnelRowsContainer" style="display: flex; flex-direction: column; gap: 8px;">
+
+          <div style="display: flex; flex-direction: column; gap: 12px; align-items: stretch; width: 100%; min-height: 0;">
+            <div id="callbacksDueCard" class="neo-card" style="display: none; margin: 0; width: 100%; height: 210px; max-height: 210px; overflow: hidden; box-sizing: border-box;">
+              <div style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em; margin-bottom: 10px; font-weight: 700;" id="callbacksDueTitle">CALLBACKS DUE · 0 — CLICK TO DIAL</div>
+              <div id="callbacksChipsContainer" style="display: flex; flex-direction: column; gap: 8px; overflow-y: auto; max-height: 150px; padding-right: 6px;"></div>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; margin: 0; width: 100%;">
+              <button type="button" onclick="startCallSession()" style="background: #10180C; color: #C8FF4A; border: 1.5px solid #10180C; border-radius: 999px; padding: 10px 20px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; cursor: pointer; box-shadow: 3px 3px 0 rgba(16,24,12,0.3); width: 100%; max-width: 100%;">▶ START CALL SESSION · <span id="sessionFreshCount">0</span> FRESH LEADS</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="neo-card" style="padding: 10px 12px 12px; margin: 0 0 18px; display: flex; flex-direction: column; min-height: 0; width: 100%;">
+          <div style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em; font-weight: 700; margin-bottom: 10px; color: var(--text-muted); text-transform: uppercase;">TEAM CALL STATUS</div>
+          <div id="agentQuotaCards" class="lead-team-status-grid" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0; align-content: start; max-height: 480px; overflow-y: auto; padding-right: 4px; width: 100%;">
             <!-- Populated via JS -->
           </div>
         </div>
 
-        <!-- CALLBACKS DUE BAR -->
-        <div id="callbacksDueCard" class="neo-card" style="margin-bottom: 18px; display: none;">
-          <div style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em; margin-bottom: 12px; font-weight: 700;" id="callbacksDueTitle">CALLBACKS DUE · 0 — CLICK TO DIAL</div>
-          <div id="callbacksChipsContainer" style="display: flex; flex-wrap: wrap; gap: 10px;"></div>
-        </div>
-
-        <!-- START CALL SESSION ACTION -->
-        <div style="display: flex; justify-content: flex-end; margin-bottom: 14px;">
-          <button type="button" onclick="startCallSession()" style="background: #10180C; color: #C8FF4A; border: 1.5px solid #10180C; border-radius: 999px; padding: 12px 26px; font-family: var(--font-mono); font-size: 12px; font-weight: 700; letter-spacing: 0.12em; cursor: pointer; box-shadow: 3px 3px 0 rgba(16,24,12,0.3);">▶ START CALL SESSION · <span id="sessionFreshCount">0</span> FRESH LEADS</button>
-        </div>
-
-        <!-- AGENT QUOTA CARDS -->
-        <div id="agentQuotaCards" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 18px;">
-          <!-- Populated via JS -->
-        </div>
-
         <!-- LEADS DIAL QUEUE TABLE -->
-        <div class="neo-table-card table-scroll-wrap">
+        <div class="neo-table-card table-scroll-wrap lead-queue-card">
           <div class="table-head-row" style="grid-template-columns: 1.4fr 1fr 0.9fr 1fr 1.2fr 1.4fr 0.7fr;">
             <span>LEAD</span><span>PHONE</span><span>AGENT</span><span>STATUS</span><span>DIAL ACTIVITY</span><span>FOLLOW-UP ACTION</span><span style="text-align: right;">ACTION</span>
           </div>
@@ -1262,8 +1403,8 @@
           <div style="display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 14px 22px; border-top: 1.5px solid #10180C; background: #F7F5EC;">
             <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em;" id="ulPageLabel">PAGE 1 / 1 · 0 LEADS</span>
             <div style="display: flex; gap: 8px;">
-              <button type="button" class="filter-chip" onclick="prevUlPage()">← PREV</button>
-              <button type="button" class="filter-chip" onclick="nextUlPage()">NEXT →</button>
+              <button type="button" class="filter-chip" id="ulPrevBtn" onclick="prevUlPage()">← PREV</button>
+              <button type="button" class="filter-chip" id="ulNextBtn" onclick="nextUlPage()">NEXT →</button>
             </div>
           </div>
         </div>
@@ -1273,7 +1414,6 @@
       <div id="tab-users" class="tab-view">
         <div class="section-header">
           <div class="section-title">
-            <span class="green-square"></span>
             <span class="section-title-text">TEAM USERS · SALES AGENTS &amp; MANAGERS</span>
           </div>
           <button type="button" onclick="toggleUserForm()" style="background: var(--green-500); color: var(--ink-900); border: 1.5px solid var(--ink-900); border-radius: 999px; padding: 10px 20px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; cursor: pointer; box-shadow: 3px 3px 0 var(--ink-900);">+ ADD USER</button>
@@ -1385,8 +1525,7 @@
       <div id="tab-lb" class="tab-view">
         <div class="section-header">
           <div class="section-title">
-            <span class="green-square"></span>
-            <span class="section-title-text" id="lbTitleText">LEADERBOARD · RANKED BY CONNECTED CALLS</span>
+            <span class="section-title-text"><span id="lbTitleText">LEADERBOARD · RANKED BY CONNECTED CALLS</span></span>
           </div>
           <div class="pill-group" id="lbPeriodChips">
             <button type="button" class="filter-chip active" id="lbChipToday" onclick="setLeaderboardPeriod('today', this)">TODAY</button>
@@ -1421,8 +1560,7 @@
       <div id="tab-recs" class="tab-view">
         <div class="section-header">
           <div class="section-title">
-            <span class="green-square"></span>
-            <span class="section-title-text" id="recsHeaderCount">CALL RECORDINGS · 0 FILES</span>
+            <span class="section-title-text"><span id="recsHeaderCount">CALL RECORDINGS · 0 FILES</span></span>
           </div>
           <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
             <span style="font-family: var(--font-mono); font-size: 11px; font-weight: 700;">AUDIT REVIEWER:</span>
@@ -1440,6 +1578,8 @@
           <button type="button" class="filter-chip" onclick="setRecordingFilter('OUT', this)">OUTBOUND</button>
           <button type="button" class="filter-chip" onclick="setRecordingFilter('5+', this)">OVER 5 MIN</button>
           <button type="button" class="filter-chip" onclick="setRecordingFilter('-5', this)">UNDER 5 MIN</button>
+          <button type="button" class="filter-chip" onclick="setRecordingFilter('PINNED', this)" title="Recordings pinned for the app">📌 PINNED · <span id="recPinnedCount">0</span></button>
+          <button type="button" class="filter-chip" onclick="setRecordingFilter('UNPINNED', this)">UNPINNED · <span id="recUnpinnedCount">0</span></button>
           <label for="recRangeSelect" class="visually-hidden">Date range</label>
           <select id="recRangeSelect" class="toolbar-select" onchange="onRecRangeChange(this.value)" style="margin-left: auto;">
             <option value="today" selected>TODAY</option>
@@ -1463,8 +1603,7 @@
       <div id="tab-leads" class="tab-view">
         <div class="section-header">
           <div class="section-title">
-            <span class="green-square"></span>
-            <span class="section-title-text" id="leadsPipelineCount">CRM PIPELINE · 0 LEADS</span>
+            <span class="section-title-text"><span id="leadsPipelineCount">CRM PIPELINE · 0 LEADS</span></span>
           </div>
           <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
             <label for="pipelineSearchInput" class="visually-hidden">Search pipeline</label>
@@ -1534,7 +1673,6 @@
       <div id="tab-profile" class="tab-view">
         <div class="section-header">
           <div class="section-title">
-            <span class="green-square"></span>
             <span class="section-title-text">ACCOUNT PROFILE &amp; CONFIGURATION</span>
           </div>
           <div id="profileViewAsWrap" style="display: none; align-items: center; gap: 10px; flex-wrap: wrap; max-width: 100%;">
@@ -1616,7 +1754,6 @@
       <div id="tab-user" class="tab-view">
         <div class="section-header">
           <div class="section-title">
-            <span class="green-square"></span>
             <span class="section-title-text" id="udTitle">USER DETAILS</span>
           </div>
           <div class="pill-group">
@@ -1989,6 +2126,7 @@
       callAgent: 'ALL',
       callSearch: '',
       callPage: 1,
+      dashTeamPage: 1,
       callRange: 'today',   // same default period as the dashboard, so the counts match on first view
       callsScopeKey: null,
       callsReq: 0,
@@ -2016,6 +2154,7 @@
       pipelineStage: 'ALL',
       pipelineAgent: 'ALL',
       pipelineSearch: '',
+      pipelinePages: {},
       refreshTimer: null,
       lastSync: 0,
       syncing: false,
@@ -2137,6 +2276,8 @@
         draft: prev.draft || '',
         saveState: prev.saveState || '',
         saveTimer: prev.saveTimer || null,
+        pinned: prev.pinBusy ? !!prev.pinned : !!r.pinned,
+        pinBusy: !!prev.pinBusy,
       };
     }
 
@@ -2258,18 +2399,6 @@
       if (a) return a === last10(u.phone);
       const n = String(c.agent || '').trim().toLowerCase();
       return !!n && n !== '—' && n === String(u.name || '').trim().toLowerCase();
-    }
-
-    // "☕ TEA BREAK · 12M" when the agent started a break in the app (row from the dashboard data)
-    function breakBadge(row) {
-      if (!row || !row.onBreak) return '';
-      const type = String(row.breakType || 'Break');
-      const lunch = /lunch/i.test(type);
-      const started = row.breakStartedAt ? new Date(row.breakStartedAt).getTime() : NaN;
-      const mins = Number.isFinite(started) ? Math.max(0, Math.floor((Date.now() - started) / 60000)) : null;
-      const label = `${lunch ? '🍽️' : '☕'} ${lunch ? 'LUNCH' : type.toUpperCase()}${mins === null ? '' : ` · ${mins}M`}`;
-      const since = Number.isFinite(started) ? ` since ${new Date(started).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' })}` : '';
-      return `<span class="break-pill" title="${esc(`On ${type.toLowerCase()}${since}`)}">${esc(label)}</span>`;
     }
 
     function statsFor(list, u) {
@@ -2675,7 +2804,6 @@
                 <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px;">
                   <span class="role-badge ${roleBadgeClass(u.role)}">${esc(roleLabel(u.role))}</span>
                   ${isAgent && data ? `<span style="display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: ${active ? '#2E9E2B' : '#D0453A'};"><span class="presence-dot ${active ? 'is-online' : 'is-offline'}" aria-hidden="true"></span>${active ? `${connected} CONNECTED ${esc(periodTxt)}` : `NO CONNECTED CALLS ${esc(periodTxt)}`}</span>` : ''}
-                  ${isAgent ? breakBadge(todayRow) : ''}
                 </div>
               </div>
             </div>
@@ -3323,7 +3451,18 @@
           const [y, mo, d] = today.split('-').map(Number);
           return ((new Date(Date.UTC(y, mo - 1, d)).getUTCDay() + 6) % 7) + 1;
         })();
-        teamContainer.innerHTML = ordered.map(u => {
+        const teamPageSize = 10;
+        const teamTotalPages = Math.max(1, Math.ceil(ordered.length / teamPageSize));
+        const teamPage = Math.min(Math.max(1, Store.dashTeamPage), teamTotalPages);
+        Store.dashTeamPage = teamPage;
+        const teamPageRows = ordered.slice((teamPage - 1) * teamPageSize, teamPage * teamPageSize);
+        const teamPageLabel = $('dashTeamPageLabel');
+        const teamPrevBtn = $('dashTeamPrevBtn');
+        const teamNextBtn = $('dashTeamNextBtn');
+        if (teamPageLabel) teamPageLabel.textContent = `PAGE ${teamPage} / ${teamTotalPages} · ${ordered.length} CALLERS`;
+        if (teamPrevBtn) { teamPrevBtn.disabled = teamPage === 1; teamPrevBtn.style.opacity = teamPage === 1 ? '0.4' : '1'; }
+        if (teamNextBtn) { teamNextBtn.disabled = teamPage >= teamTotalPages; teamNextBtn.style.opacity = teamPage >= teamTotalPages ? '0.4' : '1'; }
+        teamContainer.innerHTML = teamPageRows.map(u => {
           const row = statsFor(server.teamMembers, u);
           const uTotal = row ? Number(row.totalCalls) || 0 : 0;
           const uConnected = row ? Number(row.connectedCalls) || 0 : 0;
@@ -3337,7 +3476,7 @@
           const pct = Math.min(100, attain);
           return `
             <div class="table-body-row" data-open-user="${esc(u.id)}" title="Open ${esc(u.name)}'s details" style="grid-template-columns: 1.3fr 1.3fr 1.1fr 0.8fr 0.9fr 0.9fr 1.4fr; cursor: pointer;">
-              <strong style="display: flex; align-items: center; gap: 8px; min-width: 0;"><span class="presence-dot ${active ? 'is-online' : 'is-offline'}" role="img" aria-label="${esc(statusTitle)}" title="${esc(statusTitle)}"></span><span style="overflow: hidden; text-overflow: ellipsis;">${userLink(u)}</span>${breakBadge(row)}</strong>
+              <strong style="display: flex; align-items: center; gap: 8px; min-width: 0;"><span class="presence-dot ${active ? 'is-online' : 'is-offline'}" role="img" aria-label="${esc(statusTitle)}" title="${esc(statusTitle)}"></span><span style="overflow: hidden; text-overflow: ellipsis;">${userLink(u)}</span></strong>
               <span style="font-family: var(--font-mono); font-size: 11px; color: #5A6352; font-weight: 700;">${esc(mgrDisplay)}</span>
               <span style="font-family: var(--font-mono); font-size: 12px;">${esc(formatPhone(u.phone))}</span>
               ${countCell(uTotal)}
@@ -3353,6 +3492,18 @@
           `;
         }).join('');
       }
+    }
+
+    function prevDashTeamPage() {
+      if (Store.dashTeamPage > 1) {
+        Store.dashTeamPage--;
+        renderDashboard();
+      }
+    }
+
+    function nextDashTeamPage() {
+      Store.dashTeamPage++;
+      renderDashboard();
     }
 
     // ==========================================
@@ -3773,6 +3924,7 @@
         case 'add-lead-from-call': saveCallAsLead(id); break;
         case 'open-dial': openDialModal(id); break;
         case 'open-batch': openBatchModal(id); break;
+        case 'remove-batch': removeUploadBatch(id); break;
         case 'split-even': splitBatchEvenly(); break;
         case 'split-clear': Store.batchSplit = {}; Store.batchSplitMsg = ''; renderBatchModal(); break;
         case 'split-assign': assignBatchSplit(); break;
@@ -3782,6 +3934,7 @@
         case 'rec-star': setRecordingStar(id, el.dataset.k, Number(el.dataset.v)); break;
         case 'rec-approve': reviewRecording(id, 'APPROVED'); break;
         case 'rec-flag': reviewRecording(id, 'FLAGGED'); break;
+        case 'rec-pin': toggleRecordingPin(id); break;
         case 'rec-feedback': saveRecordingFeedback(id); break;
         case 'rec-page': changeRecPage(Number(el.dataset.dir)); break;
         case 'rec-load-older': loadOlderRecordings(); break;
@@ -3863,8 +4016,9 @@
     function renderLeadCalling() {
       const callers = dialableCallers();
 
-      // Uploads are assigned to a manager (who then splits the leads among their callers)
-      fillSelect($('leadAssignSelect'), '<option value="">SELECT MANAGER…</option>', assignableManagers(), u => `${u.name.toUpperCase()} (${roleLabel(u.role)})`);
+      // Uploads are assigned to a visible caller/manager target; we still resolve to the owning manager
+      // for the backend import because the server expects a manager-owned upload batch.
+      fillSelect($('leadAssignSelect'), '<option value="">SELECT CALLER / MANAGER…</option><option value="auto">AUTO · ROUND-ROBIN</option>', assignableUploadTargets(), u => `${u.name.toUpperCase()} (${roleLabel(u.role)})`);
       renderPendingUpload();
       fillSelect($('reassignFromSelect'), '<option value="">FROM…</option>', callers, u => u.name.toUpperCase());
       fillSelect($('reassignToSelect'), '<option value="">TO…</option>', callers, u => u.name.toUpperCase());
@@ -3883,23 +4037,46 @@
         const t = l.createdAt ? l.createdAt.getTime() : 0;
         if (t > b.latest) b.latest = t;
       });
-      const batchList = Object.values(batches).sort((a, b) => b.latest - a.latest).slice(0, 8);
+      if (Store.pendingUpload) {
+        const p = Store.pendingUpload;
+        const existing = batches[p.fileName];
+        batches[p.fileName] = {
+          ...(existing || {}),
+          name: p.fileName,
+          count: Math.max(existing ? existing.count : 0, p.withPhone),
+          fresh: Math.max(existing ? existing.fresh : 0, p.withPhone),
+          latest: Date.now(),
+          unassigned: existing ? Math.max(existing.unassigned, p.withPhone) : p.withPhone,
+          managerId: (existing && existing.managerId) || p.managerId || '',
+          pending: true,
+        };
+      }
+      const batchList = Object.values(batches)
+        .sort((a, b) => b.latest - a.latest)
+        .slice(0, 8);
       // Keep an open file-details window current, but never rebuild it under the user's typing
       const typingInBatch = document.activeElement && document.activeElement.tagName === 'INPUT' && $('batchModal').contains(document.activeElement);
       if (Store.batchOpen && $('batchModal').classList.contains('active') && !typingInBatch) renderBatchModal();
       // Each uploaded file opens its details (every lead in it) on click
-      $('uploadHistoryList').innerHTML = batchList.length ? batchList.map(b => `
-        <button type="button" data-action="open-batch" data-id="${esc(b.name)}" title="View the leads in ${esc(b.name)}" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid #E3DFD2; border-radius: 12px; padding: 10px 14px; background: transparent; width: 100%; text-align: left; cursor: pointer; font: inherit; color: inherit;">
+      $('uploadHistoryList').innerHTML = batchList.length ? batchList.map(b => {
+        const pendingTag = b.pending ? '· <strong style="color: #C8FF4A;">WAITING IN HISTORY</strong>' : '';
+        const managerText = b.pending ? '· SHEET SNAPSHOT SAVED' : (() => { const m = b.managerId && Store.users.find(u => u.id === b.managerId); return m ? ` · MANAGER ${esc(m.name.toUpperCase())}` : ''; })();
+        return `
+        <div style="display: flex; align-items: center; gap: 8px; border: 1px solid #E3DFD2; border-radius: 12px; padding: 10px 14px; background: transparent; width: 100%; box-sizing: border-box;">
+        <button type="button" data-action="open-batch" data-id="${esc(b.name)}" title="View the leads in ${esc(b.name)}" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 0; padding: 0; background: transparent; flex: 1; min-width: 0; text-align: left; cursor: pointer; font: inherit; color: inherit;">
           <div style="min-width: 0;">
             <div style="font-family: var(--font-mono); font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${esc(b.name)}</div>
-            <div style="font-size: 11px; color: #5A6352;">${b.latest ? esc(fmtTs(new Date(b.latest))) : '—'} · ${b.fresh} NOT DIALED YET${(() => { const m = b.managerId && Store.users.find(u => u.id === b.managerId); return m ? ` · MANAGER ${esc(m.name.toUpperCase())}` : ''; })()}${b.unassigned ? ` · <strong style="color: #C88A2E;">${b.unassigned} TO SPLIT</strong>` : ''}</div>
+            <div style="font-size: 11px; color: #5A6352;">${b.latest ? esc(fmtTs(new Date(b.latest))) : '—'} · ${b.fresh} NOT DIALED YET${managerText}${b.unassigned ? ` · <strong style="color: #C88A2E;">${b.unassigned} TO SPLIT</strong>` : ''}${pendingTag}</div>
           </div>
           <span style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
-            <span style="background: #EFECE3; border: 1px solid #10180C; border-radius: 999px; padding: 4px 12px; font-family: var(--font-mono); font-size: 10px; font-weight: 700;">${b.count} LEADS</span>
-            <span style="font-family: var(--font-mono); font-size: 10px; font-weight: 700; color: var(--green-600);">VIEW →</span>
+            <span style="background: ${b.pending ? '#10180C' : '#EFECE3'}; color: ${b.pending ? '#C8FF4A' : '#10180C'}; border: 1px solid #10180C; border-radius: 999px; padding: 4px 12px; font-family: var(--font-mono); font-size: 10px; font-weight: 700;">${b.count} LEADS</span>
+            <span style="font-family: var(--font-mono); font-size: 10px; font-weight: 700; color: ${b.pending ? '#C8FF4A' : 'var(--green-600)'};">VIEW →</span>
           </span>
         </button>
-      `).join('') : `<div class="empty-state" style="padding: 18px;">${Store.errors.leads ? `COULD NOT LOAD LEADS — ${esc(Store.errors.leads)}` : 'NO UPLOADED BATCHES YET'}</div>`;
+        <button type="button" data-action="remove-batch" data-id="${esc(b.name)}" title="Remove ${esc(b.name)} from upload history" aria-label="Remove ${esc(b.name)} from upload history" style="border: 1px solid #D0453A; border-radius: 999px; padding: 5px 9px; background: transparent; color: #D0453A; cursor: pointer; font-family: var(--font-mono); font-size: 9px; font-weight: 700; flex-shrink: 0;">REMOVE</button>
+        </div>
+      `;
+      }).join('') : `<div class="empty-state" style="padding: 18px;">${Store.errors.leads ? `COULD NOT LOAD LEADS — ${esc(Store.errors.leads)}` : 'NO UPLOADED BATCHES YET'}</div>`;
 
       // Conversion funnel from lead statuses
       const REACHED = new Set(['interested', 'followUp', 'bookDemo', 'demoReschedule', 'demoDone', 'newFollowUp', 'renewalFollowUp', 'warned', 'won', 'notInterested']);
@@ -3951,9 +4128,9 @@
           const bg = overdue ? '#D0453A' : '#C8FF4A';
           const color = overdue ? '#fff' : '#10180C';
           return `
-            <button type="button" data-action="open-dial" data-id="${esc(l.id)}" style="display: flex; align-items: center; gap: 8px; background: ${bg}; color: ${color}; border: 1.5px solid #10180C; border-radius: 999px; padding: 8px 16px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; cursor: pointer; box-shadow: 2px 2px 0 #10180C;">
-              <span>${esc(l.name)} · LAST CALLED ${esc(fmtTs(l.lastCallDate))}</span>
-              <span style="font-size: 9px; letter-spacing: 0.1em; opacity: 0.85;">${overdue ? 'OVERDUE' : 'DUE'}</span>
+            <button type="button" data-action="open-dial" data-id="${esc(l.id)}" style="display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 8px; background: ${bg}; color: ${color}; border: 1.5px solid #10180C; border-radius: 999px; padding: 8px 12px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; cursor: pointer; box-shadow: 2px 2px 0 #10180C; text-align: left;">
+              <span style="display: inline-block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${esc(l.name)} · ${esc(fmtTs(l.lastCallDate))}</span>
+              <span style="font-size: 9px; letter-spacing: 0.1em; opacity: 0.85; white-space: nowrap;">${overdue ? 'OVERDUE' : 'DUE'}</span>
             </button>
           `;
         }).join('');
@@ -3970,12 +4147,12 @@
         const called = mine.filter(l => !isFreshLead(l)).length;
         const pct = mine.length ? Math.round(called / mine.length * 100) : 0;
         return `
-          <div class="neo-card" style="padding: 14px 18px;">
-            <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 8px;">
-              <strong style="font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis;">${userLink(u)}</strong>
-              <span style="font-family: var(--font-mono); font-size: 10px; color: #5A6352; white-space: nowrap;">${called} / ${mine.length} CALLED</span>
+          <div style="border: 1.5px solid #10180C; border-radius: 10px; background: #F7F5EC; padding: 8px 10px; box-shadow: 2px 2px 0 #10180C; min-height: 56px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px;">
+              <strong style="font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${esc(u.name || '—')}</strong>
+              <span style="font-family: var(--font-mono); font-size: 9px; color: #5A6352; white-space: nowrap;">${called} / ${mine.length}</span>
             </div>
-            <div style="height: 10px; border: 1px solid #10180C; border-radius: 999px; overflow: hidden; margin-top: 10px; background: #EFECE3;">
+            <div style="height: 8px; border: 1px solid #10180C; border-radius: 999px; overflow: hidden; background: #EFECE3;">
               <div style="height: 100%; background: #3DC838; width: ${pct}%; transition: width 0.4s ease;"></div>
             </div>
           </div>
@@ -3996,13 +4173,17 @@
         );
       }
 
-      const pageSize = 8;
+      const pageSize = 10;
       const totalPages = Math.max(1, Math.ceil(list.length / pageSize));
       const page = Math.min(Math.max(1, Store.ulPage), totalPages);
       Store.ulPage = page;
       const pageRows = list.slice((page - 1) * pageSize, page * pageSize);
 
       $('ulPageLabel').textContent = `PAGE ${page} / ${totalPages} · ${list.length} LEADS`;
+      const prevBtn = $('ulPrevBtn');
+      const nextBtn = $('ulNextBtn');
+      if (prevBtn) { prevBtn.disabled = page === 1; prevBtn.style.opacity = page === 1 ? '0.4' : '1'; }
+      if (nextBtn) { nextBtn.disabled = page >= totalPages; nextBtn.style.opacity = page >= totalPages ? '0.4' : '1'; }
       const tableRowsEl = $('leadQueueRows');
 
       if (pageRows.length === 0) {
@@ -4078,6 +4259,27 @@
       return '';
     }
 
+    function firstPersonValue(row) {
+      for (const key of Object.keys(row)) {
+        const header = key.trim().toLowerCase();
+        const value = String(row[key] || '').trim();
+        if (value && !/phone|mobile|number|contact\s*no|notes?|remark|comment/i.test(header) && !last10(value)) return value;
+      }
+      return '';
+    }
+
+    function parseHeaderlessSheet(sheet) {
+      return XLSX.utils.sheet_to_json(sheet, { raw: false, defval: '', header: 1 })
+        .map(values => {
+          const cells = values.map(value => String(value || '').trim()).filter(Boolean);
+          const phone = cells.find(value => last10(value)) || '';
+          const name = cells.find(value => value !== phone && !last10(value)) || '';
+          const details = cells.filter(value => value !== name && value !== phone).join(' · ');
+          return { name, phone, notes: details };
+        })
+        .filter(row => row.name || row.phone || row.notes);
+    }
+
     function readExcelOrCsv(file) {
       if (typeof XLSX === 'undefined') { pop('⚠️ EXCEL LIBRARY NOT LOADED'); return; }
       const reader = new FileReader();
@@ -4088,11 +4290,13 @@
           const sheet = workbook.Sheets[workbook.SheetNames[0]];
           // raw:false keeps phone numbers as the text shown in the sheet (no 9.8E+09 / lost leading digits)
           const json = XLSX.utils.sheet_to_json(sheet, { raw: false, defval: '' });
-          rows = json.map(r => ({
-            name: pickColumn(r, [/^name$/i, /lead\s*name/i, /company/i, /contact\s*name/i, /^contact$/i, /name/i]),
+          const headers = Object.keys(json[0] || {});
+          const hasKnownHeader = headers.some(key => /name|phone|mobile|number|contact\s*no|notes?|remark|comment/i.test(key.trim()));
+          rows = hasKnownHeader ? json.map(r => ({
+            name: pickColumn(r, [/^name$/i, /lead\s*name/i, /company/i, /contact\s*name/i, /^contact$/i, /name/i]) || firstPersonValue(r),
             phone: pickColumn(r, [/^phone$/i, /mobile/i, /phone/i, /number/i, /contact\s*no/i]),
             notes: pickColumn(r, [/^notes?$/i, /remark/i, /comment/i]),
-          }));
+          })) : parseHeaderlessSheet(sheet);
         } catch (err) {
           pop('COULD NOT PARSE EXCEL FILE — CHECK FORMAT');
           return;
@@ -4103,16 +4307,47 @@
           pop(`NO ROWS WITH A VALID PHONE NUMBER IN ${file.name.toUpperCase()}`);
           return;
         }
-        Store.pendingUpload = { fileName: file.name, rows, withPhone };
+        const selectedId = $('leadAssignSelect') ? $('leadAssignSelect').value : '';
+        const selectedUser = selectedId ? Store.users.find(u => u.id === selectedId) : null;
+        Store.pendingUpload = {
+          fileName: file.name,
+          rows,
+          withPhone,
+          managerId: selectedUser && ['MANAGER', 'JR_MANAGER'].includes(String(selectedUser.role || '').toUpperCase()) ? selectedUser.id : '',
+          managerName: selectedUser && ['MANAGER', 'JR_MANAGER'].includes(String(selectedUser.role || '').toUpperCase()) ? selectedUser.name : '',
+          assignedCallerId: selectedUser && ['CALLER', 'JR_MANAGER'].includes(String(selectedUser.role || '').toUpperCase()) ? selectedUser.id : '',
+          assignedCallerName: selectedUser ? selectedUser.name : '',
+          targetCallerId: selectedId && selectedId !== ROUND_ROBIN ? selectedId : '',
+        };
         renderPendingUpload();
         pop(`${withPhone} LEADS READY · SELECT A MANAGER AND PRESS ASSIGN`);
       };
       reader.readAsArrayBuffer(file);
     }
 
-    // Managers an upload can be assigned to: managers / jr managers in the current view
-    function assignableManagers() {
-      return visibleUsers().filter(u => u.role === 'MANAGER' || u.role === 'JR_MANAGER');
+    // In the upload chooser, show everyone visible in the current view so callers can be selected.
+    // The server still requires a manager-owned upload, so we resolve the selected caller back to
+    // their reporting manager when importing the file.
+    function assignableUploadTargets() {
+      return visibleUsers().filter(u => u.role !== 'ADMIN');
+    }
+
+    // "AUTO · ROUND-ROBIN" in ASSIGN TO: rows are dealt to the dialable callers in turn
+    const ROUND_ROBIN = 'auto';
+    // A round-robin upload belongs to the manager in view (none when an admin uploads, as before)
+    function roundRobinOwnerId() {
+      const me = getActiveUser();
+      return ['MANAGER', 'JR_MANAGER'].includes(me.role) ? me.id : '';
+    }
+
+    function resolveUploadOwnerManagerId(selectedId) {
+      const chosen = Store.users.find(u => u.id === selectedId);
+      if (!chosen) return '';
+      if (['MANAGER', 'JR_MANAGER'].includes(chosen.role)) return chosen.id;
+      const fallbackManager = chosen.mgr ? Store.users.find(u => u.id === chosen.mgr) : null;
+      if (fallbackManager && ['MANAGER', 'JR_MANAGER'].includes(fallbackManager.role)) return fallbackManager.id;
+      const visibleManager = visibleUsers().find(u => ['MANAGER', 'JR_MANAGER'].includes(u.role));
+      return visibleManager ? visibleManager.id : '';
     }
 
     function renderPendingUpload() {
@@ -4120,10 +4355,10 @@
       const txt = $('pendingUploadText');
       const btn = $('leadAssignBtn');
       if (!txt || !btn) return;
-      const mgr = $('leadAssignSelect') ? $('leadAssignSelect').value : '';
-      txt.textContent = p ? `READY: ${p.fileName} · ${p.withPhone} LEADS${mgr ? '' : ' · SELECT A MANAGER'}` : 'NO FILE SELECTED';
+      const target = $('leadAssignSelect') ? $('leadAssignSelect').value : '';
+      txt.textContent = p ? `READY: ${p.fileName} · ${p.withPhone} LEADS${target ? '' : ' · SELECT A CALLER / MANAGER'}` : 'NO FILE SELECTED';
       txt.style.color = p ? '#C8FF4A' : '#B9C4B0';
-      const ready = !!(p && mgr && !Store.assigningUpload);
+      const ready = !!(p && target && !Store.assigningUpload);
       btn.disabled = !ready;
       btn.style.opacity = ready ? '1' : '0.4';
       btn.textContent = Store.assigningUpload ? 'ASSIGNING…' : 'ASSIGN';
@@ -4131,45 +4366,89 @@
 
     async function assignPendingUpload() {
       const p = Store.pendingUpload;
-      const managerId = $('leadAssignSelect').value;
+      const selectedId = $('leadAssignSelect').value;
       if (!p) { pop('CHOOSE AN EXCEL / CSV FILE FIRST'); return; }
-      if (!managerId) { pop('SELECT THE MANAGER TO ASSIGN THIS FILE TO'); return; }
+      if (!selectedId) { pop('SELECT A CALLER OR MANAGER TO ASSIGN THIS FILE TO'); return; }
+      const auto = selectedId === ROUND_ROBIN;
+      if (auto && !dialableCallers().length) { pop('NO CALLERS IN THIS VIEW FOR ROUND-ROBIN'); return; }
+      const managerId = auto ? roundRobinOwnerId() : resolveUploadOwnerManagerId(selectedId);
+      if (!auto && !managerId) { pop('NO VALID MANAGER IS AVAILABLE FOR THIS ASSIGNMENT'); return; }
       Store.assigningUpload = true;
       renderPendingUpload();
-      const ok = await importLeadRows(p.rows, p.fileName, managerId);
+      const result = await importLeadRows(p.rows, p.fileName, managerId, selectedId);
       Store.assigningUpload = false;
-      if (ok) Store.pendingUpload = null;
+      if (result && result.ok) {
+        // Keep the server response available while the next list request settles.
+        const imported = (result.leads || []).map(mapLead).filter(l => l.id);
+        const byId = new Map(Store.leads.map(l => [l.id, l]));
+        imported.forEach(l => byId.set(l.id, l));
+        Store.leads = Array.from(byId.values());
+        Store.pendingUpload = {
+          ...p,
+          assignedCallerId: result.assignedCallerId || p.assignedCallerId || (auto ? '' : selectedId),
+          assignedCallerName: result.assignedCallerName || p.assignedCallerName || (Store.users.find(u => u.id === selectedId) || {}).name || '',
+          managerId,
+          managerName: (Store.users.find(u => u.id === managerId) || {}).name || p.managerName || '',
+          importedRows: imported,
+          importedAt: Date.now(),
+        };
+      }
       renderPendingUpload();
+      renderActive();
     }
 
     // Imports the rows as one upload owned by the manager; the leads stay unassigned until the
     // manager splits them among their callers (Upload history → VIEW → Split leads).
-    async function importLeadRows(rows, fileName, managerId) {
+    async function importLeadRows(rows, fileName, managerId, selectedId = managerId) {
       const valid = [];
       let noPhone = 0;
+      const selection = Store.users.find(u => u.id === selectedId) || Store.users.find(u => u.id === managerId);
+      const directCallerId = selection && ['CALLER', 'JR_MANAGER'].includes(String(selection.role || '').toUpperCase()) ? selection.id : '';
+      const auto = selectedId === ROUND_ROBIN;
+      const rrCallers = auto ? dialableCallers() : [];
+
       rows.forEach(r => {
         if (!last10(r.phone)) { noPhone++; return; }
         const lead = { name: r.name || `Lead ${formatPhone(r.phone)}`, phone: r.phone };
         if (r.notes) lead.notes = r.notes;
+        if (auto) {
+          if (rrCallers.length) lead.assignedCallerId = rrCallers[valid.length % rrCallers.length].id;
+        } else if (directCallerId) {
+          lead.assignedCallerId = directCallerId;
+        }
         valid.push(lead);
       });
       if (!valid.length) {
         pop(`NO ROWS WITH A VALID PHONE NUMBER IN ${fileName.toUpperCase()}`);
         return false;
       }
-      const mgr = Store.users.find(u => u.id === managerId);
       pop(`UPLOADING ${valid.length} LEADS…`);
       try {
-        const json = await apiFetch('/admin/leads/import', { method: 'POST', body: { batchName: fileName, managerId, leads: valid } });
+        const json = await apiFetch('/admin/leads/import', {
+          method: 'POST',
+          body: {
+            batchName: fileName,
+            managerId,
+            assignedCallerId: auto ? '' : (directCallerId || selectedId || ''),
+            leads: valid,
+          }
+        });
         const created = Number(json.created) || 0;
         const skipped = (Number(json.skipped) || 0) + noPhone;
-        pop(`${created} LEADS ASSIGNED TO ${(mgr ? mgr.name : 'THE MANAGER').toUpperCase()} · ${skipped} SKIPPED (DUPLICATE / NO PHONE)`);
+        const targetName = auto ? `${rrCallers.length} CALLERS (ROUND-ROBIN)`
+          : (directCallerId ? (selection && selection.name ? selection.name : 'CALLER') : (selection ? selection.name : 'THE MANAGER'));
+        pop(`${created} LEADS ASSIGNED TO ${targetName.toUpperCase()} · ${skipped} SKIPPED (DUPLICATE / NO PHONE)`);
         await fetchLeads();
         renderActive();
-        return true;
+        return {
+          ok: true,
+          leads: json.leads || [],
+          assignedCallerId: directCallerId,
+          assignedCallerName: directCallerId && selection ? selection.name : '',
+        };
       } catch (e) {
         pop(`⚠️ IMPORT FAILED: ${e.message}`);
-        return false;
+        return { ok: false, leads: [] };
       }
     }
 
@@ -4516,9 +4795,7 @@
           const statusTitle = active ? `${uConnected} connected call${uConnected === 1 ? '' : 's'} today` : 'No connected calls today';
           const todayCell = !isAgent ? '—'
             : (statsReady ? `<span class="count-pill ${todayTotal > 0 ? 'is-good' : 'is-bad'}">${todayTotal}</span> calls` : `${todayCallsText(u)} calls`);
-          const onBreakBadge = isAgent && statsReady ? breakBadge(todayRow(u)) : '';
-          const statusCell = onBreakBadge ? onBreakBadge
-            : !isAgent || !statsReady ? '—'
+          const statusCell = !isAgent || !statsReady ? '—'
             : `<span style="display: inline-flex; align-items: center; gap: 6px; color: ${active ? '#2E9E2B' : '#D0453A'};" title="${esc(statusTitle)}"><span class="presence-dot ${active ? 'is-online' : 'is-offline'}" aria-hidden="true"></span>${active ? 'ACTIVE' : 'NO CALLS'}</span>`;
           return `
             <div class="table-body-row" style="grid-template-columns: 1fr 1.6fr 1.2fr 1fr 1fr 0.9fr 0.8fr 0.8fr 1.4fr;">
@@ -4764,7 +5041,7 @@
 
     function ensureRecMeta(id) {
       if (!Store.recMeta[id]) {
-        Store.recMeta[id] = { crit: EMPTY_CRIT(), status: 'PENDING', comments: [], draft: '', saveState: '', saveTimer: null };
+        Store.recMeta[id] = { crit: EMPTY_CRIT(), status: 'PENDING', comments: [], draft: '', saveState: '', saveTimer: null, pinned: false, pinBusy: false };
       }
       return Store.recMeta[id];
     }
@@ -4878,7 +5155,8 @@
     const MIN_RECORDING_SECONDS = 1;
     function isShortRecording(c) { return !(c.dur > MIN_RECORDING_SECONDS); }
 
-    function filteredRecordings() {
+    // Recordings in view before the chip filter: scope, date range and agent
+    function baseRecordings() {
       const { from: rangeFrom } = recRangeBounds();
       let recs = Store.recordings.filter(isCallInScope).filter(c => !isShortRecording(c))
         .filter(c => c.ts && c.ts >= rangeFrom);  // date range (also applied by the server)
@@ -4886,6 +5164,15 @@
         const agent = Store.users.find(u => u.id === Store.recAgent);
         recs = agent ? recs.filter(c => callBelongsTo(c, agent)) : [];
       }
+      return recs;
+    }
+
+    function isRecPinned(c) { return !!(Store.recMeta[c.id] && Store.recMeta[c.id].pinned); }
+
+    function filteredRecordings() {
+      let recs = baseRecordings();
+      if (Store.recFilter === 'PINNED') recs = recs.filter(isRecPinned);
+      if (Store.recFilter === 'UNPINNED') recs = recs.filter(c => !isRecPinned(c));
       if (Store.recFilter === 'IN') recs = recs.filter(c => c.dir === 'IN');
       if (Store.recFilter === 'OUT') recs = recs.filter(c => c.dir === 'OUT');
       if (Store.recFilter === '5+') recs = recs.filter(c => c.dur >= 300);
@@ -4972,7 +5259,10 @@
         <div class="neo-card" id="rec_card_${dk}" style="padding: 20px 24px;">
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
             <div style="min-width: 0;">
-              <div style="font-family: var(--font-display); font-size: 22px; overflow-wrap: anywhere;">${userLink({ id: c.callerId, phone: c.callerPhone, name: c.agent }, c.agent)} → ${esc(c.client || formatPhone(c.phone))}</div>
+              <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <div style="font-family: var(--font-display); font-size: 22px; overflow-wrap: anywhere;">${userLink({ id: c.callerId, phone: c.callerPhone, name: c.agent }, c.agent)} → ${esc(c.client || formatPhone(c.phone))}</div>
+                <span id="rec_pin_${dk}">${pinButtonHtml(c)}</span>
+              </div>
               <div style="font-family: var(--font-mono); font-size: 12px; color: #5A6352; margin-top: 6px;">${fmtTs(c.ts)} · <strong style="color: #10180C;">${fmtDur(c.dur)}</strong> · ${dirText}${c.sim ? ` · SIM ${esc(c.sim)}` : ''}</div>
             </div>
             <div class="rec-audio-wrap">
@@ -4994,7 +5284,58 @@
       `;
     }
 
+    // PINNED / UNPINNED chip counts: recordings in view (scope, range, agent) by pin state
+    function updateRecPinCounts() {
+      const base = baseRecordings();
+      const pinned = base.filter(isRecPinned).length;
+      const p = $('recPinnedCount');
+      const u = $('recUnpinnedCount');
+      if (p) p.textContent = pinned;
+      if (u) u.textContent = base.length - pinned;
+    }
+
+    function pinButtonHtml(c) {
+      const meta = ensureRecMeta(c.id);
+      const on = !!meta.pinned;
+      return `<button type="button" data-action="rec-pin" data-id="${esc(c.id)}" aria-pressed="${on}" ${meta.pinBusy ? 'disabled' : ''} title="${on ? 'Unpin: remove from the top of the app list' : 'Pin: show this recording first in the app'}" style="background: ${on ? '#C8FF4A' : '#fff'}; color: #10180C; border: 1.5px solid #10180C; border-radius: 999px; padding: 5px 14px; font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.1em; cursor: pointer; box-shadow: ${on ? '2px 2px 0 #10180C' : 'none'}; white-space: nowrap; opacity: ${meta.pinBusy ? 0.5 : 1};">📌 ${on ? 'PINNED · UNPIN' : 'PIN'}</button>`;
+    }
+
+    // Pin / unpin from the portal; the app reads the same flag and lists pinned recordings first
+    async function toggleRecordingPin(id) {
+      const meta = ensureRecMeta(id);
+      if (meta.pinBusy) return;
+      const next = !meta.pinned;
+      const patchPin = () => {
+        const c = Store.recordings.find(r => r.id === id);
+        const el = $(`rec_pin_${domKey(id)}`);
+        if (c && el) el.innerHTML = pinButtonHtml(c);
+        updateRecPinCounts();
+      };
+      meta.pinned = next;
+      meta.pinBusy = true;
+      patchPin();
+      try {
+        const json = await apiFetch(`/recordings/${encodeURIComponent(id)}/pin`, { method: 'POST', body: { pinned: next } });
+        ensureRecMeta(id).pinBusy = false;
+        if (json.recording) {
+          const idx = Store.recordings.findIndex(r => r.id === id);
+          const mapped = mapRecording(json.recording);
+          if (idx >= 0) Store.recordings[idx] = mapped;
+        }
+        pop(next ? 'RECORDING PINNED · SHOWN FIRST IN THE APP' : 'RECORDING UNPINNED');
+      } catch (e) {
+        const m = ensureRecMeta(id);
+        m.pinned = !next;
+        m.pinBusy = false;
+        pop(`⚠️ PIN NOT SAVED: ${e.message}`);
+      }
+      patchPin();
+      // In the PINNED / UNPINNED view the card leaves the list (never rebuilt under a playing card)
+      if (['PINNED', 'UNPINNED'].includes(Store.recFilter) && Store.tab === 'recs') renderRecordings(false);
+    }
+
     function renderRecordings(force) {
+      updateRecPinCounts();
       // Never rebuild the list under a playing card (unless the user asked for a new filter / page)
       const playingCard = Array.from(document.querySelectorAll('#recordingsCardsList audio[data-rec-id]')).find(a => !a.paused && !a.ended);
       if (playingCard && !force) return;
@@ -5083,6 +5424,7 @@
           Direction: c.dir === 'IN' ? 'Inbound' : (c.dir === 'OUT' ? 'Outbound' : ''),
           'Duration (s)': c.dur,
           Status: meta.status,
+          Pinned: meta.pinned ? 'Yes' : 'No',
         };
         CRIT.forEach(([k, label]) => { row[label] = Number(meta.crit[k]) || 0; });
         row['Average score'] = vals.length ? Number((vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2)) : '';
@@ -5113,6 +5455,7 @@
 
     function setPipelineStageFilter(stage, btn) {
       Store.pipelineStage = stage;
+      Store.pipelinePages = {};
       document.querySelectorAll('#pipelineStageChips .filter-chip').forEach(c => c.classList.remove('active'));
       if (btn) btn.classList.add('active');
       renderLeadsPipeline();
@@ -5120,11 +5463,18 @@
 
     function onPipelineSearch(val) {
       Store.pipelineSearch = (val || '').trim().toLowerCase();
+      Store.pipelinePages = {};
       renderLeadsPipeline();
     }
 
     function onPipelineAgentFilter(val) {
       Store.pipelineAgent = val;
+      Store.pipelinePages = {};
+      renderLeadsPipeline();
+    }
+
+    function loadMorePipelineStage(stage) {
+      Store.pipelinePages[stage] = (Store.pipelinePages[stage] || 1) + 1;
       renderLeadsPipeline();
     }
 
@@ -5148,7 +5498,29 @@
 
     // ---- Uploaded file details (Lead Calling · Upload history) ----
     function batchLeads() {
-      return Store.leads.filter(l => isLeadInScope(l) && l.batchName === Store.batchOpen);
+      const fromDb = Store.leads.filter(l => isLeadInScope(l) && l.batchName === Store.batchOpen);
+      if (Store.pendingUpload && Store.pendingUpload.fileName === Store.batchOpen) {
+        const byPhone = new Map(fromDb.map(l => [last10(l.phone), l]));
+        return (Store.pendingUpload.rows || []).filter(r => last10(r.phone)).map((r, index) => ({
+          ...(byPhone.get(last10(r.phone)) || {}),
+          id: `pending_${index}`,
+          name: r.name || (byPhone.get(last10(r.phone)) || {}).name || '',
+          phone: r.phone || '',
+          status: (byPhone.get(last10(r.phone)) || {}).status || 'new',
+          attempts: (byPhone.get(last10(r.phone)) || {}).attempts || 0,
+          agentId: (byPhone.get(last10(r.phone)) || {}).agentId || Store.pendingUpload.assignedCallerId || Store.pendingUpload.targetCallerId || '',
+          agent: (byPhone.get(last10(r.phone)) || {}).agent || Store.pendingUpload.assignedCallerName || '',
+          managerId: (byPhone.get(last10(r.phone)) || {}).managerId || Store.pendingUpload.managerId || '',
+          managerName: (byPhone.get(last10(r.phone)) || {}).managerName || Store.pendingUpload.managerName || '',
+          notes: r.notes || (byPhone.get(last10(r.phone)) || {}).notes || '',
+          batchName: Store.pendingUpload.fileName,
+          source: 'pending-upload',
+          lastCallDate: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }));
+      }
+      return fromDb;
     }
 
     function openBatchModal(name) {
@@ -5166,6 +5538,27 @@
       $('batchModal').classList.remove('active');
     }
 
+    async function removeUploadBatch(batchName) {
+      const name = String(batchName || '').trim();
+      if (!name) return;
+      if (!confirm(`Remove ${name} and all leads in this upload? This cannot be undone.`)) return;
+      const previousPending = Store.pendingUpload;
+      const previousLeads = Store.leads;
+      Store.pendingUpload = previousPending && previousPending.fileName === name ? null : previousPending;
+      Store.leads = previousLeads.filter(l => l.batchName !== name);
+      if (Store.batchOpen === name) closeBatchModal();
+      renderActive();
+      try {
+        await apiFetch(`/admin/leads/batch/${encodeURIComponent(name)}`, { method: 'DELETE' });
+        pop(`REMOVED ${name.toUpperCase()} FROM UPLOAD HISTORY`);
+      } catch (e) {
+        Store.pendingUpload = previousPending;
+        Store.leads = previousLeads;
+        renderActive();
+        pop(`⚠️ REMOVE FAILED: ${e.message}`);
+      }
+    }
+
     function onBatchSearch(val) {
       Store.batchSearch = val;
       renderBatchModal();
@@ -5174,6 +5567,11 @@
     function renderBatchModal() {
       if (!Store.batchOpen) return;
       const leads = batchLeads();
+      const unassigned = leads.filter(l => !l.agentId && isFreshLead(l)).length;
+      if (!unassigned && !Store.batchSplitMsg) {
+        Store.batchSplit = {};
+        Store.batchSplitMsg = '';
+      }
       const uploaded = leads.reduce((min, l) => (l.createdAt && (!min || l.createdAt < min) ? l.createdAt : min), null);
       $('batchModalTitle').textContent = Store.batchOpen;
       $('batchModalMeta').textContent = `UPLOADED ${uploaded ? fmtTs(uploaded) : '—'} · ${leads.length} LEAD${leads.length === 1 ? '' : 'S'}`;
@@ -5318,6 +5716,12 @@
     async function assignBatchSplit() {
       const leads = batchLeads();
       const unassigned = leads.filter(l => !l.agentId && isFreshLead(l)).length;
+      if (unassigned === 0) {
+        Store.batchSplit = {};
+        Store.batchSplitMsg = '✓ THIS FILE IS ALREADY ASSIGNED TO ITS CALLER(S)';
+        renderBatchModal();
+        return;
+      }
       const callers = batchSplitCallers(batchOwnerId(leads));
       const allocations = callers.map(u => ({ callerId: u.id, count: Math.max(0, Math.floor(Number((Store.batchSplit || {})[u.id]) || 0)) }))
         .filter(a => a.count > 0);
@@ -5436,7 +5840,12 @@
           bodyEl.innerHTML = '<div style="border: 1.5px dashed #B9B3A2; border-radius: 12px; padding: 18px 10px; text-align: center; font-family: var(--font-mono); font-size: 10px; color: #8A8574; font-weight: 700;">EMPTY STAGE</div>';
           return;
         }
-        bodyEl.innerHTML = colLeads.map(l => {
+        const pageSize = 10;
+        const totalPages = Math.max(1, Math.ceil(colLeads.length / pageSize));
+        const page = Math.min(Math.max(1, Store.pipelinePages[cid] || 1), totalPages);
+        Store.pipelinePages[cid] = page;
+        const visibleLeads = colLeads.slice(0, page * pageSize);
+        bodyEl.innerHTML = visibleLeads.map(l => {
           const selId = `leadStage_${domKey(l.id)}`;
           const rawLabel = STATUS_LABEL[l.status] || String(l.status).toUpperCase();
           return `
@@ -5454,7 +5863,9 @@
               </div>
             </div>
           `;
-        }).join('');
+        }).join('') + (visibleLeads.length < colLeads.length ? `
+          <button type="button" class="filter-chip" onclick="loadMorePipelineStage('${cid}')" style="width: 100%; margin-top: 2px;">VIEW MORE · ${colLeads.length - visibleLeads.length} MORE ↓</button>
+        ` : '');
       });
     }
 

@@ -138,6 +138,7 @@ RecordingModel recordingFromJson(Map<String, dynamic> r, String baseUrl) {
     rating: asInt(r['rating']),
     comment: asString(r['comment']),
     commentedBy: asString(r['commentedBy']),
+    pinned: r['pinned'] == true,
   );
 }
 

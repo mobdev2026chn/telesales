@@ -149,6 +149,7 @@ router.post('/api/admin/leads/import', async (req, res) => {
     if (!isManager(req)) return res.status(403).json({ success: false, message: 'You do not have permission for this action.' });
     const { leads } = req.body || {};
     const batchName = cleanText(req.body.batchName, 120) || `Import ${new Date().toISOString().slice(0, 10)}`;
+    const fallbackAssignedCallerId = cleanText(String(req.body.assignedCallerId || ''), 120);
     if (!Array.isArray(leads)) return res.status(400).json({ success: false, message: 'leads array is required' });
     if (leads.length > 5000) return res.status(400).json({ success: false, message: 'At most 5000 leads per import' });
 
@@ -181,12 +182,15 @@ router.post('/api/admin/leads/import', async (req, res) => {
     for (const raw of leads) {
       const phone = cleanText(raw && raw.phone !== undefined ? String(raw.phone) : '', 40);
       const num = last10(phone);
-      if (num.length !== 10 || seen.has(num)) { skipped++; continue; }
-      const assignee = await assigneeFor(raw.assignedCallerId ? String(raw.assignedCallerId) : '');
+      const name = cleanText(raw && raw.name, 120) || phone;
+      const rowKey = `${num}|${name.toLowerCase()}`;
+      if (num.length !== 10 || seen.has(rowKey)) { skipped++; continue; }
+      const callerRef = raw.assignedCallerId ? String(raw.assignedCallerId) : fallbackAssignedCallerId || '';
+      const assignee = await assigneeFor(callerRef);
       if (!assignee) { skipped++; continue; }
-      seen.add(num);
+      seen.add(rowKey);
       rows.push({
-        name: cleanText(raw.name, 120) || phone,
+        name,
         phone,
         phoneLast10: num,
         status: 'new',
@@ -202,17 +206,69 @@ router.post('/api/admin/leads/import', async (req, res) => {
       });
     }
 
-    // Skip numbers that already exist
-    const existing = await findLeadsByLast10(rows.map(r => r.phoneLast10));
-    const toInsert = rows.filter(r => !existing.has(r.phoneLast10));
-    skipped += rows.length - toInsert.length;
+    // Reconcile numbers that already exist so every valid sheet row remains represented by
+    // one server lead, while preserving its current call status and attempt history.
+    const existingDocs = await Lead.find({
+      batchName,
+      phoneLast10: { $in: rows.map(r => r.phoneLast10) },
+    }).sort({ createdAt: 1 }).lean();
+    const rowKeyFor = (row) => `${row.phoneLast10}|${String(row.name || '').trim().toLowerCase()}`;
+    const existing = new Map();
+    existingDocs.forEach(row => {
+      const key = rowKeyFor(row);
+      if (!existing.has(key)) existing.set(key, row);
+    });
+    const toInsert = rows.filter(r => !existing.has(rowKeyFor(r)));
 
     const created = toInsert.length
       ? await Lead.insertMany(toInsert.map(r => ({ ...r, id: `lead_${Date.now()}_${Math.random().toString(36).substring(2, 10)}` })), { ordered: false })
       : [];
-    res.status(201).json({ success: true, created: created.length, skipped, leads: created.map(l => toLeadDTO(l.toObject ? l.toObject() : l)) });
+    const reconciled = [];
+    for (const row of rows) {
+      const old = existing.get(rowKeyFor(row));
+      if (!old) continue;
+      if (!(await canTouchLead(req, old, scope))) {
+        skipped++;
+        continue;
+      }
+      const updated = await Lead.findOneAndUpdate(
+        { _id: old._id },
+        { $set: {
+          name: row.name,
+          phone: row.phone,
+          assignedCallerId: row.assignedCallerId,
+          assignedCaller: row.assignedCaller,
+          notes: row.notes,
+          batchName: row.batchName,
+          managerId: row.managerId,
+          managerName: row.managerName,
+          source: row.source,
+        } },
+        { new: true }
+      ).lean();
+      if (updated) reconciled.push(updated);
+    }
+    const imported = [...created.map(l => l.toObject ? l.toObject() : l), ...reconciled];
+    res.status(201).json({ success: true, created: imported.length, skipped, leads: imported.map(toLeadDTO) });
   } catch (err) {
     serverError(res, err, 'leads.import');
+  }
+});
+
+// ---- DELETE upload batch (managers) ------------------------------------------------------------
+router.delete('/api/admin/leads/batch/:batchName', async (req, res) => {
+  try {
+    if (!isManager(req)) return res.status(403).json({ success: false, message: 'You do not have permission for this action.' });
+    const batchName = cleanText(decodeURIComponent(req.params.batchName || ''), 120);
+    if (!batchName) return res.status(400).json({ success: false, message: 'batchName is required' });
+
+    const scope = await resolveScope(req, {});
+    const scopeQuery = scope.all ? {} : leadQueryFor(scope);
+    const query = Object.keys(scopeQuery).length ? { $and: [{ batchName }, scopeQuery] } : { batchName };
+    const result = await Lead.deleteMany(query);
+    res.json({ success: true, deleted: result.deletedCount || 0, batchName });
+  } catch (err) {
+    serverError(res, err, 'leads.deleteBatch');
   }
 });
 

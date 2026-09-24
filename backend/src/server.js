@@ -9,7 +9,16 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { authenticate, requireAuth, MANAGERS } = require('./middleware/auth');
 
-dotenv.config();
+const envCandidates = [
+  path.join(__dirname, '../uploads/.env'),
+  path.join(__dirname, '../.env'),
+];
+const envPath = envCandidates.find((candidate) => fs.existsSync(candidate));
+if (envPath) {
+  dotenv.config({ path: envPath });
+} else {
+  dotenv.config();
+}
 
 const adminRoutes = require('./routes/admin');
 const userRoutes = require('./routes/user');
@@ -72,6 +81,7 @@ const ROUTE_RULES = [
   { test: (m, p) => m === 'GET' && p === '/admin/calls', rule: requireAuth({ roles: MANAGERS }) },
   { test: (m, p) => /\/recordings\/[^/]+\/comment$/.test(p), rule: requireAuth({ roles: MANAGERS, legacy: true }) },
   { test: (m, p) => /\/recordings\/[^/]+\/review$/.test(p), rule: requireAuth({ roles: MANAGERS }) },
+  { test: (m, p) => /\/recordings\/[^/]+\/pin$/.test(p), rule: requireAuth({ roles: MANAGERS }) },
   { test: (m, p) => m === 'DELETE' && /recordings\//.test(p), rule: requireAuth({ roles: MANAGERS }) },
   { test: (m, p) => /^\/(user\/)?calls\/sync$/.test(p), rule: requireAuth({ roles: ANY, legacy: true }) },
   { test: (m, p) => /recordings/.test(p), rule: requireAuth({ roles: ANY, legacy: true }) },
@@ -79,6 +89,7 @@ const ROUTE_RULES = [
   { test: (m, p) => /^\/(admin\/)?dashboard|^\/dashboard\/stats|leaderboard/.test(p), rule: requireAuth({ roles: ANY, legacy: true }) },
   // Lead writes: create / import / distribute are for managers; PUT /admin/leads/:id checks per-lead permissions itself
   { test: (m, p) => m === 'POST' && /^\/admin\/leads(\/import|\/distribute)?\/?$/.test(p), rule: requireAuth({ roles: MANAGERS }) },
+  { test: (m, p) => m === 'DELETE' && /^\/admin\/leads\/batch\//.test(p), rule: requireAuth({ roles: MANAGERS }) },
   { test: (m, p) => m === 'PUT' && /^\/admin\/leads\/[^/]+\/?$/.test(p) && !/\/status\/?$/.test(p), rule: requireAuth({ roles: ANY }) },
   { test: (m, p) => /leads|contacts/.test(p), rule: requireAuth({ roles: ANY, legacy: true }) },
 ];

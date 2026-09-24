@@ -22,6 +22,8 @@ class RecordingModel {
   String commentedBy;
   String commentedByRole;
   DateTime? commentedAt;
+  /// Pinned by an admin / manager from the portal; pinned recordings are listed first.
+  bool pinned;
 
   RecordingModel({
     required this.id,
@@ -42,6 +44,7 @@ class RecordingModel {
     this.commentedBy = '',
     this.commentedByRole = '',
     this.commentedAt,
+    this.pinned = false,
   });
 
   factory RecordingModel.fromJson(Map<String, dynamic> json) {
@@ -67,6 +70,7 @@ class RecordingModel {
       commentedBy: json['commentedBy']?.toString() ?? '',
       commentedByRole: json['commentedByRole']?.toString() ?? '',
       commentedAt: json['commentedAt'] != null ? DateTime.tryParse(json['commentedAt'].toString()) : null,
+      pinned: json['pinned'] == true,
     );
   }
 

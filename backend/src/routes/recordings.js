@@ -60,6 +60,9 @@ function toRecordingDTO(r, extra = {}) {
     comments,
     comment: r.comment || '',
     commentedBy: r.commentedBy || '',
+    pinned: !!r.pinned,
+    pinnedAt: r.pinnedAt || null,
+    pinnedBy: r.pinnedBy || '',
     callLogId: r.callLogId || null,
     simSlot: r.simSlot || null,
     transcript: r.transcript || '',
@@ -573,6 +576,26 @@ router.post(['/api/recordings/:id/review', '/api/admin/recordings/:id/review'], 
     res.json({ success: true, recording: toRecordingDTO(rec.toObject()) });
   } catch (err) {
     serverError(res, err, 'recordings.review');
+  }
+});
+
+// POST /api/recordings/:id/pin  { pinned: true | false }  (admins / managers, inside their team)
+router.post(['/api/recordings/:id/pin', '/api/admin/recordings/:id/pin'], async (req, res) => {
+  try {
+    if (!req.user || !MANAGERS.includes(String(req.user.role || '').toLowerCase())) {
+      return res.status(403).json({ success: false, message: 'Only Admin and Manager roles may pin recordings.' });
+    }
+    const pinned = req.body && req.body.pinned;
+    if (typeof pinned !== 'boolean') return res.status(400).json({ success: false, message: 'pinned must be true or false' });
+    const rec = await loadReviewable(req, res);
+    if (!rec) return undefined;
+    rec.pinned = pinned;
+    rec.pinnedAt = pinned ? new Date() : null;
+    rec.pinnedBy = pinned ? String(req.user.name || '').slice(0, 80) : '';
+    await rec.save();
+    res.json({ success: true, recording: toRecordingDTO(rec.toObject()) });
+  } catch (err) {
+    serverError(res, err, 'recordings.pin');
   }
 });
 

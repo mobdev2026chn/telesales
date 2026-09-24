@@ -53,6 +53,10 @@ const RecordingSchema = new mongoose.Schema({
   commentedBy: { type: String, default: '' },
   commentedByRole: { type: String, default: '' },
   commentedAt: { type: Date, default: null },
+  // Pinned by an admin / manager from the portal; the app lists pinned recordings first
+  pinned: { type: Boolean, default: false },
+  pinnedAt: { type: Date, default: null },
+  pinnedBy: { type: String, default: '' },
 }, { timestamps: true });
 
 RecordingSchema.index({ callerId: 1, createdAt: -1 });

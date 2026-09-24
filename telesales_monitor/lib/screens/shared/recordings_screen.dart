@@ -16,7 +16,7 @@ class RecordingsScreen extends StatefulWidget {
 }
 
 class _RecordingsScreenState extends State<RecordingsScreen> {
-  int _selectedFilterIndex = 0; // 0 = ALL, 1 = OVER 5M, 2 = UNDER 5M
+  int _selectedFilterIndex = 0; // 0 = ALL, 1 = OVER 5M, 2 = UNDER 5M, 3 = PINNED
   String _selectedStaff = 'ALL STAFF';
   final Map<String, int> _ratings = {};
   final Map<String, TextEditingController> _commentCtrls = {};
@@ -184,7 +184,10 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
     final isCaller = tele.currentRole == UserRole.caller;
     final isManagerOrAdmin = tele.currentRole == UserRole.manager;
     final totalCount = tele.recordings.length;
+    final pinnedCount = tele.recordings.where((r) => r.pinned).length;
 
+    // Pinned recordings (pinned from the admin portal) are listed first
+    final List<Map<String, dynamic>> pinnedRecordings = [];
     final List<Map<String, dynamic>> dynamicRecordings = [];
 
     for (var r in tele.recordings) {
@@ -214,9 +217,12 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
       if (_selectedFilterIndex == 2 && r.duration.inSeconds >= 300) {
         continue;
       }
+      if (_selectedFilterIndex == 3 && !r.pinned) {
+        continue;
+      }
 
       final dateStr = '${r.date.day}/${r.date.month}';
-      dynamicRecordings.add({
+      (r.pinned ? pinnedRecordings : dynamicRecordings).add({
         'id': r.id,
         'callerName': r.agentName,
         'contactName': r.clientName,
@@ -225,8 +231,10 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
         'quote': r.note.isNotEmpty ? '"${r.note}"' : '',
         'isPlaying': r.isPlaying,
         'progress': r.progress,
+        'pinned': r.pinned,
       });
     }
+    dynamicRecordings.insertAll(0, pinnedRecordings);
 
     return RefreshIndicator(
       color: AppTheme.greenNeon,
@@ -289,6 +297,7 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                         _buildFilterTab('ALL · $totalCount', 0),
                         _buildFilterTab('OVER 5M', 1),
                         _buildFilterTab('UNDER 5M', 2),
+                        _buildFilterTab('PINNED · $pinnedCount', 3),
                       ],
                     ),
                   ),
@@ -331,6 +340,7 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                   final String quote = rMap['quote'] as String;
                   final bool isPlaying = rMap['isPlaying'] as bool? ?? false;
                   final double progress = rMap['progress'] as double? ?? 0.0;
+                  final bool pinned = rMap['pinned'] as bool? ?? false;
 
                   RecordingModel? origRec;
                   for (final r in tele.recordings) {
@@ -354,6 +364,26 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // Pinned by an admin / manager from the portal
+                        if (pinned) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppTheme.limeYellow,
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(color: AppTheme.ink900, width: 1),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.push_pin_rounded, size: 12, color: AppTheme.ink900),
+                                const SizedBox(width: 4),
+                                Text('PINNED', style: AppTheme.label(size: 8.5, color: AppTheme.ink900)),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                        ],
                         // Header: Caller -> Contact
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
