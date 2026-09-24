@@ -2117,11 +2117,9 @@ class TeleProvider extends ChangeNotifier {
   }
 
   /// A lead belongs to the signed-in caller when its assignedCallerId is the user's id;
-  /// leads without an id fall back to an exact (case-insensitive) name match.
+  /// older records and records with a migrated id fall back to an exact name match.
   bool isLeadAssignedToMe(LeadModel l) {
-    if (l.assignedCallerId.isNotEmpty) {
-      return _currentUserId.isNotEmpty && l.assignedCallerId == _currentUserId;
-    }
+    if (l.assignedCallerId.isNotEmpty && _currentUserId.isNotEmpty && l.assignedCallerId == _currentUserId) return true;
     final name = _callerName.trim().toLowerCase();
     return name.isNotEmpty && l.assignedTo.trim().toLowerCase() == name;
   }
