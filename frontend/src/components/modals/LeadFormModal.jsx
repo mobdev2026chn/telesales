@@ -1,6 +1,7 @@
 // ADD LEAD MODAL (pipeline "+ Add CRM lead" and call-log "+ Lead")
 import { useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { Alert, Button, Input, Select } from '../../assets/antd';
 import { closeLeadForm } from '../../redux/slices/uiSlice';
 import { selectScope } from '../../redux/selectors';
 import { last10 } from '../../utils/format';
@@ -45,31 +46,30 @@ export default function LeadFormModal() {
       <form className="modal-card" style={{ width: 460 }} onSubmit={save} noValidate>
         <div className="modal-header" style={{ marginBottom: 18 }}>
           <div><div className="modal-eyebrow">CRM</div><div id="leadFormTitle" className="modal-title">Add lead</div></div>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={close} aria-label="Close"><Icon name="x" size="sm" /></button>
+          <Button type="text" shape="circle" icon={<Icon name="x" size="sm" />} onClick={close} aria-label="Close" />
         </div>
         <div className="form-group">
           <label className="form-label" htmlFor="leadFormName">Lead / company name *</label>
-          <input type="text" id="leadFormName" ref={nameRef} className="form-control" autoComplete="off" value={name} onChange={(e) => setName(e.target.value)} />
+          <Input id="leadFormName" ref={nameRef} prefix={<Icon name="user" size="sm" />} autoComplete="off" value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <div className="form-group">
           <label className="form-label" htmlFor="leadFormPhone">Phone *</label>
-          <input type="tel" id="leadFormPhone" className="form-control" placeholder="10-digit mobile" autoComplete="off" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          <Input type="tel" id="leadFormPhone" prefix={<Icon name="phone" size="sm" />} placeholder="10-digit mobile" autoComplete="off" value={phone} onChange={(e) => setPhone(e.target.value)} />
         </div>
         <div className="form-group">
           <label className="form-label" htmlFor="leadFormAgent">Assign to agent</label>
-          <select id="leadFormAgent" className="form-control" value={agentId} onChange={(e) => setAgentId(e.target.value)}>
-            <option value="">UNASSIGNED</option>
-            {dialable.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-          </select>
+          <Select id="leadFormAgent" className="form-ant-select" value={agentId} onChange={setAgentId}
+            showSearch optionFilterProp="label"
+            options={[{ value: '', label: 'UNASSIGNED' }, ...dialable.map(u => ({ value: u.id, label: u.name }))]} />
         </div>
         <div className="form-group">
           <label className="form-label" htmlFor="leadFormNotes">Notes</label>
-          <input type="text" id="leadFormNotes" className="form-control" autoComplete="off" value={notes} onChange={(e) => setNotes(e.target.value)} />
+          <Input id="leadFormNotes" autoComplete="off" value={notes} onChange={(e) => setNotes(e.target.value)} />
         </div>
-        <div className="form-error" role="alert" style={{ margin: '0 0 12px', display: error ? 'block' : 'none' }}>{error}</div>
+        {error && <Alert className="form-alert" style={{ margin: '0 0 12px' }} type="error" showIcon role="alert" title={error} />}
         <div className="modal-footer">
-          <button type="button" className="btn btn-secondary" onClick={close}>Cancel</button>
-          <button type="submit" className="btn btn-primary" disabled={busy}>Save lead</button>
+          <Button onClick={close}>Cancel</Button>
+          <Button type="primary" htmlType="submit" loading={busy} icon={<Icon name="save" size="sm" />}>Save lead</Button>
         </div>
       </form>
     </div>

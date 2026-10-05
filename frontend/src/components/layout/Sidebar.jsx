@@ -1,6 +1,7 @@
 // LEFT SIDEBAR: navigation, signed-in profile card, log out
 import { useDispatch, useSelector } from 'react-redux';
 import { NavLink, useNavigate } from 'react-router-dom';
+import { Button, NAV_ICONS } from '../../assets/antd';
 import { NAV_ITEMS, PATHS } from '../../data/navigation';
 import { setSidebarOpen } from '../../redux/slices/uiSlice';
 import { selectScope } from '../../redux/selectors';
@@ -30,21 +31,21 @@ export default function Sidebar() {
       <div className="sidebar-header">
         <Logo className="sidebar-logo" />
         <div className="sidebar-brand">TELESALES<br />MONITOR</div>
-        <button
-          type="button"
+        <Button
+          type="text"
           onClick={() => dispatch(setSidebarOpen(false))}
           aria-label="Close menu"
           className="sidebar-close-btn"
-          style={{ display: open ? 'block' : 'none' }}
-        >
-          <Icon name="x" />
-        </button>
+          style={{ display: open ? 'inline-flex' : 'none' }}
+          icon={<Icon name="x" />}
+        />
       </div>
 
       <div className="sidebar-section-label">Workspace</div>
       <nav className="sidebar-nav-list" aria-label="Main">
         {NAV_ITEMS.filter(allowed).map(item => (
           <NavLink key={item.tab} to={item.path} className={({ isActive }) => `nav-pill${isActive ? ' active' : ''}`}>
+            <Icon name={NAV_ICONS[item.tab]} />
             {item.label}
           </NavLink>
         ))}
@@ -58,9 +59,7 @@ export default function Sidebar() {
             <div className="sidebar-user-role">{roleLabel(me.role)} · VIEW PROFILE</div>
           </div>
         </div>
-        <button type="button" className="sidebar-logout-btn" onClick={() => logout()}>
-          <Icon name="logout" size="sm" />Log out
-        </button>
+        <Button className="sidebar-logout-btn" icon={<Icon name="logout" size="sm" />} onClick={() => logout()}>Log out</Button>
       </div>
     </aside>
   );

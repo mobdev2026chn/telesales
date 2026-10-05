@@ -1,9 +1,8 @@
-// One icon from the sprite (IconSprite.jsx): <Icon name="phone" size="sm" />
+// One Ant Design icon by name (assets/antd.js ICONS): <Icon name="phone" size="sm" />
+import { ICON_ROTATE, ICONS } from '../../assets/antd';
+
 export default function Icon({ name, size, className = '' }) {
-  const cls = ['ico', size ? `ico-${size}` : '', className].filter(Boolean).join(' ');
-  return (
-    <svg className={cls} aria-hidden="true">
-      <use href={`#i-${name}`} />
-    </svg>
-  );
+  const AntIcon = ICONS[name] || ICONS.alert;
+  const cls = ['ant-ico', size ? `ant-ico-${size}` : '', className].filter(Boolean).join(' ');
+  return <AntIcon className={cls} rotate={ICON_ROTATE[name]} aria-hidden="true" />;
 }

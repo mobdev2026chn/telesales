@@ -2,6 +2,7 @@
 // split of its unassigned leads among their callers
 import { useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { Button, Input } from '../../assets/antd';
 import { HEAD_ROLES, STAGE_CLASS, STATUS_TO_STAGE } from '../../data/constants';
 import { closeBatch } from '../../redux/slices/uiSlice';
 import { selectScope, selectScopedLeads } from '../../redux/selectors';
@@ -14,6 +15,7 @@ import { Badge, LeadBadge } from '../common/Badge';
 import DataTable, { Heads, TableRow } from '../common/DataTable';
 import EmptyState from '../common/EmptyState';
 import Icon from '../common/Icon';
+import SearchField from '../common/SearchField';
 import UserLink from '../common/UserLink';
 import { distributeBatch } from '../../utils/actions/leadActions';
 
@@ -157,8 +159,8 @@ export default function BatchModal() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={exportLeads} title="Export this file's leads to Excel"><Icon name="download" size="sm" />Export</button>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={close} aria-label="Close file details"><Icon name="x" size="sm" />Close</button>
+            <Button size="small" icon={<Icon name="download" size="sm" />} onClick={exportLeads} title="Export this file's leads to Excel">Export</Button>
+            <Button type="text" size="small" icon={<Icon name="x" size="sm" />} onClick={close} aria-label="Close file details">Close</Button>
           </div>
         </div>
 
@@ -193,7 +195,7 @@ export default function BatchModal() {
                           <strong className="truncate" style={{ display: 'block' }}>{u.name}</strong>
                           <span className="muted" style={{ fontSize: 'var(--ds-fs-xs)' }}>Has {has.length} · {has.filter(l => !isFreshLead(l)).length} called</span>
                         </span>
-                        <input type="number" className="input" min="0" max={unassigned} step="1" inputMode="numeric"
+                        <Input type="number" className="split-input" min="0" max={unassigned} step="1" inputMode="numeric"
                           value={splitOf(u.id) || ''} placeholder="0" aria-label={`Leads to give ${u.name}`}
                           onChange={(e) => setSplit(prev => ({ ...prev, [u.id]: Math.max(0, Math.floor(Number(e.target.value) || 0)) }))} />
                       </label>
@@ -204,20 +206,17 @@ export default function BatchModal() {
                   <span className="fw-600 tabular" style={{ fontSize: 'var(--ds-fs-sm)', color: over ? 'var(--ds-danger)' : 'var(--ds-text)' }}>
                     ALLOCATED {allocated} / {unassigned}{over ? ' · MORE THAN AVAILABLE' : ''}
                   </span>
-                  <button type="button" className="btn btn-secondary btn-sm" style={{ marginLeft: 'auto' }} onClick={splitEvenly}>Split evenly</button>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setSplit({}); setSplitMsg(''); }}>Clear</button>
-                  <button type="button" className="btn btn-primary btn-sm" disabled={splitting} onClick={assignSplit}>{splitting ? 'Assigning…' : 'Assign'}</button>
+                  <Button size="small" style={{ marginLeft: 'auto' }} icon={<Icon name="users" size="sm" />} onClick={splitEvenly}>Split evenly</Button>
+                  <Button type="text" size="small" icon={<Icon name="x" size="sm" />} onClick={() => { setSplit({}); setSplitMsg(''); }}>Clear</Button>
+                  <Button type="primary" size="small" loading={splitting} icon={<Icon name="check-plain" size="sm" />} onClick={assignSplit}>{splitting ? 'Assigning…' : 'Assign'}</Button>
                 </div>
               </>
             ))}
           </div>
         )}
 
-        <div className="search-field" style={{ maxWidth: 'none', marginBottom: 12 }}>
-          <Icon name="search" size="sm" />
-          <label htmlFor="batchSearchInput" className="visually-hidden">Search this file&apos;s leads</label>
-          <input type="text" id="batchSearchInput" placeholder="Search lead, phone or agent…" value={search} onChange={(e) => setSearch(e.target.value)} />
-        </div>
+        <SearchField id="batchSearchInput" label="Search this file's leads" placeholder="Search lead, phone or agent…"
+          style={{ maxWidth: 'none', marginBottom: 12 }} value={search} onChange={setSearch} />
         <div className="neo-table-card">
           <DataTable cols={COLS} head={<Heads labels={['Lead', 'Phone', 'Agent', 'Status', 'Dial activity', 'Notes']} />}>
             {list.length ? list.map(l => {

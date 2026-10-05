@@ -3,6 +3,8 @@
 // ==========================================
 import { useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { Button, Col, Row, Select } from '../assets/antd';
+import ActionIcon from '../components/common/ActionIcon';
 import { Badge, LeadBadge } from '../components/common/Badge';
 import DataTable, { TableRow } from '../components/common/DataTable';
 import DateField from '../components/common/DateField';
@@ -12,6 +14,7 @@ import Icon from '../components/common/Icon';
 import PageHeader from '../components/common/PageHeader';
 import Pager from '../components/common/Pager';
 import Progress from '../components/common/Progress';
+import SearchField from '../components/common/SearchField';
 import UserLink from '../components/common/UserLink';
 import {
   LEAD_INTEREST_STATUSES, LEAD_QUEUE_FILTERS, LEAD_QUEUE_PAGE_SIZE, LEAD_REACHED_STATUSES, PERIOD_LABEL, PERIOD_OPTIONS, ROUND_ROBIN,
@@ -155,7 +158,7 @@ export default function LeadCallingPage() {
           <span className="cell-muted">{l.notes || '—'}</span>
           <span className="cell-right">
             {hasPhone
-              ? <button type="button" className="btn btn-primary btn-sm" onClick={() => dispatch(openDial(l.id))}><Icon name="phone" size="sm" />Dial</button>
+              ? <ActionIcon icon="phone" tone="call" label={`Dial ${l.name}`} onClick={() => dispatch(openDial(l.id))} />
               : <span className="muted">—</span>}
           </span>
         </TableRow>
@@ -166,122 +169,124 @@ export default function LeadCallingPage() {
   return (
     <>
       <PageHeader title="Lead Calling" subtitle="Upload lead sheets, work the dial queue and follow up on callbacks">
-        <div className="search-field">
-          <Icon name="search" size="sm" />
-          <label htmlFor="ulSearchInput" className="visually-hidden">Search leads</label>
-          <input type="text" id="ulSearchInput" placeholder="Search lead, phone, agent…" value={ulSearch} onChange={(e) => dispatch(setUlSearch(e.target.value))} />
-        </div>
+        <SearchField id="ulSearchInput" label="Search leads" placeholder="Search lead, phone, agent…"
+          value={ulSearch} onChange={(v) => dispatch(setUlSearch(v))} />
         <FilterChips id="ulFilterChips" options={queueFilters} value={ulFilter} onChange={(v) => dispatch(setUlFilter(v))} />
       </PageHeader>
 
-      <div className="grid-2-col lead-upload-grid">
-        <div className="card lead-upload-card">
-          <div className="card-header">
-            <div className="card-title">Upload lead sheet</div>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={downloadLeadTemplate}><Icon name="download" size="sm" />Template</button>
+      <Row gutter={[16, 16]} className="equal-row lead-upload-grid">
+        <Col xs={24} lg={9}>
+          <div className="card lead-upload-card">
+            <div className="card-header">
+              <div className="card-title">Upload lead sheet</div>
+              <Button type="text" size="small" icon={<Icon name="excel" size="sm" />} onClick={downloadLeadTemplate}>Template</Button>
+            </div>
+            <label className="dropzone" role="button" tabIndex={0} aria-label="Upload lead sheet (Excel or CSV)"
+              onKeyDown={onKeyActivate(() => fileRef.current && fileRef.current.click())}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => { e.preventDefault(); onFile(e.dataTransfer.files[0]); }}>
+              <input type="file" ref={fileRef} accept=".csv,.xlsx,.xls" style={{ display: 'none' }}
+                onChange={(e) => { const f = e.target.files[0]; e.target.value = ''; onFile(f); }} />
+              <div className="dropzone-icon"><Icon name="upload" size="lg" /></div>
+              <div className="dropzone-title">Drop an Excel file or click to browse</div>
+              <div className="dropzone-help">Columns: Name + Phone (optional Notes) · .xlsx / .csv · rows without a valid phone are skipped</div>
+            </label>
+            <div className="upload-row">
+              <label htmlFor="leadAssignSelect" className="field-label" style={{ margin: 0 }}>Assign to</label>
+              <Select id="leadAssignSelect" className="upload-ant-select" value={assignValue} onChange={setAssignTo}
+                showSearch optionFilterProp="label" popupMatchSelectWidth={false}
+                options={[
+                  { value: '', label: 'SELECT CALLER / MANAGER…' },
+                  { value: ROUND_ROBIN, label: 'AUTO · ROUND-ROBIN' },
+                  ...assignTargets.map(u => ({ value: u.id, label: `${u.name.toUpperCase()} (${roleLabel(u.role)})` })),
+                ]} />
+            </div>
+            <div className="upload-row" style={{ borderTop: '1px solid var(--ds-border)', paddingTop: 14, flexWrap: 'wrap' }}>
+              <span className="field-label" style={{ margin: 0 }}>Reassign fresh leads</span>
+              <label htmlFor="reassignFromSelect" className="visually-hidden">From agent</label>
+              <Select id="reassignFromSelect" className="upload-ant-select is-half" value={fromValue} onChange={setFromId}
+                showSearch optionFilterProp="label" popupMatchSelectWidth={false}
+                options={[{ value: '', label: 'FROM…' }, ...dialable.map(u => ({ value: u.id, label: u.name.toUpperCase() }))]} />
+              <Icon name="right" size="sm" className="muted" />
+              <label htmlFor="reassignToSelect" className="visually-hidden">To agent</label>
+              <Select id="reassignToSelect" className="upload-ant-select is-half" value={toValue} onChange={setToId}
+                showSearch optionFilterProp="label" popupMatchSelectWidth={false}
+                options={[{ value: '', label: 'TO…' }, ...dialable.map(u => ({ value: u.id, label: u.name.toUpperCase() }))]} />
+              <Button icon={<Icon name="swap" size="sm" />} onClick={() => reassignLeads(fromValue, toValue)}>Move</Button>
+            </div>
+            {/* The chosen file waits here until ASSIGN */}
+            <div className="upload-row" style={{ borderTop: '1px solid var(--ds-border)', paddingTop: 14 }}>
+              <span className={`pending-upload${pending ? ' is-ready' : ''}`}>
+                {pending ? `READY: ${pending.fileName} · ${pending.withPhone} LEADS${assignValue ? '' : ' · SELECT A CALLER / MANAGER'}` : 'NO FILE SELECTED'}
+              </span>
+              <Button type="primary" icon={<Icon name="check-plain" size="sm" />} loading={assigningUpload}
+                disabled={!(pending && assignValue && !assigningUpload)} onClick={() => assignPendingUpload(assignValue)}>
+                {assigningUpload ? 'Assigning…' : 'Assign'}
+              </Button>
+            </div>
           </div>
-          <label className="dropzone" role="button" tabIndex={0} aria-label="Upload lead sheet (Excel or CSV)"
-            onKeyDown={onKeyActivate(() => fileRef.current && fileRef.current.click())}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => { e.preventDefault(); onFile(e.dataTransfer.files[0]); }}>
-            <input type="file" ref={fileRef} accept=".csv,.xlsx,.xls" style={{ display: 'none' }}
-              onChange={(e) => { const f = e.target.files[0]; e.target.value = ''; onFile(f); }} />
-            <div className="dropzone-icon"><Icon name="upload" size="lg" /></div>
-            <div className="dropzone-title">Drop an Excel file or click to browse</div>
-            <div className="dropzone-help">Columns: Name + Phone (optional Notes) · .xlsx / .csv · rows without a valid phone are skipped</div>
-          </label>
-          <div className="upload-row">
-            <label htmlFor="leadAssignSelect" className="field-label" style={{ margin: 0 }}>Assign to</label>
-            <select id="leadAssignSelect" className="select" value={assignValue} onChange={(e) => setAssignTo(e.target.value)}>
-              <option value="">SELECT CALLER / MANAGER…</option>
-              <option value={ROUND_ROBIN}>AUTO · ROUND-ROBIN</option>
-              {assignTargets.map(u => <option key={u.id} value={u.id}>{u.name.toUpperCase()} ({roleLabel(u.role)})</option>)}
-            </select>
-          </div>
-          <div className="upload-row" style={{ borderTop: '1px solid var(--ds-border)', paddingTop: 14, flexWrap: 'wrap' }}>
-            <span className="field-label" style={{ margin: 0 }}>Reassign fresh leads</span>
-            <label htmlFor="reassignFromSelect" className="visually-hidden">From agent</label>
-            <select id="reassignFromSelect" className="select" style={{ flex: '1 1 140px', minWidth: 0 }} value={fromValue} onChange={(e) => setFromId(e.target.value)}>
-              <option value="">FROM…</option>
-              {dialable.map(u => <option key={u.id} value={u.id}>{u.name.toUpperCase()}</option>)}
-            </select>
-            <span className="muted" aria-hidden="true">→</span>
-            <label htmlFor="reassignToSelect" className="visually-hidden">To agent</label>
-            <select id="reassignToSelect" className="select" style={{ flex: '1 1 140px', minWidth: 0 }} value={toValue} onChange={(e) => setToId(e.target.value)}>
-              <option value="">TO…</option>
-              {dialable.map(u => <option key={u.id} value={u.id}>{u.name.toUpperCase()}</option>)}
-            </select>
-            <button type="button" className="btn btn-secondary" onClick={() => reassignLeads(fromValue, toValue)}>Move</button>
-          </div>
-          {/* The chosen file waits here until ASSIGN */}
-          <div className="upload-row" style={{ borderTop: '1px solid var(--ds-border)', paddingTop: 14 }}>
-            <span className={`pending-upload${pending ? ' is-ready' : ''}`}>
-              {pending ? `READY: ${pending.fileName} · ${pending.withPhone} LEADS${assignValue ? '' : ' · SELECT A CALLER / MANAGER'}` : 'NO FILE SELECTED'}
-            </span>
-            <button type="button" className="btn btn-primary" disabled={!(pending && assignValue && !assigningUpload)}
-              onClick={() => assignPendingUpload(assignValue)}>
-              {assigningUpload ? 'Assigning…' : 'Assign'}
-            </button>
-          </div>
-        </div>
+        </Col>
 
-        <div className="card lead-history-card">
-          <div className="card-header"><div className="card-title">Upload history</div><span className="card-subtitle">Click a file to see its leads</span></div>
-          <div className="upload-history-list">
-            {batchList.length ? batchList.map(b => {
-              const mgr = !b.pending && b.managerId ? users.find(u => u.id === b.managerId) : null;
-              const managerText = b.pending ? '· SHEET SNAPSHOT SAVED' : (mgr ? ` · MANAGER ${mgr.name.toUpperCase()}` : '');
-              return (
-                <div className="upload-item" key={b.name}>
-                  <button type="button" className="upload-item-main" onClick={() => dispatch(openBatch(b.name))} title={`View the leads in ${b.name}`}>
-                    <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span className="kpi-icon" style={{ width: 32, height: 32 }}><Icon name="file" /></span>
-                      <div style={{ minWidth: 0 }}>
-                        <div className="upload-item-name truncate">{b.name}</div>
-                        <div className="upload-item-meta">
-                          {b.latest ? fmtTs(new Date(b.latest)) : '—'} · {b.fresh} NOT DIALED YET{managerText}
-                          {b.unassigned > 0 && <> · <strong className="text-warning">{b.unassigned} TO SPLIT</strong></>}
-                          {b.pending && <> · <strong className="text-success">WAITING IN HISTORY</strong></>}
+        <Col xs={24} lg={15}>
+          <div className="card lead-history-card">
+            <div className="card-header"><div className="card-title">Upload history</div><span className="card-subtitle">Click a file to see its leads</span></div>
+            <div className="upload-history-list">
+              {batchList.length ? batchList.map(b => {
+                const mgr = !b.pending && b.managerId ? users.find(u => u.id === b.managerId) : null;
+                const managerText = b.pending ? '· SHEET SNAPSHOT SAVED' : (mgr ? ` · MANAGER ${mgr.name.toUpperCase()}` : '');
+                return (
+                  <div className="upload-item" key={b.name}>
+                    <button type="button" className="upload-item-main" onClick={() => dispatch(openBatch(b.name))} title={`View the leads in ${b.name}`}>
+                      <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span className="kpi-icon" style={{ width: 32, height: 32 }}><Icon name="file" /></span>
+                        <div style={{ minWidth: 0 }}>
+                          <div className="upload-item-name truncate">{b.name}</div>
+                          <div className="upload-item-meta">
+                            {b.latest ? fmtTs(new Date(b.latest)) : '—'} · {b.fresh} NOT DIALED YET{managerText}
+                            {b.unassigned > 0 && <> · <strong className="text-warning">{b.unassigned} TO SPLIT</strong></>}
+                            {b.pending && <> · <strong className="text-success">WAITING IN HISTORY</strong></>}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                      <Badge tone={b.pending ? 'dark' : 'neutral'}>{b.count} LEADS</Badge>
-                      <span className="text-success fw-600" style={{ fontSize: 'var(--ds-fs-sm)' }}>View ›</span>
-                    </span>
-                  </button>
-                  <button type="button" className="btn btn-danger btn-xs" onClick={() => onRemoveBatch(b.name)}
-                    title={`Remove ${b.name} from upload history`} aria-label={`Remove ${b.name} from upload history`}>Remove</button>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                        <Badge tone={b.pending ? 'dark' : 'neutral'}>{b.count} LEADS</Badge>
+                        <span className="text-success fw-600 view-link" style={{ fontSize: 'var(--ds-fs-sm)' }}>View <Icon name="right" size="sm" /></span>
+                      </span>
+                    </button>
+                    <ActionIcon icon="delete" tone="delete" label={`Remove ${b.name} from upload history`} onClick={() => onRemoveBatch(b.name)} />
+                  </div>
+                );
+              }) : <EmptyState error={!!leadsState.error}>{leadsState.error ? `COULD NOT LOAD LEADS — ${leadsState.error}` : 'NO UPLOADED BATCHES YET'}</EmptyState>}
+            </div>
+          </div>
+        </Col>
+      </Row>
+
+      <Row gutter={[16, 16]} className="equal-row lead-calling-ant-row">
+        <Col xs={24} lg={12}>
+          <div className="card">
+            <div className="card-header">
+              <div className="card-title">Conversion funnel <span className="card-subtitle">{funnelLabel}</span></div>
+              <FilterChips id="funnelPeriodChips" options={PERIOD_OPTIONS} value={funnelDate ? null : funnelPeriod} onChange={(p) => dispatch(setFunnelPeriod(p))}>
+                <DateField id="funnelDateInput" value={funnelDate} onChange={onFunnelDate} label="Conversion funnel date" title="Show one day (2020-2030)" />
+              </FilterChips>
+            </div>
+            <div className="funnel">
+              {fCounts.map(([label, n, color]) => (
+                <div className="funnel-row" key={label}>
+                  <span className="funnel-label">{label}</span>
+                  <div className="funnel-track"><div className="funnel-fill" style={{ width: `${n ? Math.max(4, Math.round(n / maxF * 100)) : 0}%`, background: color }} /></div>
+                  <span className="funnel-value">{n}</span>
                 </div>
-              );
-            }) : <EmptyState error={!!leadsState.error}>{leadsState.error ? `COULD NOT LOAD LEADS — ${leadsState.error}` : 'NO UPLOADED BATCHES YET'}</EmptyState>}
+              ))}
+            </div>
           </div>
-        </div>
-      </div>
+        </Col>
 
-      <div className="lead-calling-row">
-        <div className="card">
-          <div className="card-header">
-            <div className="card-title">Conversion funnel <span className="card-subtitle">{funnelLabel}</span></div>
-            <FilterChips id="funnelPeriodChips" options={PERIOD_OPTIONS} value={funnelDate ? null : funnelPeriod} onChange={(p) => dispatch(setFunnelPeriod(p))}>
-              <DateField id="funnelDateInput" value={funnelDate} onChange={onFunnelDate} label="Conversion funnel date" title="Show one day (2020-2030)" />
-            </FilterChips>
-          </div>
-          <div className="funnel">
-            {fCounts.map(([label, n, color]) => (
-              <div className="funnel-row" key={label}>
-                <span className="funnel-label">{label}</span>
-                <div className="funnel-track"><div className="funnel-fill" style={{ width: `${n ? Math.max(4, Math.round(n / maxF * 100)) : 0}%`, background: color }} /></div>
-                <span className="funnel-value">{n}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="stack">
-          <button type="button" className="btn btn-dark btn-lg btn-block" onClick={startCallSession}>
-            <Icon name="play" />Start call session · <span>{scopedLeads.filter(isFreshLead).length}</span> fresh leads
-          </button>
+        <Col xs={24} lg={12} className="stack">
+          <Button size="large" block className="btn-ink" icon={<Icon name="phone" />} onClick={startCallSession}>
+            Start call session · <span>{scopedLeads.filter(isFreshLead).length}</span> fresh leads
+          </Button>
           {cbLeads.length > 0 && (
             <div id="callbacksDueCard" className="card" style={{ display: 'flex' }}>
               <div className="card-header" style={{ marginBottom: 10 }}><div className="card-title">Callbacks due · {cbLeads.length}</div></div>
@@ -298,8 +303,8 @@ export default function LeadCallingPage() {
               </div>
             </div>
           )}
-        </div>
-      </div>
+        </Col>
+      </Row>
 
       <div className="card" style={{ marginBottom: 'var(--ds-space-4)' }}>
         <div className="card-header"><div className="card-title">Team call status</div><span className="card-subtitle">Leads called / leads assigned</span></div>

@@ -927,3 +927,158 @@ select.form-control, .select { cursor: pointer; padding-right: 8px; }
 .mgr-chain-item.is-direct { color: var(--ds-text); font-weight: 700; }
 .mgr-chain-sep { color: var(--ds-chain-sep); }
 .mgr-chain-top { color: var(--ds-chain-muted); }
+
+/* ---------- 16. ANT DESIGN LAYER ----------
+   antd components themed in assets/antd.js (ANT_THEME); these rules fit them into the portal layout. */
+
+/* Icons (<Icon name="…" />) */
+.ant-ico { font-size: 16px; line-height: 0; flex-shrink: 0; vertical-align: -0.15em; }
+.ant-ico-sm { font-size: 14px; }
+.ant-ico-lg { font-size: 20px; }
+.nav-pill .ant-ico { font-size: 18px; opacity: 0.85; }
+.nav-pill.active .ant-ico { opacity: 1; }
+.kpi-icon .ant-ico { font-size: 16px; }
+.dropzone-icon .ant-ico { font-size: 22px; }
+.app-header-meta .ant-ico, .rec-source .ant-ico, .impersonation-banner .ant-ico { margin-right: 4px; }
+.view-link { display: inline-flex; align-items: center; gap: 2px; }
+.tel-link { display: inline-flex; align-items: center; gap: 4px; }
+.podium-crown { color: var(--ds-lime-400); margin-right: 6px; font-size: 18px; }
+.badge .ant-ico { font-size: 12px; }
+
+/* Interactive shake: the icon in any action button wiggles on hover / keyboard focus */
+@keyframes iconShake {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  20% { transform: rotate(-14deg) scale(1.12); }
+  40% { transform: rotate(11deg) scale(1.12); }
+  60% { transform: rotate(-7deg) scale(1.06); }
+  80% { transform: rotate(4deg) scale(1.03); }
+}
+.ant-btn:not(:disabled):hover .anticon:not(.anticon-loading),
+.ant-btn:not(:disabled):focus-visible .anticon:not(.anticon-loading),
+.nav-pill:hover .anticon,
+.nav-pill:focus-visible .anticon,
+.dropzone:hover .dropzone-icon .anticon,
+.upload-item-main:hover .kpi-icon .anticon,
+.callback-item:hover .anticon,
+.demo-slot-act:hover .anticon {
+  animation: iconShake 0.55s ease-in-out;
+  transform-origin: 50% 50%;
+}
+.ant-btn:not(:disabled):active { transform: scale(0.97); }
+
+/* Brand button variants (ink = the old .btn-dark, lime = .btn-lime) */
+.ant-btn.btn-ink { background: var(--ds-ink-900); border-color: var(--ds-ink-900); color: var(--ds-lime-400); }
+.ant-btn.btn-ink:not(:disabled):hover { background: var(--ds-ink-800); border-color: var(--ds-ink-800); color: var(--ds-lime-400); }
+.ant-btn.btn-lime-ant { background: var(--ds-lime-400); border-color: #B7EC38; color: var(--ds-ink-900); }
+.ant-btn.btn-lime-ant:not(:disabled):hover { background: #BDF43C; border-color: #A6D92A; color: var(--ds-ink-900); }
+.ant-btn.btn-xs-ant { height: 26px; padding: 0 9px; font-size: var(--ds-fs-xs); }
+
+/* Icon-only row actions (ActionIcon): soft tinted squares, the icon shakes on hover */
+.ant-btn.action-icon { width: 34px; min-width: 34px; height: 34px; padding: 0; border: 0; border-radius: 10px; box-shadow: none; }
+.ant-btn.action-icon .anticon { font-size: 16px; }
+.ant-btn.action-icon:not(:disabled):hover { transform: translateY(-1px); box-shadow: 0 3px 8px rgba(16, 24, 12, 0.10); }
+.ant-btn.action-icon--edit { background: #E3F2EE; color: #2F5D57; }
+.ant-btn.action-icon--edit:not(:disabled):hover { background: #CDE8E1; color: #1F4540; }
+.ant-btn.action-icon--delete { background: #FDE8E8; color: #E0393E; }
+.ant-btn.action-icon--delete:not(:disabled):hover { background: #FBD3D3; color: #C42A2F; }
+.ant-btn.action-icon--view { background: #EAF0FB; color: #2F63B3; }
+.ant-btn.action-icon--view:not(:disabled):hover { background: #D7E3F8; color: #234E92; }
+.ant-btn.action-icon--call, .ant-btn.action-icon--play { background: var(--ds-success-bg); color: var(--ds-green-700); }
+.ant-btn.action-icon--call:not(:disabled):hover, .ant-btn.action-icon--play:not(:disabled):hover { background: #D4EFCF; color: #1B6119; }
+.ant-btn.action-icon--add { background: var(--ds-lime-bg); color: var(--ds-lime-text); }
+.ant-btn.action-icon--add:not(:disabled):hover { background: #E6F7B8; color: #3C5000; }
+.cell-actions { flex-wrap: nowrap; gap: 8px; }
+.cell-right .ant-btn.action-icon { margin-left: auto; }
+.ant-btn.play-btn { background: var(--ds-success-bg); border-color: transparent; color: var(--ds-green-700); }
+.ant-btn.play-btn:not(:disabled):hover { background: #D4EFCF; border-color: transparent; color: var(--ds-green-700); }
+
+/* Filter chips (FilterChips / Chip) */
+.ant-btn.ant-chip { height: 32px; padding: 0 13px; font-size: var(--ds-fs-sm); font-weight: 600; color: var(--ds-text-2); border-color: var(--ds-border); }
+.ant-btn.ant-chip:not(:disabled):hover { color: var(--ds-text); border-color: var(--ds-border-strong); background: var(--ds-surface); }
+.ant-btn.ant-chip.is-active,
+.ant-btn.ant-chip.is-active:not(:disabled):hover { background: var(--ds-ink-900); border-color: var(--ds-ink-900); color: var(--ds-lime-400); }
+.ant-btn.ant-chip.is-active .chip-count { background: rgba(200, 255, 74, 0.16); color: var(--ds-lime-400); }
+.dial-outcomes .ant-btn.ant-chip { width: 100%; border-radius: var(--ds-radius-sm); padding: 0 8px; }
+.demo-tl-row .ant-btn.ant-chip { height: 36px; padding: 0 16px; font-weight: 700; }
+
+/* Sidebar / mobile bar / dock buttons */
+.ant-btn.sidebar-close-btn { margin-left: auto; color: var(--ds-text-on-dark); }
+.ant-btn.sidebar-close-btn:not(:disabled):hover { background: rgba(255, 255, 255, 0.08); color: #FFFFFF; }
+.ant-btn.sidebar-logout-btn { width: 100%; height: 36px; background: transparent; border-color: var(--ds-ink-700); color: var(--ds-text-on-dark-2); }
+.ant-btn.sidebar-logout-btn:not(:disabled):hover { background: rgba(255, 255, 255, 0.06); border-color: var(--ds-ink-700); color: #FFFFFF; }
+.ant-btn.hamburger-btn { background: transparent; border-color: var(--ds-ink-700); color: var(--ds-text-on-dark); height: 32px; }
+.ant-btn.hamburger-btn:not(:disabled):hover { background: rgba(255, 255, 255, 0.06); border-color: var(--ds-ink-700); color: #FFFFFF; }
+.ant-btn.audio-ctl-btn { width: 32px; height: 32px; min-width: 32px; }
+.ant-btn.audio-ctl-btn.audio-ctl-play { width: 38px; height: 38px; min-width: 38px; }
+.ant-btn.audio-close { background: var(--ds-surface-sunken); }
+
+/* Inputs, selects and date pickers sized like the old controls */
+.search-input.ant-input-affix-wrapper { flex: 1 1 220px; min-width: 0; max-width: 320px; }
+.page-actions .search-input.ant-input-affix-wrapper { flex: 0 1 260px; width: 260px; }
+.search-input .ant-input-prefix { color: var(--ds-text-3); }
+.toolbar-ant-select { min-width: 150px; max-width: 100%; }
+#callAgentFilter, #recAgentFilter, #pipelineAgentFilter { min-width: 190px; }
+.page-actions .toolbar-ant-select, .quick-jump-box .toolbar-ant-select { min-width: 220px; }
+.form-ant-select { width: 100%; }
+.upload-ant-select { flex: 1 1 200px; min-width: 0; }
+.upload-ant-select.is-half { flex: 1 1 140px; }
+.stage-ant-select { width: 100%; }
+.inline-ant-select { min-width: 200px; max-width: 100%; }
+.mgr-filter-ant { width: 100%; max-width: 100%; text-transform: none; letter-spacing: 0; font-weight: 600; }
+.mgr-filter-ant.is-active { background: var(--ds-lime-bg); border-color: var(--ds-lime-400); }
+.mgr-filter-ant.is-active .ant-select-selector { background: var(--ds-lime-bg); border-color: var(--ds-lime-400); }
+.date-picker.ant-picker { height: 32px; border-radius: var(--ds-radius-pill); width: 150px; }
+.demo-day-nav .date-picker.ant-picker { height: 30px; }
+.inline-edit .target-input { width: 84px; text-align: center; font-weight: 700; }
+.split-item .split-input { width: 76px; height: 32px; text-align: center; font-weight: 700; }
+.rec-feedback-row .ant-input { flex: 1; min-width: 0; }
+.crit-rate.ant-rate { font-size: 17px; white-space: nowrap; }
+.crit-rate.ant-rate .ant-rate-star:not(:last-child) { margin-inline-end: 3px; }
+.login-alert { text-align: left; margin-bottom: 16px; }
+.form-alert { text-align: left; margin-top: var(--ds-space-3); }
+
+/* Toast (antd message) in the portal ink + lime style */
+.global-toast .ant-message-notice-content {
+  background: var(--ds-ink-900) !important; color: #FFFFFF; border-left: 3px solid var(--ds-lime-400);
+  font-size: var(--ds-fs-sm); font-weight: 600; letter-spacing: 0.02em; max-width: min(460px, calc(100vw - 32px));
+}
+.global-toast .anticon { color: var(--ds-lime-400) !important; }
+
+/* Row / Col layout: equal-height cards, spacing below each row */
+.kpi-row, .equal-row { margin-bottom: var(--ds-space-4); }
+.kpi-row > .ant-col > .kpi { height: 100%; }
+.equal-row > .ant-col > .card { height: 100%; }
+.lead-calling-ant-row > .ant-col.stack { display: flex; flex-direction: column; gap: var(--ds-space-3); }
+.lead-calling-ant-row > .ant-col.stack > #callbacksDueCard { flex: 1 1 auto; flex-direction: column; min-height: 0; }
+.lead-calling-ant-row > .ant-col.stack > #callbacksDueCard .callback-list { flex: 1 1 auto; max-height: 240px; }
+.toolbar .ant-segmented, .card-header .ant-segmented { max-width: 100%; overflow-x: auto; }
+.toolbar .ant-select.toolbar-ant-select { height: 32px; }
+
+/* Lead Calling "Reassign fresh leads": label on its own line, then FROM → TO · Move on one line */
+.upload-row > span.field-label { flex: 1 1 100%; }
+.upload-row .upload-ant-select.is-half { flex: 1 1 0; min-width: 0; }
+
+/* User list: 9 columns need more room before the table scrolls sideways */
+.users-table .table-scroll-wrap > div { min-width: 1100px; }
+
+/* Demo slots: as many columns as fit, so a time label never spills out of its pill */
+.demo-slot-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.demo-slot { padding: 10px 8px; }
+
+/* Responsive: antd controls follow the same breakpoints as the rest of the portal */
+@media (max-width: 860px) {
+  .page-actions .search-input.ant-input-affix-wrapper, .search-input.ant-input-affix-wrapper { width: 100%; max-width: none; flex: 1 1 100%; }
+  .page-actions .toolbar-ant-select, .quick-jump-box .toolbar-ant-select { flex: 1 1 200px; min-width: 0; }
+  .toolbar .toolbar-spacer { margin-left: 0; width: 100%; }
+  .toolbar .toolbar-spacer .toolbar-ant-select { flex: 1 1 160px; min-width: 0; }
+  .page-actions, .page-actions > .pill-group, .section-header > .pill-group { justify-content: flex-start; }
+}
+@media (max-width: 560px) {
+  .page-actions > .ant-btn { flex: 1 1 auto; }
+  .date-picker.ant-picker { width: 100%; flex: 1 1 140px; }
+  .pill-group .ant-btn.ant-chip { padding: 0 11px; }
+  .rec-feedback-row .ant-btn { width: 100%; }
+  .inline-edit .inline-ant-select { min-width: 0; width: 100%; }
+  .demo-day-nav { width: 100%; }
+  .kpi-row .kpi { padding: 14px; }
+}

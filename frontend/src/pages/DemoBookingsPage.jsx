@@ -4,9 +4,12 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useDispatch, useSelector } from 'react-redux';
+import { Button, Tooltip } from '../assets/antd';
 import { Badge } from '../components/common/Badge';
 import DataTable, { Heads, TableRow } from '../components/common/DataTable';
+import DateField from '../components/common/DateField';
 import EmptyState from '../components/common/EmptyState';
+import { Chip } from '../components/common/FilterChips';
 import Icon from '../components/common/Icon';
 import PageHeader from '../components/common/PageHeader';
 import UserLink from '../components/common/UserLink';
@@ -99,14 +102,14 @@ export default function DemoBookingsPage() {
   return (
     <>
       <PageHeader title="Demo Bookings" subtitle={`${list.length} demo booking${list.length === 1 ? '' : 's'} in this view`}>
-        <button type="button" className="btn btn-dark" onClick={exportDemos} title="Export the listed demo bookings to Excel"><Icon name="download" size="sm" />Export</button>
+        <Button className="btn-ink" icon={<Icon name="download" size="sm" />} onClick={exportDemos} title="Export the listed demo bookings to Excel">Export</Button>
       </PageHeader>
 
       <div className="demo-tl-row">
         <span className="demo-tl-label">Team leader</span>
         <div className="pill-group">
           {[['ALL', 'All'], ...Array.from(tls.entries()).sort((a, b) => String(a[1]).localeCompare(String(b[1])))].map(([id, name]) => (
-            <button key={id} type="button" className={`filter-chip${tl === id ? ' active' : ''}`} onClick={() => { setMenu(null); dispatch(setDemoTl(id)); }}>{name}</button>
+            <Chip key={id} active={tl === id} icon={id === 'ALL' ? <Icon name="users" size="sm" /> : <Icon name="user" size="sm" />} onClick={() => { setMenu(null); dispatch(setDemoTl(id)); }}>{name}</Chip>
           ))}
         </div>
       </div>
@@ -114,12 +117,15 @@ export default function DemoBookingsPage() {
       <div className="demo-slot-card">
         <div className="demo-slot-head">
           <div className="demo-day-nav">
-            <button type="button" className="demo-nav-btn" onClick={() => shiftDay(-1)} title="Previous day" aria-label="Previous day">‹</button>
+            <Tooltip title="Previous day">
+              <Button shape="circle" size="small" icon={<Icon name="left" size="sm" />} onClick={() => shiftDay(-1)} aria-label="Previous day" />
+            </Tooltip>
             <strong>{fmtLongDay(istMidnight(day))}</strong>
-            <button type="button" className="demo-nav-btn" onClick={() => shiftDay(1)} title="Next day" aria-label="Next day">›</button>
-            <button type="button" className={`filter-chip${day === istDateStr(new Date()) ? ' active' : ''}`} onClick={() => changeDay(null)}>Today</button>
-            <label htmlFor="demoDayInput" className="visually-hidden">Pick a date</label>
-            <input type="date" id="demoDayInput" className="demo-day-input" value={day} onChange={(e) => changeDay(e.target.value)} />
+            <Tooltip title="Next day">
+              <Button shape="circle" size="small" icon={<Icon name="right" size="sm" />} onClick={() => shiftDay(1)} aria-label="Next day" />
+            </Tooltip>
+            <Chip active={day === istDateStr(new Date())} icon={<Icon name="calendar" size="sm" />} onClick={() => changeDay(null)}>Today</Chip>
+            <DateField id="demoDayInput" value={day} onChange={changeDay} label="Pick a date" allowClear={false} />
           </div>
           <span className="demo-slot-hint">10:00 AM – 7:00 PM · 30-min slots</span>
         </div>
@@ -139,7 +145,7 @@ export default function DemoBookingsPage() {
             if (st.past) cls += ' is-past';
             return (
               <div key={m} className={cls} role="button" tabIndex={0} onClick={(e) => openMenu(e, m)} onKeyDown={onKeyActivate((e) => openMenu(e, m))}>
-                <button type="button" className="demo-slot-act" title="Slot actions" aria-label="Slot actions" onClick={(e) => openMenu(e, m)}>⋯</button>
+                <button type="button" className="demo-slot-act" title="Slot actions" aria-label="Slot actions" onClick={(e) => openMenu(e, m)}><Icon name="ellipsis" /></button>
                 <span className="demo-slot-time">{demoSlotLabel(m)}</span>
                 {sub && <span className="demo-slot-sub">{sub}</span>}
               </div>
@@ -148,7 +154,7 @@ export default function DemoBookingsPage() {
         </div>
         <div className="demo-slot-legend">
           <span><i className="lg-free" />Free</span><span><i className="lg-booked" />Booked</span><span><i className="lg-blocked" />Blocked</span>
-          <span className="muted">Use ⋯ on a slot to block or unblock it. Blocked slots show red in the callers&apos; app.</span>
+          <span className="muted">Use <Icon name="ellipsis" size="sm" /> on a slot to block or unblock it. Blocked slots show red in the callers&apos; app.</span>
         </div>
       </div>
 
@@ -212,21 +218,21 @@ function SlotMenu({ menu, tl, visible, onClose }) {
         <div className="demo-menu-item" key={d.id}>
           <strong>{d.clientName || '—'}</strong>
           <span>{[d.clientPhone ? formatPhone(d.clientPhone) : '', d.teamLeaderName, d.agent ? `by ${d.agent}` : ''].filter(Boolean).join(' · ')}</span>
-          {!st.past && <button type="button" className="btn btn-secondary btn-sm" onClick={() => cancel(d.id)}>Cancel demo</button>}
+          {!st.past && <Button size="small" icon={<Icon name="missed" size="sm" />} onClick={() => cancel(d.id)}>Cancel demo</Button>}
         </div>
       ))}
       {st.blocks.map(b => (
         <div className="demo-menu-item is-blocked" key={b.id}>
           <strong>Blocked · {b.teamLeaderName || 'All team leaders'}</strong>
           <span>{b.blockedByName ? `by ${b.blockedByName}` : ''}</span>
-          <button type="button" className="btn btn-secondary btn-sm" onClick={() => act(() => unblockDemoSlot(b.id))}>Unblock slot</button>
+          <Button size="small" icon={<Icon name="check" size="sm" />} onClick={() => act(() => unblockDemoSlot(b.id))}>Unblock slot</Button>
         </div>
       ))}
       {!st.past && !st.blocks.length && !st.bookings.length && (
         <>
           <p className="demo-menu-note">Free slot. Blocking it stops callers booking it for {tlName}.</p>
-          <button type="button" className="btn btn-danger-solid"
-            onClick={() => act(() => blockDemoSlot(tl !== 'ALL' ? tl : '', demoSlotStart(ds.day, m), demoSlotLabel(m)))}>Block slot</button>
+          <Button type="primary" danger icon={<Icon name="slash" size="sm" />}
+            onClick={() => act(() => blockDemoSlot(tl !== 'ALL' ? tl : '', demoSlotStart(ds.day, m), demoSlotLabel(m)))}>Block slot</Button>
         </>
       )}
     </div>,

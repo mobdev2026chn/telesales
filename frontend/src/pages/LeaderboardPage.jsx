@@ -3,6 +3,7 @@
 // ==========================================
 import { useEffect, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { Button } from '../assets/antd';
 import { Badge, CountPill } from '../components/common/Badge';
 import DataTable, { TableRow } from '../components/common/DataTable';
 import DateField from '../components/common/DateField';
@@ -25,9 +26,9 @@ import { fetchLeaderboard } from '../utils/actions/statsActions';
 
 const COLS = '0.5fr 1.3fr 1.6fr 1.2fr 0.9fr 1fr 0.9fr 1.3fr';
 const MEDALS = [
-  { place: '1ST · GOLD', crown: '♛ ' },
-  { place: '2ND · SILVER', crown: '' },
-  { place: '3RD · BRONZE', crown: '' },
+  { place: '1ST · GOLD', crown: true },
+  { place: '2ND · SILVER', crown: false },
+  { place: '3RD · BRONZE', crown: false },
 ];
 
 // Places are decided by connected calls (then talk time, then total calls), recomputed on every live refresh
@@ -119,9 +120,9 @@ export default function LeaderboardPage() {
       ? <div className="card" style={{ width: '100%' }}><EmptyState>NO CALL ACTIVITY RECORDED FOR THIS TIMEFRAME</EmptyState></div>
       : podium.map(p => (
         <div className={`podium-card${p.label === '#1' ? ' is-first' : ''}`} key={p.label}>
-          <Badge tone={p.label === '#1' ? 'lime' : 'neutral'}>{p.place}</Badge>
+          <Badge tone={p.label === '#1' ? 'lime' : 'neutral'}><Icon name="award" size="sm" />{p.place}</Badge>
           <div className="podium-rank">{p.label}</div>
-          <div className="podium-name">{p.crown}<UserLink user={{ id: p.id, phone: p.phone, name: p.name }} label={p.name} /></div>
+          <div className="podium-name">{p.crown && <Icon name="crown" className="podium-crown" />}<UserLink user={{ id: p.id, phone: p.phone, name: p.name }} label={p.name} /></div>
           <div className="podium-meta">{p.conn} connected · {fmtTalk(p.talk)}</div>
         </div>
       ));
@@ -149,7 +150,7 @@ export default function LeaderboardPage() {
         <FilterChips id="lbPeriodChips" options={PERIOD_OPTIONS} value={lb.customDate ? null : lb.period} onChange={(p) => dispatch(setLbPeriod(p))}>
           <DateField id="lbDateInput" value={lb.customDate} onChange={onDate} label="Leaderboard date" title="Filter leaderboard by date (2020-2030)" />
         </FilterChips>
-        <button type="button" className="btn btn-secondary btn-sm" onClick={exportLeaderboard} title="Export the leaderboard to Excel"><Icon name="download" size="sm" />Export</button>
+        <Button icon={<Icon name="download" size="sm" />} onClick={exportLeaderboard} title="Export the leaderboard to Excel">Export</Button>
       </PageHeader>
 
       <div id="leaderboardPodium">{podiumEl}</div>

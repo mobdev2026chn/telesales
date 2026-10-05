@@ -3,10 +3,12 @@
 // ==========================================
 import { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { Button, Select } from '../assets/antd';
 import { LeadBadge } from '../components/common/Badge';
 import FilterChips from '../components/common/FilterChips';
 import Icon from '../components/common/Icon';
 import PageHeader from '../components/common/PageHeader';
+import SearchField from '../components/common/SearchField';
 import UserLink from '../components/common/UserLink';
 import { PIPELINE_PAGE_SIZE, PIPELINE_STAGE_FILTERS, PIPELINE_STAGES, STAGE_CLASS, STATUS_LABEL } from '../data/constants';
 import { loadMorePipelineStage, setPipelineAgent, setPipelineSearch, setPipelineStage } from '../redux/slices/leadsSlice';
@@ -45,18 +47,13 @@ export default function LeadsPipelinePage() {
   return (
     <>
       <PageHeader title="Leads Pipeline" subtitle={subtitle}>
-        <div className="search-field">
-          <Icon name="search" size="sm" />
-          <label htmlFor="pipelineSearchInput" className="visually-hidden">Search pipeline</label>
-          <input type="text" id="pipelineSearchInput" placeholder="Search lead, phone, agent…" defaultValue={pipelineSearch}
-            onChange={(e) => dispatch(setPipelineSearch(e.target.value))} />
-        </div>
+        <SearchField id="pipelineSearchInput" label="Search pipeline" placeholder="Search lead, phone, agent…"
+          defaultValue={pipelineSearch} onChange={(v) => dispatch(setPipelineSearch(v))} />
         <label htmlFor="pipelineAgentFilter" className="visually-hidden">Agent</label>
-        <select id="pipelineAgentFilter" className="toolbar-select" style={{ height: 34 }} value={agent} onChange={(e) => dispatch(setPipelineAgent(e.target.value))}>
-          <option value="ALL">ALL AGENTS</option>
-          {scoped.map(u => <option key={u.id} value={u.id}>{u.name.toUpperCase()} ({roleLabel(u.role)})</option>)}
-        </select>
-        <button type="button" className="btn btn-primary" onClick={() => dispatch(openLeadForm({}))}><Icon name="plus" size="sm" />Add CRM lead</button>
+        <Select id="pipelineAgentFilter" className="toolbar-ant-select" value={agent} onChange={(v) => dispatch(setPipelineAgent(v))}
+          showSearch optionFilterProp="label" popupMatchSelectWidth={false}
+          options={[{ value: 'ALL', label: 'ALL AGENTS' }, ...scoped.map(u => ({ value: u.id, label: `${u.name.toUpperCase()} (${roleLabel(u.role)})` }))]} />
+        <Button type="primary" icon={<Icon name="plus" size="sm" />} onClick={() => dispatch(openLeadForm({}))}>Add CRM lead</Button>
       </PageHeader>
 
       {/* STAGE FILTER CHIPS (NEW, INTERESTED, FOLLOW-UP, CONVERTED, NOT INTERESTED) */}
@@ -91,17 +88,16 @@ export default function LeadsPipelinePage() {
                           <div className="cell-sub">{l.notes || '—'}</div>
                           <div className="kanban-card-foot">
                             <label htmlFor={selId} className="visually-hidden">Stage for {l.name}</label>
-                            <select id={selId} className="select input-sm" value={l.stage} onChange={(e) => moveLeadStage(l.id, e.target.value)}>
-                              {PIPELINE_STAGES.map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
+                            <Select id={selId} size="small" className="stage-ant-select" value={l.stage} onChange={(v) => moveLeadStage(l.id, v)}
+                              options={PIPELINE_STAGES.map(s => ({ value: s, label: s }))} />
                           </div>
                         </div>
                       );
                     })}
                     {visible.length < colLeads.length && (
-                      <button type="button" className="btn btn-secondary btn-sm btn-block" onClick={() => dispatch(loadMorePipelineStage(cid))}>
+                      <Button size="small" block icon={<Icon name="ellipsis" size="sm" />} onClick={() => dispatch(loadMorePipelineStage(cid))}>
                         View more · {colLeads.length - visible.length} more
-                      </button>
+                      </Button>
                     )}
                   </>
                 )}

@@ -4,12 +4,14 @@
 import { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
+import { Col, Row } from '../assets/antd';
 import { CountPill, PresenceDot } from '../components/common/Badge';
 import DataTable, { TableRow } from '../components/common/DataTable';
 import DateField from '../components/common/DateField';
 import EmptyState from '../components/common/EmptyState';
 import FilterChips from '../components/common/FilterChips';
 import HourBars from '../components/common/HourBars';
+import { KpiGrid } from '../components/common/Kpi';
 import ManagerChain from '../components/common/ManagerChain';
 import MgrFilterSelect from '../components/common/MgrFilterSelect';
 import PageHeader from '../components/common/PageHeader';
@@ -83,77 +85,46 @@ export default function DashboardPage() {
         </FilterChips>
       </PageHeader>
 
-      <div className="kpi-grid">
-        <div className="kpi kpi--dark">
-          <div className="kpi-head"><span className="kpi-label">01 · Total calls</span></div>
-          <div className="kpi-value">{dashTxt(m && m.total)}</div>
-          <div className="kpi-meta">{m ? `${fmtTalk(m.talkSeconds)} total talk time` : (failed ? 'Could not load' : 'Loading…')}</div>
-        </div>
-        <div className="kpi kpi--success">
-          <div className="kpi-head"><span className="kpi-label">02 · Incoming</span></div>
-          <div className="kpi-value">{dashTxt(m && m.incoming)}</div>
-          <div className="kpi-meta">{m ? `${m.incoming} inbound received` : 'Inbound calls received'}</div>
-        </div>
-        <div className="kpi">
-          <div className="kpi-head"><span className="kpi-label">03 · Outgoing</span></div>
-          <div className="kpi-value">{dashTxt(m && m.outgoing)}</div>
-          <div className="kpi-meta">{m ? `${m.outgoing} outbound dialed` : 'Outbound calls dialed'}</div>
-        </div>
-        <div className="kpi kpi--brand">
-          <div className="kpi-head"><span className="kpi-label">04 · Connected</span></div>
-          <div className="kpi-value">{dashTxt(m && m.connected)}</div>
-          <div className="kpi-meta">{m ? `${rate}% connect rate` : '—'}</div>
-        </div>
-      </div>
+      <KpiGrid items={[
+        { label: 'Total calls', value: dashTxt(m && m.total), meta: m ? `${fmtTalk(m.talkSeconds)} total talk time` : (failed ? 'Could not load' : 'Loading…'), tone: 'dark' },
+        { label: 'Incoming', value: dashTxt(m && m.incoming), meta: m ? `${m.incoming} inbound received` : 'Inbound calls received', tone: 'success' },
+        { label: 'Outgoing', value: dashTxt(m && m.outgoing), meta: m ? `${m.outgoing} outbound dialed` : 'Outbound calls dialed' },
+        { label: 'Connected', value: dashTxt(m && m.connected), meta: m ? `${rate}% connect rate` : '—', tone: 'brand' },
+        { label: 'Missed calls', value: dashTxt(m && m.missed), meta: 'Unanswered inbound calls', tone: 'danger' },
+        { label: 'Rejected / no answer', value: dashTxt(m && m.rejected), meta: 'Declined or not picked up', tone: 'warning' },
+        { label: 'Never attended', value: dashTxt(m && m.neverAttended), meta: 'Missed + rejected follow-ups' },
+        { label: 'Unique calls', value: dashTxt(m && m.uniqueClients), meta: 'Distinct clients reached', tone: 'lime' },
+      ]} />
 
-      <div className="kpi-grid">
-        <div className="kpi kpi--danger">
-          <div className="kpi-head"><span className="kpi-label">05 · Missed calls</span></div>
-          <div className="kpi-value">{dashTxt(m && m.missed)}</div>
-          <div className="kpi-meta">Unanswered inbound calls</div>
-        </div>
-        <div className="kpi kpi--warning">
-          <div className="kpi-head"><span className="kpi-label">06 · Rejected / no answer</span></div>
-          <div className="kpi-value">{dashTxt(m && m.rejected)}</div>
-          <div className="kpi-meta">Declined or not picked up</div>
-        </div>
-        <div className="kpi">
-          <div className="kpi-head"><span className="kpi-label">07 · Never attended</span></div>
-          <div className="kpi-value">{dashTxt(m && m.neverAttended)}</div>
-          <div className="kpi-meta">Missed + rejected follow-ups</div>
-        </div>
-        <div className="kpi kpi--lime">
-          <div className="kpi-head"><span className="kpi-label">08 · Unique calls</span></div>
-          <div className="kpi-value">{dashTxt(m && m.uniqueClients)}</div>
-          <div className="kpi-meta">Distinct clients reached</div>
-        </div>
-      </div>
+      <Row gutter={[16, 16]} className="equal-row">
+        <Col xs={24} lg={9}>
+          <div className="card">
+            <div className="card-header"><div className="card-title">Call mix</div><span className="card-subtitle">Inbound vs outbound</span></div>
+            <div className="mix-bar">
+              <div style={{ background: 'var(--ds-green-500)', width: `${m && m.total ? Math.max(3, inPct) : 0}%` }} />
+              <div style={{ flex: 1 }} />
+            </div>
+            <div className="mix-legend">
+              <span><span className="legend-swatch" style={{ background: 'var(--ds-green-500)' }} />Inbound · <strong>{callsTxt('incoming')}</strong></span>
+              <span><span className="legend-swatch" style={{ background: 'var(--ds-ink-900)' }} />Outbound · <strong>{callsTxt('outgoing')}</strong></span>
+            </div>
+            <div className="stat-list">
+              <div className="stat-row"><span>Connect rate</span><strong>{m ? `${rate}%` : '—'}</strong></div>
+              <div className="stat-row"><span>Avg connected duration</span><strong>{m ? fmtDur(avgDur) : '—'}</strong></div>
+              <div className="stat-row"><span>Unique clients reached</span><strong>{dashTxt(m && m.uniqueClients)}</strong></div>
+            </div>
+          </div>
+        </Col>
 
-      <div className="grid-2-col">
-        <div className="card">
-          <div className="card-header"><div className="card-title">Call mix</div><span className="card-subtitle">Inbound vs outbound</span></div>
-          <div className="mix-bar">
-            <div style={{ background: 'var(--ds-green-500)', width: `${m && m.total ? Math.max(3, inPct) : 0}%` }} />
-            <div style={{ flex: 1 }} />
+        <Col xs={24} lg={15}>
+          <div className="card">
+            <div className="card-header"><div className="card-title">Call activity by hour</div><span className="card-subtitle">10 AM – 7 PM IST</span></div>
+            <div className="hour-bars">
+              {server && <HourBars byHour={hourCounts(Array.isArray(server.hourlyAll) ? server.hourlyAll : server.hourlyCalls)} />}
+            </div>
           </div>
-          <div className="mix-legend">
-            <span><span className="legend-swatch" style={{ background: 'var(--ds-green-500)' }} />Inbound · <strong>{callsTxt('incoming')}</strong></span>
-            <span><span className="legend-swatch" style={{ background: 'var(--ds-ink-900)' }} />Outbound · <strong>{callsTxt('outgoing')}</strong></span>
-          </div>
-          <div className="stat-list">
-            <div className="stat-row"><span>Connect rate</span><strong>{m ? `${rate}%` : '—'}</strong></div>
-            <div className="stat-row"><span>Avg connected duration</span><strong>{m ? fmtDur(avgDur) : '—'}</strong></div>
-            <div className="stat-row"><span>Unique clients reached</span><strong>{dashTxt(m && m.uniqueClients)}</strong></div>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="card-header"><div className="card-title">Call activity by hour</div><span className="card-subtitle">10 AM – 7 PM IST</span></div>
-          <div className="hour-bars">
-            {server && <HourBars byHour={hourCounts(Array.isArray(server.hourlyAll) ? server.hourlyAll : server.hourlyCalls)} />}
-          </div>
-        </div>
-      </div>
+        </Col>
+      </Row>
 
       <TeamPerformance
         server={server}

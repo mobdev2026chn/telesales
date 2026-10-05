@@ -1,4 +1,6 @@
 // KPI tiles. tone: '' | dark | brand | success | warning | danger | lime
+import { Col, Row } from '../../assets/antd';
+
 export function Kpi({ num, label, value, meta, tone, title }) {
   return (
     <div className={`kpi${tone ? ` kpi--${tone}` : ''}`} title={title}>
@@ -9,11 +11,15 @@ export function Kpi({ num, label, value, meta, tone, title }) {
   );
 }
 
-// A grid of tiles numbered 01, 02, … in order
+// Tiles numbered 01, 02, … in order: 4 per row on desktop, 2 on tablets and phones
 export function KpiGrid({ items, start = 0 }) {
   return (
-    <div className="kpi-grid">
-      {items.map((k, i) => <Kpi key={k.label} {...k} num={String(start + i + 1).padStart(2, '0')} />)}
-    </div>
+    <Row gutter={[16, 16]} className="kpi-row">
+      {items.map((k, i) => (
+        <Col xs={12} lg={6} key={k.label}>
+          <Kpi {...k} num={String(start + i + 1).padStart(2, '0')} />
+        </Col>
+      ))}
+    </Row>
   );
 }

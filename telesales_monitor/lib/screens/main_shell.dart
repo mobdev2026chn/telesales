@@ -117,7 +117,7 @@ class _MainShellState extends State<MainShell> {
                             const Icon(Icons.headset_mic_rounded, size: 16, color: AppTheme.ink900),
                             const SizedBox(width: 8),
                             Text(
-                              'CALLER MODE ACTIVE (${tele.supervisorLabel})',
+                              'CALLER MODE ACTIVE (MANAGER)',
                               style: AppTheme.mono(size: 10, color: AppTheme.ink900, weight: FontWeight.w700),
                             ),
                           ],

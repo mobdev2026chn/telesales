@@ -3,9 +3,10 @@
 // ==========================================
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { Button, Input, Rate, Select } from '../assets/antd';
 import { Badge, DirBadge } from '../components/common/Badge';
 import EmptyState from '../components/common/EmptyState';
-import FilterChips from '../components/common/FilterChips';
+import FilterChips, { Chip } from '../components/common/FilterChips';
 import Icon from '../components/common/Icon';
 import PageHeader from '../components/common/PageHeader';
 import Pager from '../components/common/Pager';
@@ -127,27 +128,25 @@ export default function RecordingsPage() {
       >
         <span className="muted" style={{ fontSize: 'var(--ds-fs-sm)' }}>Reviewer</span>
         <span className="badge badge-outline badge-lg">{(authUser && authUser.name ? authUser.name : '—').toUpperCase()}</span>
-        <button type="button" className="btn btn-secondary btn-sm" onClick={exportReviews} title="Export the filtered recording reviews to Excel"><Icon name="download" size="sm" />Export reviews</button>
+        <Button icon={<Icon name="download" size="sm" />} onClick={exportReviews} title="Export the filtered recording reviews to Excel">Export reviews</Button>
       </PageHeader>
 
       <div className="toolbar">
         <FilterChips id="recFilterChips" options={filters} value={rs.filter} onChange={(v) => dispatch(setRecFilter(v))} />
         <div className="pill-group toolbar-spacer">
           <label htmlFor="recRangeSelect" className="visually-hidden">Date range</label>
-          <select id="recRangeSelect" className="toolbar-select" value={rs.range} onChange={(e) => changeRecRange(e.target.value)}>
-            {CALL_RANGE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
+          <Select id="recRangeSelect" className="toolbar-ant-select" value={rs.range} onChange={(v) => changeRecRange(v)}
+            options={CALL_RANGE_OPTIONS} suffixIcon={<Icon name="calendar" size="sm" />} />
           <label htmlFor="recAgentFilter" className="visually-hidden">Agent</label>
-          <select id="recAgentFilter" className="toolbar-select" value={agentValid ? rs.agent : 'ALL'} onChange={(e) => changeRecAgent(e.target.value)}>
-            <option value="ALL">ALL AGENTS</option>
-            {scoped.map(u => <option key={u.id} value={u.id}>{u.name.toUpperCase()} ({roleLabel(u.role)})</option>)}
-          </select>
+          <Select id="recAgentFilter" className="toolbar-ant-select" value={agentValid ? rs.agent : 'ALL'} onChange={(v) => changeRecAgent(v)}
+            showSearch optionFilterProp="label" popupMatchSelectWidth={false}
+            options={[{ value: 'ALL', label: 'ALL AGENTS' }, ...scoped.map(u => ({ value: u.id, label: `${u.name.toUpperCase()} (${roleLabel(u.role)})` }))]} />
         </div>
       </div>
 
       <div className="stack" style={{ gap: 'var(--ds-space-4)' }}>{listBody}</div>
       <Pager className="pager-bar" label={`PAGE ${pg.page} / ${pg.totalPages} · ${recs.length} RECORDINGS`} page={pg.page} totalPages={pg.totalPages} onPage={changePage}>
-        {rs.hasMore && <button type="button" className="filter-chip" onClick={() => fetchRecordings(true)}>Load older</button>}
+        {rs.hasMore && <Chip icon={<Icon name="history" size="sm" />} onClick={() => fetchRecordings(true)}>Load older</Chip>}
       </Pager>
     </div>
   );
@@ -193,11 +192,11 @@ function RecordingCard({ rec: c, meta, users }) {
             </div>
           </div>
           <span>
-            <button type="button" aria-pressed={on} disabled={meta.pinBusy} onClick={() => toggleRecordingPin(c.id)}
+            <Button size="small" aria-pressed={on} disabled={meta.pinBusy} onClick={() => toggleRecordingPin(c.id)}
               title={on ? 'Unpin: remove from the top of the app list' : 'Pin: show this recording first in the app'}
-              className={`btn btn-sm ${on ? 'btn-lime' : 'btn-secondary'}`} style={{ whiteSpace: 'nowrap' }}>
-              📌 {on ? 'Pinned · Unpin' : 'Pin'}
-            </button>
+              className={on ? 'btn-lime-ant' : ''} icon={<Icon name={on ? 'pin-filled' : 'pin'} size="sm" />}>
+              {on ? 'Pinned · Unpin' : 'Pin'}
+            </Button>
           </span>
         </div>
         <div className="rec-audio-wrap">
@@ -253,13 +252,9 @@ function ReviewSection({ id, meta }) {
           return (
             <div className="criteria-item" key={k}>
               <span>{label}</span>
-              <div style={{ display: 'flex', gap: 1 }} role="group" aria-label={`${label} rating`}>
-                {[1, 2, 3, 4, 5].map(i => (
-                  <button key={i} type="button" className={`star-btn${rating >= i ? ' is-on' : ''}`}
-                    aria-label={`${label}: ${i} of 5`} aria-pressed={rating >= i}
-                    onClick={() => setRecordingStar(id, k, i)}>★</button>
-                ))}
-              </div>
+              <Rate className="crit-rate" value={rating} allowClear={false} aria-label={`${label} rating`}
+                tooltips={[1, 2, 3, 4, 5].map(i => `${label}: ${i} of 5`)}
+                onChange={(i) => setRecordingStar(id, k, i)} />
             </div>
           );
         })}
@@ -267,8 +262,8 @@ function ReviewSection({ id, meta }) {
       <div className="rec-review-foot">
         <span className="fw-600" style={{ fontSize: 'var(--ds-fs-sm)' }}>Overall · <span className="text-2">{overallText}</span></span>
         <div className="cell-actions">
-          <button type="button" className="btn btn-primary btn-sm" onClick={() => reviewRecording(id, 'APPROVED')}>✓ Approve</button>
-          <button type="button" className="btn btn-danger btn-sm" onClick={() => reviewRecording(id, 'FLAGGED')}>⚑ Flag for coaching</button>
+          <Button type="primary" size="small" icon={<Icon name="check" size="sm" />} onClick={() => reviewRecording(id, 'APPROVED')}>Approve</Button>
+          <Button danger size="small" icon={<Icon name="flag" size="sm" />} onClick={() => reviewRecording(id, 'FLAGGED')}>Flag for coaching</Button>
         </div>
       </div>
       {(meta.comments || []).map((cm, i) => (
@@ -278,10 +273,10 @@ function ReviewSection({ id, meta }) {
       ))}
       <div className="rec-feedback-row">
         <label htmlFor={draftId} className="visually-hidden">Coaching feedback</label>
-        <input type="text" id={draftId} className="input" value={meta.draft || ''} placeholder="Provide coaching feedback for this caller…"
+        <Input id={draftId} value={meta.draft || ''} placeholder="Provide coaching feedback for this caller…"
           onChange={(e) => dispatch(setRecordingDraft({ id, draft: e.target.value }))}
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); saveRecordingFeedback(id); } }} />
-        <button type="button" className="btn btn-dark" onClick={() => saveRecordingFeedback(id)}>Send feedback</button>
+        <Button className="btn-ink" icon={<Icon name="send" size="sm" />} onClick={() => saveRecordingFeedback(id)}>Send feedback</Button>
       </div>
     </>
   );

@@ -4,15 +4,19 @@
 import { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Button, Col, Row } from '../assets/antd';
 import Avatar from '../components/common/Avatar';
 import { Badge, DirBadge, LeadBadge, OutcomeBadge, PresenceDot, RoleBadge } from '../components/common/Badge';
 import DataTable, { Heads, TableRow } from '../components/common/DataTable';
 import DateField from '../components/common/DateField';
 import EmptyState from '../components/common/EmptyState';
+import { Chip } from '../components/common/FilterChips';
 import HourBars from '../components/common/HourBars';
 import { KpiGrid } from '../components/common/Kpi';
 import PageHeader from '../components/common/PageHeader';
 import Pager from '../components/common/Pager';
+import PlayButton from '../components/common/PlayButton';
+import Icon from '../components/common/Icon';
 import Progress from '../components/common/Progress';
 import UserLink from '../components/common/UserLink';
 import { PERIOD_OPTIONS, PIPELINE_STAGES, STAGE_CLASS, STAGE_TITLE, USER_DETAIL_PAGE_SIZE } from '../data/constants';
@@ -80,10 +84,10 @@ export default function UserDetailPage() {
   const header = (title) => (
     <PageHeader title={title} subtitle="Calls, recordings and leads for one person" actionsClass="">
       <div className="pill-group">
-        <button type="button" className="btn btn-secondary btn-sm" onClick={close}>‹ Back</button>
+        <Button icon={<Icon name="back" size="sm" />} onClick={close}>Back</Button>
         {PERIOD_OPTIONS.map(o => {
           const on = !ud.date && ud.period === o.value;
-          return <button key={o.value} type="button" className={`filter-chip${on ? ' active' : ''}`} aria-pressed={on ? 'true' : 'false'} onClick={() => dispatch(setUdPeriod(o.value))}>{o.label}</button>;
+          return <Chip key={o.value} active={on} pressed onClick={() => dispatch(setUdPeriod(o.value))}>{o.label}</Chip>;
         })}
         <DateField id="udDateInput" value={ud.date} onChange={onDate} label="User details date" />
       </div>
@@ -145,8 +149,7 @@ export default function UserDetailPage() {
           <OutcomeBadge out={c.out} />
           <span className="tabular">{fmtDur(c.dur)}</span>
           <span>{recId ? (
-            <button type="button" className="icon-btn" onClick={() => playCallAudioDirect(recId, 'log')}
-              aria-label={`Play recording of call with ${c.client || formatPhone(c.phone)}`} title="Play recording">▶</button>
+            <PlayButton onClick={() => playCallAudioDirect(recId, 'log')} label={`Play recording of call with ${c.client || formatPhone(c.phone)}`} />
           ) : <span className="muted">—</span>}</span>
         </TableRow>
       );
@@ -172,8 +175,7 @@ export default function UserDetailPage() {
         <span className="cell-mono">{formatPhone(r.phone)}</span>
         <DirBadge dir={r.dir} />
         <span className="tabular">{fmtDur(r.dur)}</span>
-        <span><button type="button" className="icon-btn" onClick={() => playCallAudioDirect(r.id, 'log')}
-          aria-label={`Play recording with ${r.client || formatPhone(r.phone)}`} title="Play recording">▶</button></span>
+        <span><PlayButton onClick={() => playCallAudioDirect(r.id, 'log')} label={`Play recording with ${r.client || formatPhone(r.phone)}`} /></span>
       </TableRow>
     ));
   }
@@ -200,52 +202,56 @@ export default function UserDetailPage() {
     <>
       {header(`${String(u.name || 'USER').toUpperCase()} · DETAILS`)}
       {data && data.dashError && <EmptyState error>COULD NOT LOAD THE NUMBERS — {data.dashError}</EmptyState>}
-      <div className="grid-2-col">
-        <div className="card">
-          <div className="user-hero">
-            <Avatar user={u} className="avatar-lg" />
-            <div style={{ minWidth: 0 }}>
-              <div className="user-hero-name">{u.name}</div>
-              <div className="user-hero-tags">
-                <RoleBadge role={u.role} />
-                {isAgent && data && (
-                  <span className={`status-text ${active ? 'text-success' : 'text-danger'}`}>
-                    <PresenceDot online={active} />{active ? `${connected} CONNECTED ${periodTxt}` : `NO CONNECTED CALLS ${periodTxt}`}
-                  </span>
-                )}
+      <Row gutter={[16, 16]} className="equal-row">
+        <Col xs={24} lg={9}>
+          <div className="card">
+            <div className="user-hero">
+              <Avatar user={u} className="avatar-lg" />
+              <div style={{ minWidth: 0 }}>
+                <div className="user-hero-name">{u.name}</div>
+                <div className="user-hero-tags">
+                  <RoleBadge role={u.role} />
+                  {isAgent && data && (
+                    <span className={`status-text ${active ? 'text-success' : 'text-danger'}`}>
+                      <PresenceDot online={active} />{active ? `${connected} CONNECTED ${periodTxt}` : `NO CONNECTED CALLS ${periodTxt}`}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-          <div className="detail-list">
-            <DetailLine label="Login email">{u.email || '—'}</DetailLine>
-            <DetailLine label="Phone / SIM"><span className="mono">{formatPhone(u.phone)}</span></DetailLine>
-            <DetailLine label="Reports to">{mgrUser ? <><UserLink user={mgrUser} /> ({roleLabel(mgrUser.role)})</> : 'Top Level / Admin'}</DetailLine>
-            <DetailLine label="Team">{u.team || '—'}</DetailLine>
-            <DetailLine label="App status">
-              {online ? <Badge tone="success" dot>SIGNED IN</Badge>
-                : <span className="muted">NOT SIGNED IN{seenAt ? ` · LAST ACTIVE ${fmtTs(new Date(seenAt))}` : ''}</span>}
-            </DetailLine>
-          </div>
-          {isAgent && (
-            <div style={{ paddingTop: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                <span className="detail-label">Today vs daily target</span>
-                <strong className="tabular">{target > 0 ? `${todayCalls}/${target} (${pct}%)` : 'NO TARGET'}</strong>
-              </div>
-              <Progress pct={pct} lg />
+            <div className="detail-list">
+              <DetailLine label="Login email">{u.email || '—'}</DetailLine>
+              <DetailLine label="Phone / SIM"><span className="mono">{formatPhone(u.phone)}</span></DetailLine>
+              <DetailLine label="Reports to">{mgrUser ? <><UserLink user={mgrUser} /> ({roleLabel(mgrUser.role)})</> : 'Top Level / Admin'}</DetailLine>
+              <DetailLine label="Team">{u.team || '—'}</DetailLine>
+              <DetailLine label="App status">
+                {online ? <Badge tone="success" dot>SIGNED IN</Badge>
+                  : <span className="muted">NOT SIGNED IN{seenAt ? ` · LAST ACTIVE ${fmtTs(new Date(seenAt))}` : ''}</span>}
+              </DetailLine>
             </div>
-          )}
-        </div>
-        <div className="card">
-          <div className="card-header"><div className="card-title">Call activity by hour</div><span className="card-subtitle">{periodTxt}</span></div>
-          <div className="hour-bars"><HourBars byHour={hourCounts(d && d.hourlyAll)} /></div>
-          <div className="stat-list">
-            <div className="stat-row"><span>Connect rate</span><strong>{loadingTxt || `${rate}%`}</strong></div>
-            <div className="stat-row"><span>Avg connected duration</span><strong>{loadingTxt || fmtDur(num(d && d.avgDurationSeconds))}</strong></div>
-            <div className="stat-row"><span>Unique clients reached</span><strong>{loadingTxt || num(d && d.uniqueClients)}</strong></div>
+            {isAgent && (
+              <div style={{ paddingTop: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <span className="detail-label">Today vs daily target</span>
+                  <strong className="tabular">{target > 0 ? `${todayCalls}/${target} (${pct}%)` : 'NO TARGET'}</strong>
+                </div>
+                <Progress pct={pct} lg />
+              </div>
+            )}
           </div>
-        </div>
-      </div>
+        </Col>
+        <Col xs={24} lg={15}>
+          <div className="card">
+            <div className="card-header"><div className="card-title">Call activity by hour</div><span className="card-subtitle">{periodTxt}</span></div>
+            <div className="hour-bars"><HourBars byHour={hourCounts(d && d.hourlyAll)} /></div>
+            <div className="stat-list">
+              <div className="stat-row"><span>Connect rate</span><strong>{loadingTxt || `${rate}%`}</strong></div>
+              <div className="stat-row"><span>Avg connected duration</span><strong>{loadingTxt || fmtDur(num(d && d.avgDurationSeconds))}</strong></div>
+              <div className="stat-row"><span>Unique clients reached</span><strong>{loadingTxt || num(d && d.uniqueClients)}</strong></div>
+            </div>
+          </div>
+        </Col>
+      </Row>
 
       <KpiGrid items={[
         { label: `Total calls · ${periodTxt}`, value: val(total), meta: `${fmtTalk(talk)} talk time`, tone: 'dark' },

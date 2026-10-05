@@ -3,11 +3,12 @@
 // ==========================================
 import { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { Button, Col, Input, Row, Select } from '../assets/antd';
 import Avatar from '../components/common/Avatar';
+import Icon from '../components/common/Icon';
 import PageHeader from '../components/common/PageHeader';
 import { setViewAs } from '../redux/slices/authSlice';
 import { selectScope } from '../redux/selectors';
-import { onKeyActivate } from '../utils/dom';
 import { formatPhone, roleLabel, safeImage } from '../utils/format';
 import { notify } from '../utils/notify';
 import { isHead } from '../utils/scope';
@@ -76,62 +77,62 @@ export default function ProfilePage() {
         {admin && (
           <div className="quick-jump-box" style={{ display: 'flex' }}>
             <label htmlFor="profileUserSelect">View profile as</label>
-            <select id="profileUserSelect" className="toolbar-select" value={me.id} onChange={(e) => onProfileUserSwitch(e.target.value)}>
-              {users.map(u => (
-                <option key={u.id} value={u.id}>{roleLabel(u.role)} · {u.name.toUpperCase()}{u.id === authId ? ' (YOU)' : ''}</option>
-              ))}
-            </select>
+            <Select id="profileUserSelect" className="toolbar-ant-select" value={me.id} onChange={onProfileUserSwitch}
+              showSearch optionFilterProp="label" popupMatchSelectWidth={false}
+              options={users.map(u => ({ value: u.id, label: `${roleLabel(u.role)} · ${u.name.toUpperCase()}${u.id === authId ? ' (YOU)' : ''}` }))} />
           </div>
         )}
       </PageHeader>
 
-      <div className="profile-grid">
-        <div className="card profile-card">
-          <Avatar user={me} className="avatar-xl" as="div" label="Profile photo" />
-          <div className="profile-name">{me.name}</div>
-          <span className="badge badge-lime badge-lg">{roleLabel(me.role)}</span>
-          {editable && (
-            <div style={{ marginTop: 'var(--ds-space-5)' }}>
-              <label htmlFor="pfPhotoInput" role="button" tabIndex={0} className="btn btn-dark"
-                onKeyDown={onKeyActivate(() => document.getElementById('pfPhotoInput').click())}>Change photo</label>
-              <input id="pfPhotoInput" type="file" accept="image/*" style={{ display: 'none' }} onChange={onPhoto} />
-            </div>
-          )}
-          <div className="muted" style={{ fontSize: 'var(--ds-fs-xs)', marginTop: 10 }}>JPG or PNG · saved to the server</div>
-        </div>
-
-        <div className="card">
-          <div className="card-header" style={{ marginBottom: 4 }}><div className="card-title">Account &amp; hierarchy</div></div>
-          <div className="detail-list">
-            <div className="detail-row"><span className="detail-label">Full name</span><span className="detail-value">{me.name}</span></div>
-            <div className="detail-row"><span className="detail-label">Login email</span><span className="detail-value">{me.email || '—'}</span></div>
-            <div className="detail-row"><span className="detail-label">Phone / SIM number</span><span className="detail-value mono">{formatPhone(me.phone)}</span></div>
-            <div className="detail-row"><span className="detail-label">Role &amp; permissions</span><span className="detail-value">{roleLabel(me.role)}</span></div>
-            <div className="detail-row">
-              <div><span className="detail-label">Reports to</span><span className="detail-help">Direct supervisor for performance reviews</span></div>
-              <div className="inline-edit">
-                <span className="detail-value">
-                  {me.role === 'ADMIN' ? 'ORGANIZATION HEAD (BOARD)' : (mgr ? `${mgr.name} (${roleLabel(mgr.role)})` : 'TOP LEVEL (ADMIN)')}
-                </span>
-                {me.role !== 'ADMIN' && editable && (
-                  <select className="select" aria-label="Reports to manager" value={me.mgr || ''} onChange={(e) => onSaveManager(e.target.value)}>
-                    <option value="">TOP LEVEL (ADMIN)</option>
-                    {mgrChoices.map(u => <option key={u.id} value={u.id}>{u.name} ({roleLabel(u.role)})</option>)}
-                  </select>
-                )}
+      <Row gutter={[16, 16]} align="top">
+        <Col xs={24} lg={8} xxl={6}>
+          <div className="card profile-card">
+            <Avatar user={me} className="avatar-xl" as="div" label="Profile photo" />
+            <div className="profile-name">{me.name}</div>
+            <span className="badge badge-lime badge-lg">{roleLabel(me.role)}</span>
+            {editable && (
+              <div style={{ marginTop: 'var(--ds-space-5)' }}>
+                <Button className="btn-ink" icon={<Icon name="upload-plain" size="sm" />} onClick={() => document.getElementById('pfPhotoInput').click()}>Change photo</Button>
+                <input id="pfPhotoInput" type="file" accept="image/*" style={{ display: 'none' }} onChange={onPhoto} />
               </div>
-            </div>
-            <div className="detail-row">
-              <div><span className="detail-label">Daily call target</span><span className="detail-help">Target dials per day (powers dashboard &amp; leaderboard attainment %)</span></div>
-              <div className="inline-edit">
-                {/* Re-created when the person or their saved target changes */}
-                <TargetEditor key={`${me.id}:${me.target}`} initial={String(me.target || 0)} editable={editable} onSave={onSaveTarget} />
-              </div>
-            </div>
-            <div className="detail-row"><span className="detail-label">Account status</span><span className="badge badge-success badge-dot">Active &amp; verified</span></div>
+            )}
+            <div className="muted" style={{ fontSize: 'var(--ds-fs-xs)', marginTop: 10 }}>JPG or PNG · saved to the server</div>
           </div>
-        </div>
-      </div>
+        </Col>
+
+        <Col xs={24} lg={16} xxl={18}>
+          <div className="card">
+            <div className="card-header" style={{ marginBottom: 4 }}><div className="card-title">Account &amp; hierarchy</div></div>
+            <div className="detail-list">
+              <div className="detail-row"><span className="detail-label">Full name</span><span className="detail-value">{me.name}</span></div>
+              <div className="detail-row"><span className="detail-label">Login email</span><span className="detail-value">{me.email || '—'}</span></div>
+              <div className="detail-row"><span className="detail-label">Phone / SIM number</span><span className="detail-value mono">{formatPhone(me.phone)}</span></div>
+              <div className="detail-row"><span className="detail-label">Role &amp; permissions</span><span className="detail-value">{roleLabel(me.role)}</span></div>
+              <div className="detail-row">
+                <div><span className="detail-label">Reports to</span><span className="detail-help">Direct supervisor for performance reviews</span></div>
+                <div className="inline-edit">
+                  <span className="detail-value">
+                    {me.role === 'ADMIN' ? 'ORGANIZATION HEAD (BOARD)' : (mgr ? `${mgr.name} (${roleLabel(mgr.role)})` : 'TOP LEVEL (ADMIN)')}
+                  </span>
+                  {me.role !== 'ADMIN' && editable && (
+                    <Select className="inline-ant-select" aria-label="Reports to manager" value={me.mgr || ''} onChange={onSaveManager}
+                      showSearch optionFilterProp="label" popupMatchSelectWidth={false}
+                      options={[{ value: '', label: 'TOP LEVEL (ADMIN)' }, ...mgrChoices.map(u => ({ value: u.id, label: `${u.name} (${roleLabel(u.role)})` }))]} />
+                  )}
+                </div>
+              </div>
+              <div className="detail-row">
+                <div><span className="detail-label">Daily call target</span><span className="detail-help">Target dials per day (powers dashboard &amp; leaderboard attainment %)</span></div>
+                <div className="inline-edit">
+                  {/* Re-created when the person or their saved target changes */}
+                  <TargetEditor key={`${me.id}:${me.target}`} initial={String(me.target || 0)} editable={editable} onSave={onSaveTarget} />
+                </div>
+              </div>
+              <div className="detail-row"><span className="detail-label">Account status</span><span className="badge badge-success badge-dot">Active &amp; verified</span></div>
+            </div>
+          </div>
+        </Col>
+      </Row>
     </>
   );
 }
@@ -140,9 +141,9 @@ function TargetEditor({ initial, editable, onSave }) {
   const [value, setValue] = useState(initial);
   return (
     <>
-      <input type="number" className="input" aria-label="Daily call target" min="0" max="1000" disabled={!editable}
+      <Input type="number" className="target-input" aria-label="Daily call target" min="0" max="1000" disabled={!editable}
         value={value} onChange={(e) => setValue(e.target.value)} />
-      {editable && <button type="button" className="btn btn-primary btn-sm" onClick={() => onSave(value)}>Save</button>}
+      {editable && <Button type="primary" size="small" icon={<Icon name="save" size="sm" />} onClick={() => onSave(value)}>Save</Button>}
     </>
   );
 }

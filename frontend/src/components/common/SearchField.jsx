@@ -1,30 +1,22 @@
-// Search box with the magnifier icon (and an optional clear button)
+// Search box with the magnifier icon (and a clear button when onClear is given)
+import { Input } from '../../assets/antd';
 import Icon from './Icon';
 
-export default function SearchField({ id, label, placeholder, value, onChange, onEnter, onClear, style }) {
+export default function SearchField({ id, label, placeholder, value, defaultValue, onChange, onEnter, onClear, style }) {
   return (
-    <div className="search-field" style={style}>
-      <Icon name="search" size="sm" />
-      <label htmlFor={id} className="visually-hidden">{label}</label>
-      <input
-        type="text"
-        id={id}
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={onEnter ? (e) => { if (e.key === 'Enter') onEnter(); } : undefined}
-      />
-      {onClear && (
-        <button
-          type="button"
-          className="search-clear"
-          style={{ display: value.length > 0 ? 'block' : 'none' }}
-          onClick={onClear}
-          aria-label="Clear search"
-        >
-          <Icon name="x" size="sm" />
-        </button>
-      )}
-    </div>
+    <Input
+      id={id}
+      className="search-input"
+      style={style}
+      aria-label={label}
+      placeholder={placeholder}
+      value={value}
+      defaultValue={defaultValue}
+      prefix={<Icon name="search" size="sm" />}
+      allowClear={!!onClear}
+      // The clear (×) button fires onChange with a click event
+      onChange={(e) => { if (e.type === 'click' && onClear) onClear(); else onChange(e.target.value); }}
+      onPressEnter={onEnter ? () => onEnter() : undefined}
+    />
   );
 }

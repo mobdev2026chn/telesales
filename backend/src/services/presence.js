@@ -1,7 +1,7 @@
 // Online / offline presence. A user is ONLINE when a signed-in request from them arrived within
-// ONLINE_WINDOW_MS and they have not logged out since. The app sends a heartbeat every 2 minutes
-// while logged in (also in the background), so a phone that is switched off, loses its session or
-// has the app killed turns offline after the window.
+// ONLINE_WINDOW_MS and they have not logged out since. The app sends an authenticated heartbeat
+// while active; a phone that is switched off, loses its session or has the app killed turns offline
+// after the window.
 const Employee = require('../models/Employee');
 
 const ONLINE_WINDOW_MS = 5 * 60 * 1000;

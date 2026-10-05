@@ -170,6 +170,18 @@ app.use((err, req, res, next) => {
   return res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`Telesales Backend API running on http://0.0.0.0:${PORT}`);
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(
+      `Port ${PORT} is already in use. Another backend instance may already be running. ` +
+      `Stop that instance, or choose another port (PowerShell: $env:PORT=5001; npm run dev).`,
+    );
+  } else {
+    console.error('Backend failed to start:', err);
+  }
+  process.exit(1);
 });

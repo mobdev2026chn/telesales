@@ -1,6 +1,7 @@
 // DOCKED BOTTOM AUDIO PLAYER BAR (driven by utils/audioController)
 import { useCallback } from 'react';
 import { useSelector } from 'react-redux';
+import { Button, Tooltip } from '../../assets/antd';
 import {
   audioCtlStep, audioCtlToggle, closeBottomAudioBar, onAnyAudioPlay, registerDock, syncAudioControls,
 } from '../../utils/audioController';
@@ -17,11 +18,15 @@ export default function AudioPlayerBar() {
         <div className="audio-title">{audio.title}</div>
       </div>
       <div className="audio-ctl-group">
-        <button type="button" className="audio-ctl-btn" onClick={() => audioCtlStep(-1)} disabled={audio.idx <= 0} title="Previous recording" aria-label="Previous recording">⏮</button>
-        <button type="button" className="audio-ctl-btn audio-ctl-play" onClick={audioCtlToggle} title={audio.playing ? 'Pause' : 'Play'} aria-label={audio.playing ? 'Pause' : 'Play'}>
-          {audio.playing ? '❚❚' : '▶'}
-        </button>
-        <button type="button" className="audio-ctl-btn" onClick={() => audioCtlStep(1)} disabled={audio.idx < 0 || audio.idx >= audio.total - 1} title="Next recording" aria-label="Next recording">⏭</button>
+        <Tooltip title="Previous recording">
+          <Button shape="circle" className="audio-ctl-btn" icon={<Icon name="step-back" />} onClick={() => audioCtlStep(-1)} disabled={audio.idx <= 0} aria-label="Previous recording" />
+        </Tooltip>
+        <Tooltip title={audio.playing ? 'Pause' : 'Play'}>
+          <Button shape="circle" type="primary" className="audio-ctl-btn audio-ctl-play" icon={<Icon name={audio.playing ? 'pause' : 'caret-right'} />} onClick={audioCtlToggle} aria-label={audio.playing ? 'Pause' : 'Play'} />
+        </Tooltip>
+        <Tooltip title="Next recording">
+          <Button shape="circle" className="audio-ctl-btn" icon={<Icon name="step-forward" />} onClick={() => audioCtlStep(1)} disabled={audio.idx < 0 || audio.idx >= audio.total - 1} aria-label="Next recording" />
+        </Tooltip>
         <span className="muted mono" style={{ fontSize: 'var(--ds-fs-2xs)', whiteSpace: 'nowrap' }}>
           {audio.idx >= 0 ? `${audio.idx + 1} / ${audio.total}` : ''}
         </span>
@@ -37,9 +42,9 @@ export default function AudioPlayerBar() {
         onPause={syncAudioControls}
         onEnded={syncAudioControls}
       />
-      <button type="button" className="audio-close" onClick={closeBottomAudioBar} aria-label="Close player" title="Close player">
-        <Icon name="x" size="sm" />
-      </button>
+      <Tooltip title="Close player">
+        <Button shape="circle" type="text" className="audio-close" icon={<Icon name="x" size="sm" />} onClick={closeBottomAudioBar} aria-label="Close player" />
+      </Tooltip>
     </div>
   );
 }

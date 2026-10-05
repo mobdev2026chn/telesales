@@ -1,11 +1,14 @@
 // LEAD DIAL MODAL: records the outcome on the lead (the phone app logs the actual call)
 import { useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { Alert, Button, Input } from '../../assets/antd';
 import { DIAL_OUTCOMES } from '../../data/constants';
 import { closeDial } from '../../redux/slices/uiSlice';
 import { formatPhone, initialOf } from '../../utils/format';
 import { leadAgentName, leadLabel } from '../../utils/leads';
 import { commitDialOutcome } from '../../utils/actions/leadActions';
+import { Chip } from '../common/FilterChips';
+import Icon from '../common/Icon';
 
 export default function DialModal() {
   const dispatch = useDispatch();
@@ -50,8 +53,8 @@ export default function DialModal() {
             <div className="avatar dial-avatar" aria-hidden="true">{initialOf(lead.name)}</div>
             <div style={{ minWidth: 0 }}>
               <div className="modal-title" id="dialModalName">{lead.name}</div>
-              <a href={digits ? `tel:${digits}` : '#'} className="mono fw-700" style={{ fontSize: 'var(--ds-fs-base)' }} title="Call this number">
-                {formatPhone(lead.phone)}
+              <a href={digits ? `tel:${digits}` : '#'} className="mono fw-700 tel-link" style={{ fontSize: 'var(--ds-fs-base)' }} title="Call this number">
+                <Icon name="phone" size="sm" /> {formatPhone(lead.phone)}
               </a>
             </div>
           </div>
@@ -60,27 +63,26 @@ export default function DialModal() {
             <div id="dialOutcomeLabel" className="field-label">Call outcome</div>
             <div className="dial-outcomes" role="group" aria-labelledby="dialOutcomeLabel">
               {DIAL_OUTCOMES.map(o => (
-                <button key={o.value} type="button" className={`filter-chip${outcome === o.value ? ' active' : ''}`}
-                  aria-pressed={outcome === o.value ? 'true' : 'false'} onClick={() => setOutcome(o.value)}>
+                <Chip key={o.value} active={outcome === o.value} pressed onClick={() => setOutcome(o.value)}>
                   {o.label}
-                </button>
+                </Chip>
               ))}
             </div>
           </div>
 
           <div className="form-group">
             <label htmlFor="dialModalNote" className="form-label">Call notes / feedback</label>
-            <input type="text" id="dialModalNote" ref={noteRef} className="input" value={note}
+            <Input id="dialModalNote" ref={noteRef} value={note}
               placeholder="E.g. Wants pricing deck, follow up tomorrow..."
               onChange={(e) => setNote(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } }} />
           </div>
 
-          <div className="form-error" role="alert" style={{ margin: '0 0 12px', display: error ? 'block' : 'none' }}>{error}</div>
+          {error && <Alert className="form-alert" style={{ margin: '0 0 12px' }} type="error" showIcon role="alert" title={error} />}
 
-          <button type="button" className="btn btn-primary btn-lg btn-block" disabled={busy} onClick={commit}>
+          <Button type="primary" size="large" block loading={busy} icon={<Icon name="save" />} onClick={commit}>
             Save outcome &amp; update CRM
-          </button>
+          </Button>
         </div>
 
         <div className="dial-side">
@@ -92,7 +94,7 @@ export default function DialModal() {
               <div className="detail-row"><span className="detail-label">Dial attempts</span><strong className="detail-value">{lead.attempts || 0}</strong></div>
             </div>
           </div>
-          <button type="button" className="btn btn-secondary" onClick={close}>Cancel</button>
+          <Button icon={<Icon name="x" size="sm" />} onClick={close}>Cancel</Button>
         </div>
       </div>
     </div>

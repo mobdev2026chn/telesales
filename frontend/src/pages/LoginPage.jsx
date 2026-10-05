@@ -1,6 +1,8 @@
 // LOGIN: admins, managers, junior managers and team leaders (POST /auth/admin-login)
 import { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { Alert, Button, Input } from '../assets/antd';
+import Icon from '../components/common/Icon';
 import Logo from '../components/common/Logo';
 import PasswordField from '../components/common/PasswordField';
 import { clearLoginError } from '../redux/slices/authSlice';
@@ -38,22 +40,22 @@ export default function LoginPage() {
         <div className="login-title">Telesales Monitor</div>
         <div className="login-subtitle">Admin, manager &amp; team leader portal</div>
 
-        <div className="alert-error" role="alert" style={{ display: shownError ? 'block' : 'none' }}>{shownError}</div>
+        {shownError && <Alert className="login-alert" type="error" showIcon role="alert" title={shownError} />}
         <form onSubmit={submit} noValidate>
           <div className="form-group">
             <label className="form-label" htmlFor="webLoginEmail">Email or phone</label>
-            <input type="text" id="webLoginEmail" className="form-control" autoComplete="username" inputMode="email"
+            <Input id="webLoginEmail" size="large" prefix={<Icon name="user" size="sm" />} autoComplete="username" inputMode="email"
               autoCapitalize="off" spellCheck="false" required value={identifier} onChange={(e) => setIdentifier(e.target.value)} />
           </div>
 
           <div className="form-group">
             <label className="form-label" htmlFor="webLoginPassword">Password</label>
-            <PasswordField id="webLoginPassword" autoComplete="current-password" required value={password} onChange={setPassword} />
+            <PasswordField id="webLoginPassword" size="large" autoComplete="current-password" required value={password} onChange={setPassword} />
           </div>
 
-          <button type="submit" className="btn btn-primary btn-lg btn-block" style={{ marginTop: 6 }} disabled={busy}>
+          <Button type="primary" htmlType="submit" size="large" block style={{ marginTop: 6 }} loading={busy} icon={<Icon name="login" />}>
             {busy ? 'Signing in…' : 'Sign in'}
-          </button>
+          </Button>
           <div className="login-note">Admins, managers &amp; junior managers only.</div>
         </form>
       </div>

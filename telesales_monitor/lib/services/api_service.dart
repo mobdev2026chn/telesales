@@ -232,6 +232,17 @@ class ApiService {
   }
 
   /// GET /auth/me. Returns `{success, user}`; null when offline.
+  /// POST /auth/heartbeat keeps the signed-in app visible as online in the admin portal.
+  static Future<bool> heartbeat() async {
+    if (_token.isEmpty) return false;
+    final res = await _request(
+      'POST',
+      '/auth/heartbeat',
+      timeout: const Duration(seconds: 8),
+    );
+    return res != null && _ok(res);
+  }
+
   /// POST /auth/logout: the admin dashboard shows this user as offline straight away. Best effort.
   static Future<void> logout() async {
     if (_token.isEmpty) return;

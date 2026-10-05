@@ -2,6 +2,7 @@
 import { useSelector } from 'react-redux';
 import { TAB_TITLES } from '../../data/navigation';
 import { fmtLongDay, fmtTime12 } from '../../utils/format';
+import Icon from '../common/Icon';
 
 export default function AppHeader() {
   const tab = useSelector(s => s.ui.tab);
@@ -15,7 +16,7 @@ export default function AppHeader() {
       </div>
       <div className="app-header-meta">
         <span><span className="sync-dot" aria-hidden="true" />{time ? `Synced ${time}` : 'Syncing…'}</span>
-        <span>{fmtLongDay(new Date())}</span>
+        <span><Icon name="calendar" size="sm" /> {fmtLongDay(new Date())}</span>
       </div>
     </header>
   );

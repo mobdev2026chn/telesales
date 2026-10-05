@@ -4,6 +4,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
+import { Alert, Button, Input, Segmented, Select } from '../assets/antd';
+import ActionIcon from '../components/common/ActionIcon';
 import Avatar from '../components/common/Avatar';
 import { PresenceDot, RoleBadge } from '../components/common/Badge';
 import DataTable, { Heads, TableRow } from '../components/common/DataTable';
@@ -96,9 +98,9 @@ export default function UserManagementPage() {
             )}
           </span>
           <div className="cell-actions">
-            {canViewAs && <button type="button" className="btn btn-primary btn-xs" onClick={() => viewAs(u.id)} title="View the portal scoped to this user">View as</button>}
-            {canEdit && <button type="button" className="btn btn-secondary btn-xs" onClick={() => dispatch(toggleUserForm(u.id))}>Edit</button>}
-            {canDelete && <button type="button" className="btn btn-danger btn-xs" onClick={() => onDelete(u)}>Delete</button>}
+            {canViewAs && <ActionIcon icon="eye" tone="view" label={`View the portal as ${u.name}`} onClick={() => viewAs(u.id)} />}
+            {canEdit && <ActionIcon icon="edit" tone="edit" label={`Edit ${u.name}`} onClick={() => dispatch(toggleUserForm(u.id))} />}
+            {canDelete && <ActionIcon icon="delete" tone="delete" label={`Delete ${u.name}`} onClick={() => onDelete(u)} />}
           </div>
         </TableRow>
       );
@@ -124,22 +126,28 @@ export default function UserManagementPage() {
   return (
     <>
       <PageHeader title="User Management" subtitle="Sales agents, managers and who reports to whom">
-        <button type="button" className="btn btn-primary" onClick={() => dispatch(toggleUserForm())}><Icon name="plus" size="sm" />Add user</button>
+        <Button type="primary" icon={<Icon name="plus" size="sm" />} onClick={() => dispatch(toggleUserForm())}>Add user</Button>
       </PageHeader>
 
       <div className="toolbar">
-        <div className="segmented">
-          <button type="button" className={`filter-chip${userView === 'list' ? ' active' : ''}`} onClick={() => dispatch(setUserView('list'))}><Icon name="list" size="sm" />User list</button>
-          <button type="button" className={`filter-chip${userView === 'tree' ? ' active' : ''}`} onClick={() => dispatch(setUserView('tree'))}><Icon name="layers" size="sm" />Team hierarchy</button>
-        </div>
+        <Segmented
+          value={userView}
+          onChange={(v) => dispatch(setUserView(v))}
+          options={[
+            { value: 'list', label: 'User list', icon: <Icon name="list" size="sm" /> },
+            { value: 'tree', label: 'Team hierarchy', icon: <Icon name="layers" size="sm" /> },
+          ]}
+        />
         {/* Admin-only "view as" quick jump */}
         {admin && (
           <div className="quick-jump-box toolbar-spacer" style={{ display: 'flex' }}>
             <label htmlFor="userQuickJumpSelect">View portal as</label>
-            <select id="userQuickJumpSelect" className="toolbar-select" value="" onChange={(e) => { if (e.target.value) viewAs(e.target.value); }}>
-              <option value="">SELECT USER TO VIEW AS…</option>
-              {users.filter(u => u.id !== authId).map(u => <option key={u.id} value={u.id}>{u.name} ({roleLabel(u.role)})</option>)}
-            </select>
+            <Select id="userQuickJumpSelect" className="toolbar-ant-select" value="" onChange={(v) => { if (v) viewAs(v); }}
+              showSearch optionFilterProp="label" popupMatchSelectWidth={false} suffixIcon={<Icon name="eye" size="sm" />}
+              options={[
+                { value: '', label: 'SELECT USER TO VIEW AS…' },
+                ...users.filter(u => u.id !== authId).map(u => ({ value: u.id, label: `${u.name} (${roleLabel(u.role)})` })),
+              ]} />
           </div>
         )}
       </div>
@@ -148,7 +156,7 @@ export default function UserManagementPage() {
 
       {userView === 'list' && (
         <div style={{ marginBottom: 'var(--ds-space-5)' }}>
-          <div className="neo-table-card">
+          <div className="neo-table-card users-table">
             <DataTable cols={LIST_COLS} head={<Heads labels={['Name', 'Login email', 'Phone / SIM', 'Role', 'Manager', 'Target', 'Today', 'Status', 'Actions']} />}>
               {listBody}
             </DataTable>
@@ -166,11 +174,7 @@ export default function UserManagementPage() {
               <div className="card-title">Reporting tree</div>
               <div className="card-subtitle">Admin → managers → junior managers → team leaders → callers</div>
             </div>
-            <div className="segmented">
-              {TREE_FILTERS.map(f => (
-                <button key={f.value} type="button" className={`filter-chip${treeFilter === f.value ? ' active' : ''}`} onClick={() => dispatch(setTreeFilter(f.value))}>{f.label}</button>
-              ))}
-            </div>
+            <Segmented value={treeFilter} onChange={(v) => dispatch(setTreeFilter(v))} options={TREE_FILTERS} />
           </div>
           <div style={{ padding: 'var(--ds-space-5)' }}>
             {!filteredTree.length ? <EmptyState>NO USERS MATCH THIS FILTER</EmptyState> : filteredTree.map(({ u, depth }) => (
@@ -187,7 +191,7 @@ export default function UserManagementPage() {
                   </div>
                   <div className="cell-sub" style={{ wordBreak: 'break-word' }}>{u.email || '—'} · {formatPhone(u.phone)} · Target: {u.target || 0}/day</div>
                 </div>
-                {admin && u.id !== authId && <button type="button" className="btn btn-secondary btn-xs" onClick={() => viewAs(u.id)}>View as</button>}
+                {admin && u.id !== authId && <ActionIcon icon="eye" tone="view" label={`View the portal as ${u.name}`} onClick={() => viewAs(u.id)} />}
               </div>
             ))}
           </div>
@@ -271,41 +275,42 @@ function UserForm({ editingId, scope }) {
       <div className="user-form-grid">
         <div>
           <label className="user-form-label" htmlFor="fUserName">Name *</label>
-          <input type="text" id="fUserName" ref={nameRef} className="input" placeholder="Full name" autoComplete="off" value={form.name} onChange={ev('name')} />
+          <Input id="fUserName" ref={nameRef} placeholder="Full name" autoComplete="off" value={form.name} onChange={ev('name')} />
         </div>
         <div>
           <label className="user-form-label" htmlFor="fUserEmail">Login email</label>
-          <input type="email" id="fUserEmail" className="input" placeholder="name@company.com" autoComplete="off" value={form.email} onChange={ev('email')} />
+          <Input type="email" id="fUserEmail" placeholder="name@company.com" autoComplete="off" value={form.email} onChange={ev('email')} />
         </div>
         <div>
           <label className="user-form-label" htmlFor="fUserPhone">Phone / SIM *</label>
-          <input type="tel" id="fUserPhone" className="input" placeholder="10-digit mobile" autoComplete="off" value={form.phone} onChange={ev('phone')} />
+          <Input type="tel" id="fUserPhone" placeholder="10-digit mobile" autoComplete="off" value={form.phone} onChange={ev('phone')} />
         </div>
         <div>
           <label className="user-form-label" htmlFor="fUserPassword">Password *</label>
-          <PasswordField id="fUserPassword" className="input" autoComplete="new-password" value={form.password} onChange={set('password')}
+          <PasswordField id="fUserPassword" autoComplete="new-password" value={form.password} onChange={set('password')}
             placeholder={editUser ? 'Leave blank to keep current password' : 'Min 6 characters'} />
         </div>
         <div>
           <label className="user-form-label" htmlFor="fUserRole">Role</label>
-          <select id="fUserRole" className="select" value={form.role} onChange={ev('role')}>
-            {ROLE_OPTIONS.map(o => <option key={o.value} value={o.value} disabled={roleDisabled(o.value)}>{o.label}</option>)}
-          </select>
+          <Select id="fUserRole" className="form-ant-select" value={form.role} onChange={set('role')}
+            options={ROLE_OPTIONS.map(o => ({ ...o, disabled: roleDisabled(o.value) }))} />
         </div>
         <div>
           <label className="user-form-label" htmlFor="fUserMgr">Reports to</label>
-          <select id="fUserMgr" className="select" value={form.mgr} onChange={ev('mgr')}>
-            {admin && <option value="">TOP LEVEL / ADMIN</option>}
-            {mgrChoices.map(m => <option key={m.id} value={m.id}>{m.name.toUpperCase()} ({roleLabel(m.role)})</option>)}
-          </select>
+          <Select id="fUserMgr" className="form-ant-select" value={form.mgr} onChange={set('mgr')}
+            showSearch optionFilterProp="label" popupMatchSelectWidth={false}
+            options={[
+              ...(admin ? [{ value: '', label: 'TOP LEVEL / ADMIN' }] : []),
+              ...mgrChoices.map(m => ({ value: m.id, label: `${m.name.toUpperCase()} (${roleLabel(m.role)})` })),
+            ]} />
         </div>
         <div>
           <label className="user-form-label" htmlFor="fUserTarget">Target / day</label>
-          <input type="number" id="fUserTarget" className="input" min="0" max="1000" step="1" value={form.target} onChange={ev('target')} />
+          <Input type="number" id="fUserTarget" min="0" max="1000" step="1" value={form.target} onChange={ev('target')} />
         </div>
-        <button type="button" className="btn btn-primary" onClick={save} disabled={busy} style={{ height: 38 }}>{busy ? 'Saving…' : 'Save user'}</button>
+        <Button type="primary" icon={<Icon name="save" size="sm" />} onClick={save} loading={busy}>{busy ? 'Saving…' : 'Save user'}</Button>
       </div>
-      <div className="form-error" role="alert" style={{ display: error ? 'block' : 'none' }}>{error}</div>
+      {error && <Alert className="form-alert" type="error" showIcon role="alert" title={error} />}
     </div>
   );
 }

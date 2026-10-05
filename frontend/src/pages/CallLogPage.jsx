@@ -3,13 +3,16 @@
 // ==========================================
 import { useEffect, useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { Button, Select } from '../assets/antd';
+import ActionIcon from '../components/common/ActionIcon';
 import { DirBadge, OutcomeBadge } from '../components/common/Badge';
 import DataTable, { Heads, TableRow } from '../components/common/DataTable';
 import EmptyState from '../components/common/EmptyState';
-import FilterChips from '../components/common/FilterChips';
+import FilterChips, { Chip } from '../components/common/FilterChips';
 import Icon from '../components/common/Icon';
 import PageHeader from '../components/common/PageHeader';
 import Pager from '../components/common/Pager';
+import PlayButton from '../components/common/PlayButton';
 import SearchField from '../components/common/SearchField';
 import UserLink from '../components/common/UserLink';
 import {
@@ -153,7 +156,7 @@ export default function CallLogPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <span className={c.client ? 'fw-600' : 'cell-unknown'}>{clientText}</span>
                 {showAddLead && (
-                  <button type="button" className="btn btn-lime btn-xs" onClick={() => addLeadFromCall(c)}><Icon name="plus" size="sm" />Lead</button>
+                  <ActionIcon icon="plus" tone="add" label="Add this caller as a lead" onClick={() => addLeadFromCall(c)} />
                 )}
               </div>
               <span className="cell-mono">{formatPhone(c.phone)}</span>
@@ -164,8 +167,7 @@ export default function CallLogPage() {
               <span className="cell-muted">SIM {c.sim}</span>
               <span>
                 {playId ? (
-                  <button type="button" className="icon-btn" onClick={() => playCallAudioDirect(playId, 'log')}
-                    aria-label={`Play recording of call with ${clientText}`} title="Play recording">▶</button>
+                  <PlayButton onClick={() => playCallAudioDirect(playId, 'log')} label={`Play recording of call with ${clientText}`} />
                 ) : <span className="muted">—</span>}
               </span>
             </TableRow>
@@ -180,22 +182,20 @@ export default function CallLogPage() {
       <PageHeader title="Call Log" subtitle="Every SIM-tracked call from the team's phones">
         <SearchField id="callSearchInput" label="Search calls" placeholder="Search agent, client, phone…"
           value={searchText} onChange={onTyping} onEnter={doSearch} onClear={clearSearch} />
-        <button type="button" className="btn btn-dark" onClick={doSearch}><Icon name="search" size="sm" />Search</button>
-        <button type="button" className="btn btn-secondary" onClick={exportCallLog} title="Export the filtered call log to Excel"><Icon name="download" size="sm" />Export</button>
+        <Button className="btn-ink" icon={<Icon name="search" size="sm" />} onClick={doSearch}>Search</Button>
+        <Button icon={<Icon name="download" size="sm" />} onClick={exportCallLog} title="Export the filtered call log to Excel">Export</Button>
       </PageHeader>
 
       <div className="toolbar">
         <FilterChips id="callDirChips" options={CALL_DIR_FILTERS} value={calls.filter} onChange={(v) => dispatch(setCallFilter(v))} />
         <div className="pill-group toolbar-spacer">
           <label htmlFor="callRangeSelect" className="visually-hidden">Date range</label>
-          <select id="callRangeSelect" className="toolbar-select" value={calls.range} onChange={(e) => changeCallRange(e.target.value)}>
-            {CALL_RANGE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
+          <Select id="callRangeSelect" className="toolbar-ant-select" value={calls.range} onChange={(v) => changeCallRange(v)}
+            options={CALL_RANGE_OPTIONS} suffixIcon={<Icon name="calendar" size="sm" />} />
           <label htmlFor="callAgentFilter" className="visually-hidden">Agent</label>
-          <select id="callAgentFilter" className="toolbar-select" value={agentValue} onChange={(e) => dispatch(setCallAgent(e.target.value))}>
-            <option value="ALL">ALL AGENTS</option>
-            {scoped.map(u => <option key={u.id} value={u.id}>{u.name.toUpperCase()} ({roleLabel(u.role)})</option>)}
-          </select>
+          <Select id="callAgentFilter" className="toolbar-ant-select" value={agentValue} onChange={(v) => dispatch(setCallAgent(v))}
+            showSearch optionFilterProp="label" popupMatchSelectWidth={false}
+            options={[{ value: 'ALL', label: 'ALL AGENTS' }, ...scoped.map(u => ({ value: u.id, label: `${u.name.toUpperCase()} (${roleLabel(u.role)})` }))]} />
         </div>
       </div>
 
@@ -211,7 +211,7 @@ export default function CallLogPage() {
           onPage={(p) => dispatch(setCallPage(p))}
         >
           {calls.meta.hasMore && (
-            <button type="button" className="filter-chip" disabled={loadingOlder} onClick={loadOlder}>{loadingOlder ? 'Loading…' : 'Load older'}</button>
+            <Chip loading={loadingOlder} icon={<Icon name="history" size="sm" />} onClick={loadOlder}>{loadingOlder ? 'Loading…' : 'Load older'}</Chip>
           )}
         </Pager>
       </div>
