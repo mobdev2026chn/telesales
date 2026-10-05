@@ -1,6 +1,9 @@
 // Rules for the work SIM: the SIM that holds the caller's registered number. Only calls on it are
 // tracked, recorded and uploaded. Mirrors CallMonitorStore.isWorkSim on the Android side.
 
+/// Android SIM slot indices are zero-based; this identifies the second slot.
+bool isSim2SlotIndex(int slotIndex) => slotIndex == 1;
+
 /// Whether a call on [slot] (1-based, 0 = the phone could not tell) belongs to the work SIM.
 /// [modeName] is SimTrackingMode.name: "sim1Only" | "sim2Only" | "bothSims".
 /// An unknown slot is kept only when both SIMs are tracked or the phone has a single SIM; on a

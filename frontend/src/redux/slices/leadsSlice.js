@@ -35,6 +35,12 @@ const leadsSlice = createSlice({
     leadsFailed(state, { payload }) { state.error = payload; },
     leadsReplaced(state, { payload }) { state.list = payload; },
     leadUpdated(state, { payload }) { upsert(state.list, payload); },
+    leadUpserted(state, { payload }) {
+      const idx = state.list.findIndex(x => x.id === payload.id);
+      if (idx >= 0) state.list[idx] = payload;
+      else state.list.unshift(payload);
+    },
+    leadRemoved(state, { payload }) { state.list = state.list.filter(x => x.id !== payload); },
     leadsUpdated(state, { payload }) { payload.forEach(l => upsert(state.list, l)); },
     leadAdded(state, { payload }) { state.list.unshift(payload); },
     // Imported rows merged in while the next list request settles
@@ -63,7 +69,7 @@ const leadsSlice = createSlice({
 });
 
 export const {
-  leadsLoaded, leadsFailed, leadsReplaced, leadUpdated, leadsUpdated, leadAdded, leadsMerged,
+  leadsLoaded, leadsFailed, leadsReplaced, leadUpdated, leadUpserted, leadRemoved, leadsUpdated, leadAdded, leadsMerged,
   setPendingUpload, setAssigningUpload, setUlFilter, setUlSearch, setUlPage, setFunnelPeriod, setFunnelDate,
   setPipelineStage, setPipelineAgent, setPipelineSearch, loadMorePipelineStage,
 } = leadsSlice.actions;

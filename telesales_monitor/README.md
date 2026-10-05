@@ -15,7 +15,16 @@ flutter run --dart-define=API_URL=http://<COMPUTER-LAN-IP>:5000/api
 ```
 
 The backend must be reachable from the device (including through the Windows
-firewall). Open the admin portal at `http://localhost:5000`; mobile sign-ins,
-presence, and synced calls will then use the same local database.
+firewall). Before building, `scripts/build_testing_apk.ps1` checks
+`http://<COMPUTER-LAN-IP>:5000/api/health` from the computer. This confirms the
+backend endpoint is up, but the phone must also be able to reach it: keep both
+devices on the same Wi-Fi and allow inbound TCP port 5000 through Windows
+Firewall. Open the same health URL in the phone's browser to diagnose the
+phone-to-PC network path. Mobile sign-ins, presence, and synced calls will then
+use the same local database. Open the admin portal at `http://localhost:5000`.
+
+The app does not retry a custom backend URL against the emulator or production
+server. This prevents a local testing build from silently sending requests to a
+different database.
 
 Release builds continue to use the configured HTTPS production API by default.

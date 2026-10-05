@@ -10,6 +10,7 @@ const { getPeriodRange, aggregateCallStats, findCallerStats, buildDedupKey } = r
 const { resolveScope, callLogQueryFor, leadQueryFor, MANAGER_ROLES } = require('../services/scope');
 const { isOnline, breakInfo } = require('../services/presence');
 const { escapeRegex, last10, byIdQuery, phoneRegex, serverError, parseLimit, parseDate } = require('../utils/common');
+const { refreshEmployeeSocket } = require('../services/realtime');
 
 const DEFAULT_TEAM = 'Telesales Team';
 const ROLES = ['caller', 'team_leader', 'jr_manager', 'manager', 'admin'];
@@ -399,6 +400,11 @@ router.put('/users/:id', async (req, res) => {
       ? await Employee.findOneAndUpdate({ _id: target._id }, update, { new: true, runValidators: true })
       : await Employee.findById(target._id);
     forgetProfile(target.id); // new role / team applies to their open sessions straight away
+    try {
+      refreshEmployeeSocket(req.app.get('io'), target.id);
+    } catch (err) {
+      console.error(`[socket] could not refresh updated employee userId=${target.id}: ${err.message}`);
+    }
 
     res.json({ success: true, user: updated, message: 'User updated successfully' });
   } catch (err) {
@@ -421,6 +427,11 @@ router.delete('/users/:id', async (req, res) => {
     }
     await Employee.deleteOne({ _id: target._id });
     forgetProfile(target.id);
+    try {
+      refreshEmployeeSocket(req.app.get('io'), target.id);
+    } catch (err) {
+      console.error(`[socket] could not disconnect deleted employee userId=${target.id}: ${err.message}`);
+    }
     res.json({ success: true, message: 'User deleted successfully' });
   } catch (err) {
     serverError(res, err, 'admin.users.delete');

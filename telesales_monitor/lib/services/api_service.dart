@@ -14,18 +14,43 @@ import 'api_parsers.dart';
 class ApiService {
   static const String productionBaseUrl = 'https://telesales.askeva.io/api';
 
-  /// Override per build: `flutter build apk --dart-define=API_URL=https://staging.example.com/api`.
+  /// Override per build, e.g. the local testing APK script supplies the PC's LAN URL.
+  /// Debug builds without an override use the local emulator backend; release builds
+  /// continue using [productionBaseUrl].
   static const String configuredBaseUrl = String.fromEnvironment(
     'API_URL',
-    defaultValue: productionBaseUrl,
+    defaultValue: kDebugMode ? debugEmulatorBaseUrl : productionBaseUrl,
   );
 
-  /// Local backend on the Android emulator host. Use with
-  /// `--dart-define=API_URL=http://10.0.2.2:5000/api` when developing locally.
-  /// Physical devices must use the computer's LAN IP instead.
+  /// Local backend on the Android emulator host. Physical testing devices use the
+  /// computer's LAN IP via `scripts/build_testing_apk.ps1`.
   static const String debugEmulatorBaseUrl = 'http://10.0.2.2:5000/api';
 
-  static List<String> get candidateBaseUrls => [configuredBaseUrl];
+  static List<String> get candidateBaseUrls =>
+      candidateBaseUrlsFor(configuredBaseUrl);
+
+  @visibleForTesting
+  static List<String> candidateBaseUrlsFor(String apiBaseUrl) => [apiBaseUrl];
+
+  static String simConnectionHelpFor(String apiBaseUrl) {
+    final baseUrl = apiBaseUrl.replaceFirst(RegExp(r'/+$'), '');
+    final uri = Uri.tryParse(baseUrl);
+    final healthUrl = '$baseUrl/health';
+
+    if (uri?.host == Uri.parse(debugEmulatorBaseUrl).host) {
+      return 'This build is configured for the Android emulator ($healthUrl). '
+          'For a physical phone, rebuild with '
+          '`scripts/build_testing_apk.ps1 -BackendHost <PC-Wi-Fi-IP>`. '
+          'Keep the phone and PC on the same Wi-Fi network.';
+    }
+    if (uri?.scheme == 'http') {
+      return 'The local API at $healthUrl is not reachable. Confirm the backend is '
+          'running on port 5000, the phone and PC are on the same Wi-Fi network, '
+          'and Windows Firewall allows inbound TCP port 5000 on the active network.';
+    }
+    return 'The API at $healthUrl is not reachable. Check the phone’s internet '
+        'connection and try opening that address in the phone’s browser.';
+  }
 
   static final String preferredBaseUrl = configuredBaseUrl;
   static String baseUrl = preferredBaseUrl;
@@ -178,6 +203,7 @@ class ApiService {
     if (res == null) return null;
     try {
       final d = jsonDecode(res.body);
+      
       return d is Map<String, dynamic> ? d : null;
     } catch (_) {
       return null;

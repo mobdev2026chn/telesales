@@ -9,6 +9,7 @@ const { findEmployeeByRef } = require('../services/scope');
 const { breakInfo } = require('../services/presence');
 const { last10, byIdQuery, phoneRegex, serverError } = require('../utils/common');
 const { uploadBase64, deleteAsset } = require('../services/cloudinary');
+const { publishForEmployee } = require('../services/realtime');
 
 const router = express.Router();
 
@@ -38,6 +39,17 @@ router.post(['/api/calls/sync', '/api/user/calls/sync'], async (req, res) => {
       return res.json({ success: true, count: 0, syncedCount: 0, message: 'Caller not registered in system' });
     }
     const insertedCount = await syncCallsForCaller(callerEmp, calls);
+    if (insertedCount > 0) {
+      try {
+        await publishForEmployee(req, callerEmp, 'dashboardUpdated', {
+          callerId: callerEmp.id,
+          syncedCount: insertedCount,
+          updatedAt: new Date().toISOString(),
+        });
+      } catch (err) {
+        console.error(`[socket] dashboardUpdated publish failed callerId=${callerEmp.id}: ${err.message}`);
+      }
+    }
     res.json({
       success: true,
       count: insertedCount,
@@ -62,6 +74,7 @@ router.post(['/api/user/contacts/save', '/api/user/leads/save-contact'], async (
     const re = phoneRegex(phoneNumber);
 
     let lead = (await findLeadsByLast10([num])).get(num);
+    const existed = !!lead;
     if (lead) {
       const set = { name };
       if (typeof notes === 'string' && notes.trim()) set.notes = notes.trim().slice(0, 2000);
@@ -92,6 +105,19 @@ router.post(['/api/user/contacts/save', '/api/user/leads/save-contact'], async (
     await CallLog.updateMany({ phoneNumber: re }, { $set: { contactName: name } });
     await Recording.updateMany({ phoneNumber: re }, { $set: { contactName: name } });
 
+    if (me) {
+      try {
+        const dto = {
+          ...lead,
+          id: lead.id || String(lead._id),
+          _id: undefined,
+          updatedAt: lead.updatedAt || new Date().toISOString(),
+        };
+        await publishForEmployee(req, me, existed ? 'leadUpdated' : 'leadCreated', { lead: dto, id: dto.id });
+      } catch (err) {
+        console.error(`[socket] contact lead publish failed leadId=${lead.id || lead._id}: ${err.message}`);
+      }
+    }
     res.json({ success: true, lead, message: `Contact "${name}" saved successfully!` });
   } catch (err) {
     serverError(res, err, 'contacts.save');

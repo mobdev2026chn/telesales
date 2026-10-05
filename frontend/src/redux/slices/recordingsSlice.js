@@ -58,6 +58,12 @@ const recordingsSlice = createSlice({
       const idx = state.list.findIndex(r => r.id === payload.id);
       if (idx >= 0) state.list[idx] = payload;
     },
+    recordingUpserted(state, { payload }) {
+      mergeMeta(state, [payload]);
+      const idx = state.list.findIndex(r => r.id === payload.id);
+      if (idx >= 0) state.list[idx] = payload;
+      else state.list.unshift(payload);
+    },
     recMetaPatched(state, { payload }) {
       const { id, patch } = payload;
       const meta = state.recMeta[id] || newRecMeta();
@@ -88,7 +94,7 @@ const recordingsSlice = createSlice({
 });
 
 export const {
-  recsRequested, recsLoaded, recsFailed, recMetaMerged, recordingUpdated, recMetaPatched, setRecordingDraft,
+  recsRequested, recsLoaded, recsFailed, recMetaMerged, recordingUpdated, recordingUpserted, recMetaPatched, setRecordingDraft,
   setRecFilter, setRecPage, recRangeChanged, recAgentChanged,
 } = recordingsSlice.actions;
 export default recordingsSlice.reducer;

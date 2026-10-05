@@ -7,12 +7,20 @@ import Toast from './components/common/Toast';
 import AudioPlayerBar from './components/layout/AudioPlayerBar';
 import LoginPage from './pages/LoginPage';
 import AppRoutes from './routes/AppRoutes';
+import { getToken } from './utils/api';
 import { checkSession } from './utils/actions/authActions';
+import { connectRealtime, disconnectRealtime } from './utils/realtime';
 
 export default function App() {
   const status = useSelector(s => s.auth.status);
 
   useEffect(() => { checkSession(); }, []);
+
+  useEffect(() => {
+    if (status !== 'signedIn') return undefined;
+    connectRealtime(getToken());
+    return disconnectRealtime;
+  }, [status]);
 
   return (
     <>

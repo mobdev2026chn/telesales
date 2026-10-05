@@ -1,4 +1,6 @@
 const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const fs = require('fs');
@@ -28,6 +30,7 @@ const leadRoutes = require('./routes/leads');
 const notificationRoutes = require('./routes/notifications');
 const diagnosticsRoutes = require('./routes/diagnostics');
 const demoRoutes = require('./routes/demos');
+const { initializeRealtime } = require('./services/realtime');
 
 // Connect to MongoDB, then create the first admin if (and only if) there is none
 connectDB().then((connected) => {
@@ -45,14 +48,14 @@ app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: { poli
 // CORS: the admin web is same-origin and the mobile app is not a browser, so only explicitly
 // configured origins (CORS_ORIGIN, comma separated; '*' ignored) and localhost in development.
 const allowedOrigins = (process.env.CORS_ORIGIN || '').split(',').map(o => o.trim()).filter(o => o && o !== '*');
+function isAllowedOrigin(origin) {
+  if (!origin) return true;
+  if (origin === 'null' && process.env.NODE_ENV !== 'production') return true;
+  if (allowedOrigins.includes(origin)) return true;
+  return process.env.NODE_ENV !== 'production' && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+}
 app.use(cors({
-  origin: (origin, cb) => {
-    if (!origin) return cb(null, true);
-    if (origin === 'null' && process.env.NODE_ENV !== 'production') return cb(null, true);
-    if (allowedOrigins.includes(origin)) return cb(null, true);
-    if (process.env.NODE_ENV !== 'production' && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return cb(null, true);
-    return cb(null, false);
-  },
+  origin: (origin, cb) => cb(null, isAllowedOrigin(origin)),
 }));
 
 // Large bodies only where base64 audio is uploaded; everything else stays small
@@ -170,7 +173,17 @@ app.use((err, req, res, next) => {
   return res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
 });
 
-const server = app.listen(PORT, '0.0.0.0', () => {
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: (origin, cb) => cb(null, isAllowedOrigin(origin)),
+    methods: ['GET', 'POST'],
+  },
+});
+app.set('io', io);
+initializeRealtime(io);
+
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`Telesales Backend API running on http://0.0.0.0:${PORT}`);
 });
 

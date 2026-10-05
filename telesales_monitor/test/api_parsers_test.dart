@@ -352,5 +352,28 @@ void main() {
       expect(ApiService.preferredBaseUrl, ApiService.configuredBaseUrl);
       expect(ApiService.candidateBaseUrls, [ApiService.configuredBaseUrl]);
     });
+
+    test('custom API URLs do not fall back to another database', () {
+      expect(ApiService.candidateBaseUrlsFor('http://192.168.1.18:5000/api'), [
+        'http://192.168.1.18:5000/api',
+      ]);
+    });
+
+    test('local connection help points to the configured backend', () {
+      final help = ApiService.simConnectionHelpFor(
+        'http://192.168.1.18:5000/api',
+      );
+      expect(help, contains('http://192.168.1.18:5000/api/health'));
+      expect(help, contains('Windows Firewall'));
+      expect(help, isNot(contains('10.0.2.2')));
+    });
+
+    test('emulator URL is identified as unsuitable for physical phones', () {
+      final help = ApiService.simConnectionHelpFor(
+        ApiService.debugEmulatorBaseUrl,
+      );
+      expect(help, contains('Android emulator'));
+      expect(help, contains('physical phone'));
+    });
   });
 }

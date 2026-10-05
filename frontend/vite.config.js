@@ -13,6 +13,11 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5173,
       proxy: {
+        '/socket.io': {
+          target,
+          changeOrigin: true,
+          ws: true,
+        },
         '/api': {
           target,
           changeOrigin: true,

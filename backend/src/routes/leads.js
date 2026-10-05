@@ -6,6 +6,7 @@ const { escapeRegex, last10, byIdQuery, serverError, parseLimit, exactNameRegex 
 const { resolveScope, leadQueryFor, ownerInScope, MANAGER_ROLES, findEmployeeByRef } = require('../services/scope');
 const { LEAD_STATUSES } = require('../services/matching');
 const { findLeadsByLast10 } = require('../services/callStats');
+const { publishForEmployee, publishEventsForEmployee } = require('../services/realtime');
 
 const router = express.Router();
 
@@ -137,7 +138,25 @@ router.post('/api/admin/leads', async (req, res) => {
       source: 'manual',
       lastCallDate: null,
     });
-    res.status(201).json({ success: true, lead: toLeadDTO(lead.toObject()) });
+    const dto = toLeadDTO(lead.toObject());
+    try {
+      const target = dto.assignedCallerId
+        ? await Employee.findOne({ id: dto.assignedCallerId }).select('id managerId managerName').lean()
+        : req.user;
+      await publishForEmployee(req, target || req.user, 'leadCreated', { lead: dto, id: dto.id });
+      if (status) {
+        await publishForEmployee(req, target || req.user, 'callStatusUpdated', {
+          leadId: dto.id,
+          callerId: dto.assignedCallerId,
+          status: dto.status,
+          updatedAt: dto.updatedAt || new Date().toISOString(),
+          lead: dto,
+        });
+      }
+    } catch (err) {
+      console.error(`[socket] leadCreated publish failed leadId=${dto.id}: ${err.message}`);
+    }
+    res.status(201).json({ success: true, lead: dto });
   } catch (err) {
     serverError(res, err, 'leads.create');
   }
@@ -249,6 +268,22 @@ router.post('/api/admin/leads/import', async (req, res) => {
       if (updated) reconciled.push(updated);
     }
     const imported = [...created.map(l => l.toObject ? l.toObject() : l), ...reconciled];
+    const createdIds = new Set(created.map(lead => lead.id || String(lead._id)));
+    const events = imported.map(lead => {
+      const dto = toLeadDTO(lead);
+      return {
+        event: createdIds.has(dto.id) ? 'leadCreated' : 'leadUpdated',
+        payload: { lead: dto, id: dto.id },
+      };
+    });
+    try {
+      const target = owner
+        ? await Employee.findOne({ id: owner.id }).select('id managerId managerName').lean()
+        : req.user;
+      await publishEventsForEmployee(req, target || req.user, events);
+    } catch (err) {
+      console.error(`[socket] lead import publish failed count=${events.length}: ${err.message}`);
+    }
     res.status(201).json({ success: true, created: imported.length, skipped, leads: imported.map(toLeadDTO) });
   } catch (err) {
     serverError(res, err, 'leads.import');
@@ -265,7 +300,23 @@ router.delete('/api/admin/leads/batch/:batchName', async (req, res) => {
     const scope = await resolveScope(req, {});
     const scopeQuery = scope.all ? {} : leadQueryFor(scope);
     const query = Object.keys(scopeQuery).length ? { $and: [{ batchName }, scopeQuery] } : { batchName };
+    const removing = await Lead.find(query).select('id _id assignedCallerId managerId managerName').lean();
     const result = await Lead.deleteMany(query);
+    try {
+      await publishEventsForEmployee(req, req.user, removing.map(lead => {
+        const id = lead.id || String(lead._id);
+        return {
+          event: 'leadDeleted',
+          payload: {
+            id,
+            leadId: id,
+            deletedAt: new Date().toISOString(),
+          },
+        };
+      }));
+    } catch (err) {
+      console.error(`[socket] lead batch delete publish failed count=${removing.length}: ${err.message}`);
+    }
     res.json({ success: true, deleted: result.deletedCount || 0, batchName });
   } catch (err) {
     serverError(res, err, 'leads.deleteBatch');
@@ -309,12 +360,23 @@ router.post('/api/admin/leads/distribute', async (req, res) => {
 
     let offset = 0;
     const assigned = [];
+    const changedIds = [];
     for (const w of wanted) {
       const ids = pool.slice(offset, offset + w.count).map(p => p._id);
       offset += w.count;
       // Re-check "still unassigned" so a concurrent split never hands the same lead to two callers
       const r = await Lead.updateMany({ _id: { $in: ids }, ...unassigned }, { $set: { assignedCallerId: w.emp.id, assignedCaller: w.emp.name || '' } });
+      if (r.modifiedCount) changedIds.push(...ids);
       assigned.push({ callerId: w.emp.id, name: w.emp.name || '', count: r.modifiedCount || 0 });
+    }
+    const updatedLeads = await Lead.find({ _id: { $in: changedIds } }).lean();
+    try {
+      await publishEventsForEmployee(req, req.user, updatedLeads.map(lead => {
+        const dto = toLeadDTO(lead);
+        return { event: 'leadUpdated', payload: { lead: dto, id: dto.id } };
+      }));
+    } catch (err) {
+      console.error(`[socket] lead distribution publish failed count=${updatedLeads.length}: ${err.message}`);
     }
     res.json({ success: true, assigned, remaining: pool.length - offset });
   } catch (err) {
@@ -358,7 +420,25 @@ router.put('/api/admin/leads/:id', async (req, res, next) => {
       lead.lastCallDate = new Date();
     }
     await lead.save();
-    res.json({ success: true, lead: toLeadDTO(lead.toObject()) });
+    const dto = toLeadDTO(lead.toObject());
+    try {
+      const target = dto.assignedCallerId
+        ? await Employee.findOne({ id: dto.assignedCallerId }).select('id managerId managerName').lean()
+        : req.user;
+      await publishForEmployee(req, target || req.user, 'leadUpdated', { lead: dto, id: dto.id });
+      if (b.status !== undefined) {
+        await publishForEmployee(req, target || req.user, 'callStatusUpdated', {
+          leadId: dto.id,
+          callerId: dto.assignedCallerId,
+          status: dto.status,
+          updatedAt: dto.updatedAt || new Date().toISOString(),
+          lead: dto,
+        });
+      }
+    } catch (err) {
+      console.error(`[socket] leadUpdated publish failed leadId=${dto.id}: ${err.message}`);
+    }
+    res.json({ success: true, lead: dto });
   } catch (err) {
     serverError(res, err, 'leads.update');
   }
@@ -407,7 +487,16 @@ async function updateStatus(req, res) {
         },
         { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
       );
-      return res.json({ success: true, lead: toLeadDTO(lead.toObject()) });
+      const dto = toLeadDTO(lead.toObject());
+      try {
+        const target = dto.assignedCallerId
+          ? await Employee.findOne({ id: dto.assignedCallerId }).select('id managerId managerName').lean()
+          : req.user;
+        await publishForEmployee(req, target || req.user, 'leadCreated', { lead: dto, id: dto.id });
+      } catch (err) {
+        console.error(`[socket] leadCreated publish failed leadId=${dto.id}: ${err.message}`);
+      }
+      return res.json({ success: true, lead: dto });
     }
 
     if (!(await canTouchLead(req, lead))) return res.status(403).json({ success: false, message: 'This lead is not assigned to you.' });
@@ -422,7 +511,25 @@ async function updateStatus(req, res) {
       }
     }
     await lead.save();
-    res.json({ success: true, lead: toLeadDTO(lead.toObject()) });
+    const dto = toLeadDTO(lead.toObject());
+    try {
+      const target = dto.assignedCallerId
+        ? await Employee.findOne({ id: dto.assignedCallerId }).select('id managerId managerName').lean()
+        : req.user;
+      await publishForEmployee(req, target || req.user, 'leadUpdated', { lead: dto, id: dto.id });
+      if (status) {
+        await publishForEmployee(req, target || req.user, 'callStatusUpdated', {
+          leadId: dto.id,
+          callerId: dto.assignedCallerId,
+          status: dto.status,
+          updatedAt: dto.updatedAt || new Date().toISOString(),
+          lead: dto,
+        });
+      }
+    } catch (err) {
+      console.error(`[socket] lead status publish failed leadId=${dto.id}: ${err.message}`);
+    }
+    res.json({ success: true, lead: dto });
   } catch (err) {
     serverError(res, err, 'leads.status');
   }

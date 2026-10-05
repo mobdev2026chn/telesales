@@ -74,7 +74,7 @@ const profileCache = new Map(); // id -> { at, emp | null }
 async function currentProfile(id) {
   const hit = profileCache.get(id);
   if (hit && Date.now() - hit.at < PROFILE_TTL_MS) return hit.emp;
-  const emp = await Employee.findOne({ id }).select('id role team name phone').lean();
+  const emp = await Employee.findOne({ id }).select('id role team name phone managerId managerName').lean();
   profileCache.set(id, { at: Date.now(), emp: emp || null });
   if (profileCache.size > 5000) profileCache.delete(profileCache.keys().next().value);
   return emp || null;
@@ -82,6 +82,23 @@ async function currentProfile(id) {
 
 function forgetProfile(id) {
   if (id) profileCache.delete(String(id)); else profileCache.clear();
+}
+
+async function verifySocketToken(token) {
+  if (typeof token !== 'string' || !token.trim()) throw new Error('Authentication required');
+  const payload = jwt.verify(token, getSecret());
+  if (!payload.sub) throw new Error('Invalid authentication token');
+  const emp = await currentProfile(String(payload.sub));
+  if (!emp) throw new Error('Account no longer exists');
+  return {
+    id: emp.id,
+    role: normalizeRole(emp.role),
+    name: emp.name || payload.name || '',
+    phone: emp.phone || payload.phone || '',
+    team: emp.team || '',
+    managerId: emp.managerId || '',
+    managerName: emp.managerName || '',
+  };
 }
 
 // Global, non-blocking: attaches req.user when a valid token is present and pins the
@@ -98,6 +115,8 @@ async function authenticate(req, res, next) {
         name: payload.name,
         phone: payload.phone,
         team: payload.team,
+        managerId: '',
+        managerName: '',
       };
     } catch (_) {
       req.tokenInvalid = true;
@@ -115,6 +134,8 @@ async function authenticate(req, res, next) {
         req.user.team = emp.team || '';
         req.user.name = emp.name || req.user.name;
         req.user.phone = emp.phone || req.user.phone;
+        req.user.managerId = emp.managerId || '';
+        req.user.managerName = emp.managerName || '';
       }
     } catch (_) {
       // Database unreachable: keep what the token says rather than failing every request
@@ -173,6 +194,7 @@ module.exports = {
   verifyAndUpgradePassword,
   authenticate,
   forgetProfile,
+  verifySocketToken,
   requireAuth,
   legacyGraceEnabled,
   MANAGERS,

@@ -32,6 +32,20 @@ const dashboardSlice = createSlice({
       state.errorKey = payload.key;
       state.pendingKey = null;
     },
+    employeePresenceChanged(state, { payload }) {
+      if (!state.data) return;
+      const { id, online, lastSeenAt } = payload;
+      const member = state.data.teamMembers?.find((row) => row.id === id);
+      if (member) {
+        member.online = online;
+        member.lastSeenAt = lastSeenAt;
+      }
+      const liveStatus = state.data.callerLiveStatuses?.find((row) => row.id === id);
+      if (liveStatus && liveStatus.status !== 'ON CALL') {
+        liveStatus.status = online ? 'ONLINE' : 'OFFLINE';
+        liveStatus.statusColor = online ? '#34C759' : '#8E8E93';
+      }
+    },
     dashInvalidated(state) { state.dataKey = null; },
     setDashPeriod(state, { payload }) { state.period = payload; state.customDate = null; },
     setDashDate(state, { payload }) { state.customDate = payload || null; },
@@ -44,7 +58,7 @@ const dashboardSlice = createSlice({
 });
 
 export const {
-  dashRequested, dashSucceeded, dashFailed, dashInvalidated,
+  dashRequested, dashSucceeded, dashFailed, dashInvalidated, employeePresenceChanged,
   setDashPeriod, setDashDate, setDashTeamPage, setDashMgrFilter,
 } = dashboardSlice.actions;
 export default dashboardSlice.reducer;

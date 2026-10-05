@@ -15,6 +15,7 @@ import '../models/notification_model.dart';
 import '../services/api_parsers.dart';
 import '../services/api_service.dart';
 import '../services/call_recording_setup.dart';
+import '../services/realtime_service.dart';
 import '../services/work_sim.dart';
 
 enum UserRole { manager, caller }
@@ -469,6 +470,7 @@ class TeleProvider extends ChangeNotifier {
     await fetchDeviceSims();
     if (_isLoggedIn) {
       await refreshProfile();
+      if (_isLoggedIn) _connectRealtime();
     }
     if (_isLoggedIn) {
       await _checkWorkSimForSession(); // before the first sync: only the registered SIM's calls
@@ -512,6 +514,15 @@ class TeleProvider extends ChangeNotifier {
   }
 
   Timer? _syncPollingTimer;
+
+  void _connectRealtime() {
+    if (!_isLoggedIn || _authToken.isEmpty) return;
+    RealtimeService.connect(_authToken, onReconnected: () {
+      if (!_isLoggedIn) return;
+      unawaited(refreshProfile());
+      unawaited(fetchBackendData());
+    });
+  }
 
   Future<void> _sendPresenceHeartbeat() async {
     if (!_isLoggedIn || !_appInForeground) return;
@@ -1336,7 +1347,9 @@ class TeleProvider extends ChangeNotifier {
     }
     for (final sim in readable) {
       if (samePhone(sim.phoneNumber, last10Reg)) {
-        _simTrackingMode = sim.slotIndex == 1 ? SimTrackingMode.sim2Only : SimTrackingMode.sim1Only;
+        _simTrackingMode = isSim2SlotIndex(sim.slotIndex)
+            ? SimTrackingMode.sim2Only
+            : SimTrackingMode.sim1Only;
         _activeSimSlot = sim.slotIndex + 1;
         return {'isValid': true, 'matched': true, 'slotIndex': sim.slotIndex};
       }
@@ -1359,8 +1372,7 @@ class TeleProvider extends ChangeNotifier {
           'isValid': false,
           'message': 'Could not reach the AskEVA server.'
               '${why.isNotEmpty ? '\n\nReason: $why' : ''}'
-              '\n\nTip: open https://telesales.askeva.io/api/health in Chrome on this phone. If it opens, allow AskEVA '
-              'to use Wi-Fi and mobile data in Settings → Apps → AskEVA.',
+              '\n\n${ApiService.simConnectionHelpFor(ApiService.configuredBaseUrl)}',
         };
       }
       if (verifyRes['success'] != true) {
@@ -1493,6 +1505,7 @@ class TeleProvider extends ChangeNotifier {
   /// Signs out and forgets everything that belongs to the user. Always await it.
   Future<void> purgeUserSession() async {
     _sessionGeneration++; // in-flight requests of this session are ignored from now on
+    RealtimeService.disconnect();
     ApiService.clearToken();
     _isLoggedIn = false;
     _setupCompleted = true; // Setup (permissions / SIM) is per device, not per user
@@ -1585,6 +1598,7 @@ class TeleProvider extends ChangeNotifier {
     ApiService.setToken(_authToken);
     _applyUserProfile(user);
     _isLoggedIn = true;
+    _connectRealtime();
     _setupCompleted = true;
     _loginSessionTimestamp = DateTime.now();
     final syncAck = (await SharedPreferences.getInstance()).getInt(_syncAckKey(_currentUserId));
@@ -3019,6 +3033,7 @@ class TeleProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    RealtimeService.disconnect();
     _sessionCallTimer?.cancel();
     _syncPollingTimer?.cancel();
     _playbackPollTimer?.cancel();

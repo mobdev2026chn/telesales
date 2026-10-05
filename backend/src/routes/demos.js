@@ -9,6 +9,7 @@ const { MANAGERS } = require('../middleware/auth');
 const Employee = require('../models/Employee');
 const { resolveScope, NOTHING } = require('../services/scope');
 const { exactNameRegex, parseDate, parseLimit, serverError } = require('../utils/common');
+const { publishForEmployee } = require('../services/realtime');
 
 const router = express.Router();
 
@@ -232,6 +233,13 @@ router.post('/api/demos/:id/cancel', async (req, res) => {
     if (!allowed) return res.status(403).json({ success: false, message: 'You can cancel only your own demos.' });
     if (demo.status !== 'BOOKED') return res.status(400).json({ success: false, message: 'This demo is not active any more.' });
     await DemoBooking.updateOne({ id: demo.id }, { $set: { status: 'CANCELLED' } });
+    const updated = await DemoBooking.findOne({ id: demo.id }).lean();
+    const eventDemo = toDemoDTO(updated);
+    try {
+      await publishForEmployee(req, req.user, 'demoUpdated', { demo: eventDemo, id: eventDemo.id }, [demo.teamLeaderId]);
+    } catch (err) {
+      console.error(`[socket] demoUpdated publish failed demoId=${demo.id}: ${err.message}`);
+    }
     res.json({ success: true });
   } catch (err) { serverError(res, err, 'demos.cancel'); }
 });
@@ -282,7 +290,13 @@ router.post(['/api/demos', '/api/user/demos'], async (req, res) => {
       course: cleanText(b.course, 120),
       reason: cleanText(b.reason, 2000),
     });
-    res.status(201).json({ success: true, demo: toDemoDTO(demo.toObject()) });
+    const eventDemo = toDemoDTO(demo.toObject());
+    try {
+      await publishForEmployee(req, req.user, 'demoCreated', { demo: eventDemo, id: eventDemo.id }, [eventDemo.teamLeaderId]);
+    } catch (err) {
+      console.error(`[socket] demoCreated publish failed demoId=${eventDemo.id}: ${err.message}`);
+    }
+    res.status(201).json({ success: true, demo: eventDemo });
   } catch (err) { serverError(res, err, 'demos.create'); }
 });
 
