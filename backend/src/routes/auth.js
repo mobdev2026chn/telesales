@@ -196,7 +196,4 @@ router.post('/check-phone', async (req, res) => {
 });
 
 module.exports = router;
-
-
-
-
+       
