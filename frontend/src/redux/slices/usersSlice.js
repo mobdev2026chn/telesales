@@ -26,6 +26,15 @@ const usersSlice = createSlice({
       const u = state.list.find(x => x.id === payload.id);
       if (u) Object.assign(u, payload.fields);
     },
+    employeePresenceChanged(state, { payload }) {
+      const patch = { online: payload.online, lastSeenAt: payload.lastSeenAt };
+      const user = state.list.find((row) => row.id === payload.id);
+      if (user) Object.assign(user, patch);
+      if (state.todayMembers) {
+        const todayUser = state.todayMembers.find((row) => row.id === payload.id);
+        if (todayUser) Object.assign(todayUser, patch);
+      }
+    },
     todayLoaded(state, { payload }) { state.todayMembers = payload; state.todayError = null; },
     todayFailed(state, { payload }) { state.todayError = payload; },
   },
@@ -34,5 +43,7 @@ const usersSlice = createSlice({
   },
 });
 
-export const { usersLoaded, usersFailed, userRemoved, userMerged, userPatched, todayLoaded, todayFailed } = usersSlice.actions;
+export const {
+  usersLoaded, usersFailed, userRemoved, userMerged, userPatched, employeePresenceChanged, todayLoaded, todayFailed,
+} = usersSlice.actions;
 export default usersSlice.reducer;

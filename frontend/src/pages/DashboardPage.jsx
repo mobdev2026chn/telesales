@@ -1,7 +1,7 @@
 // ==========================================
 // 1. DASHBOARD: server numbers for the period + the team table
 // ==========================================
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { Col, Row } from '../assets/antd';
@@ -25,9 +25,10 @@ import { selectDashKey, selectScope } from '../redux/selectors';
 import { fmtDur, fmtTalk, fmtTs, formatPhone, validPickerDate } from '../utils/format';
 import { notify } from '../utils/notify';
 import { paginate } from '../utils/table';
-import { periodTargetDays } from '../utils/periods';
+import { periodLabel, periodTargetDays, periodWindow } from '../utils/periods';
 import { managerChainText, mgrFilterOptions, mgrFilterSet, statsFor } from '../utils/scope';
-import { appPresence, hourCounts, presenceTitle } from '../utils/stats';
+import { appPresence, demoHourCounts, hourCounts, presenceTitle } from '../utils/stats';
+import { fetchDemos } from '../utils/actions/demoActions';
 import { fetchDashboard } from '../utils/actions/statsActions';
 
 const TEAM_COLS = '1.3fr 1.3fr 1.1fr 0.8fr 0.9fr 0.9fr 1.4fr';
@@ -117,12 +118,7 @@ export default function DashboardPage() {
         </Col>
 
         <Col xs={24} lg={15}>
-          <div className="card">
-            <div className="card-header"><div className="card-title">Call activity by hour</div><span className="card-subtitle">10 AM – 7 PM IST</span></div>
-            <div className="hour-bars">
-              {server && <HourBars byHour={hourCounts(Array.isArray(server.hourlyAll) ? server.hourlyAll : server.hourlyCalls)} />}
-            </div>
-          </div>
+          <HourlyCard server={server} period={dash.period} customDate={dash.customDate} />
         </Col>
       </Row>
 
@@ -142,6 +138,52 @@ export default function DashboardPage() {
         onOpen={(id) => navigate(userPath(id))}
       />
     </>
+  );
+}
+
+const HOURLY_VIEWS = [{ value: 'calls', label: 'Calls' }, { value: 'demos', label: 'Demo bookings' }];
+
+// Calls by hour, or (toggle) demo bookings by scheduled hour for the same period with their status
+function HourlyCard({ server, period, customDate }) {
+  const [view, setView] = useState('calls');
+  const demos = useSelector(s => s.demos);
+  const showDemos = view === 'demos';
+
+  useEffect(() => {
+    if (showDemos && !demos.loaded && !demos.pending && !demos.error) fetchDemos();
+  }, [showDemos, demos.loaded, demos.pending, demos.error]);
+
+  let bars = null;
+  let footer = null;
+  if (!showDemos) {
+    if (server) bars = <HourBars byHour={hourCounts(Array.isArray(server.hourlyAll) ? server.hourlyAll : server.hourlyCalls)} />;
+  } else if (demos.loaded) {
+    const { start, end } = periodWindow(period, customDate);
+    const { byHour, status } = demoHourCounts(demos.list, start, end);
+    bars = <HourBars byHour={byHour} unit="demo" />;
+    footer = (
+      <div className="mix-legend">
+        <span><span className="legend-swatch" style={{ background: 'var(--ds-green-400)' }} />Booked · <strong>{status.BOOKED}</strong></span>
+        <span><span className="legend-swatch" style={{ background: 'var(--ds-green-500)' }} />Done · <strong>{status.DONE}</strong></span>
+        <span><span className="legend-swatch" style={{ background: 'var(--ds-surface-sunken)' }} />Cancelled · <strong>{status.CANCELLED}</strong></span>
+      </div>
+    );
+  } else {
+    footer = <EmptyState>{demos.error ? `COULD NOT LOAD DEMO BOOKINGS — ${demos.error}` : 'LOADING DEMO BOOKINGS…'}</EmptyState>;
+  }
+
+  return (
+    <div className="card">
+      <div className="card-header">
+        <div className="card-title">{showDemos ? 'Demo bookings by hour' : 'Call activity by hour'}</div>
+        <FilterChips options={HOURLY_VIEWS} value={view} onChange={setView} pressed />
+      </div>
+      <div className="card-subtitle" style={{ marginBottom: 8 }}>
+        {showDemos ? `${periodLabel(period, customDate)} · scheduled time, cancelled not counted · 10 AM – 7 PM IST` : '10 AM – 7 PM IST'}
+      </div>
+      <div className="hour-bars">{bars}</div>
+      {footer}
+    </div>
   );
 }
 
@@ -204,12 +246,16 @@ function TeamPerformance({ server, failed, error, usersError, callers, users, mg
 
   return (
     <div className="neo-table-card">
-      <div className="card-header"><div className="card-title">Team performance</div><span className="card-subtitle">Green = signed in to the app · signed-in agents first</span></div>
+      <div className="card-header"><div className="card-title">Team performance</div><div className="pill-group">
+          <span className="card-subtitle">Green = signed in to the app · signed-in agents first</span>
+          <MgrFilterSelect id="dashMgrFilter" value={mgrValue} options={mgrOptions} onChange={onMgr} />
+        </div>
+      </div>
       <DataTable
         cols={TEAM_COLS}
         head={<>
           <span>Agent</span>
-          <MgrFilterSelect id="dashMgrFilter" value={mgrValue} options={mgrOptions} onChange={onMgr} />
+          <span>Managed by</span>
           <span>Phone / SIM</span><span>Calls</span><span>Connected</span><span>Talk time</span><span>Daily target</span>
         </>}
       >

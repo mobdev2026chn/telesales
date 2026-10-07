@@ -9,20 +9,60 @@ const TOUCH_EVERY_MS = 30 * 1000; // at most one write per user per 30 s
 
 const lastWrite = new Map(); // userId -> ms of the last lastSeenAt write
 
-function touch(userId) {
+function touch(userId, force = false) {
   if (!userId) return;
   const now = Date.now();
-  if (now - (lastWrite.get(userId) || 0) < TOUCH_EVERY_MS) return;
+  if (!force && now - (lastWrite.get(userId) || 0) < TOUCH_EVERY_MS) return;
   lastWrite.set(userId, now);
   Employee.updateOne({ id: userId }, { $set: { lastSeenAt: new Date(now) } }, { timestamps: false })
     .catch(() => lastWrite.delete(userId));
+}
+
+function markSignedIn(userId) {
+  if (!userId) return;
+  const now = new Date(Date.now() + 1);
+  lastWrite.set(userId, now.getTime());
+  Employee.updateOne(
+    { id: userId },
+    { $set: { lastSeenAt: now, socketConnected: null } },
+    { timestamps: false },
+  ).catch((err) => {
+    lastWrite.delete(userId);
+    console.error(`[presence] login timestamp update failed userId=${userId}: ${err.message}`);
+  });
+}
+
+async function socketConnected(userId) {
+  if (!userId) return null;
+  const now = new Date(Date.now() + 1);
+  lastWrite.set(userId, now.getTime());
+  return Employee.updateOne(
+    { id: userId },
+    { $set: { lastSeenAt: now, socketConnected: true } },
+    { timestamps: false },
+  );
+}
+
+async function socketDisconnected(userId) {
+  if (!userId) return null;
+  const now = new Date();
+  lastWrite.set(userId, now.getTime());
+  return Employee.updateOne(
+    { id: userId },
+    { $set: { lastSeenAt: now, loggedOutAt: now, socketConnected: false } },
+    { timestamps: false },
+  );
 }
 
 async function markLoggedOut(userId) {
   if (!userId) return;
   lastWrite.delete(userId);
   // Logging out also ends any break
-  await Employee.updateOne({ id: userId }, { $set: { loggedOutAt: new Date(), breakType: '', breakStartedAt: null } }, { timestamps: false });
+  await Employee.updateOne(
+    { id: userId },
+    { $set: { loggedOutAt: new Date(), socketConnected: false, breakType: '', breakStartedAt: null } },
+    { timestamps: false },
+  );
 }
 
 // A break shown on the portal: started from the app, not older than MAX_BREAK_MS (a phone that
@@ -39,9 +79,20 @@ function breakInfo(emp, now = Date.now()) {
 
 function isOnline(emp, now = Date.now()) {
   if (!emp || !emp.lastSeenAt) return false;
+  if (emp.socketConnected === false) return false;
   const seen = new Date(emp.lastSeenAt).getTime();
   if (now - seen > ONLINE_WINDOW_MS) return false;
   return !emp.loggedOutAt || seen > new Date(emp.loggedOutAt).getTime();
 }
 
-module.exports = { touch, markLoggedOut, isOnline, breakInfo, ONLINE_WINDOW_MS, MAX_BREAK_MS };
+module.exports = {
+  touch,
+  markSignedIn,
+  socketConnected,
+  socketDisconnected,
+  markLoggedOut,
+  isOnline,
+  breakInfo,
+  ONLINE_WINDOW_MS,
+  MAX_BREAK_MS,
+};

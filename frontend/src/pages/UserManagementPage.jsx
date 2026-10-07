@@ -12,15 +12,17 @@ import DataTable, { Heads, TableRow } from '../components/common/DataTable';
 import EmptyState from '../components/common/EmptyState';
 import Icon from '../components/common/Icon';
 import PageHeader from '../components/common/PageHeader';
+import Pager from '../components/common/Pager';
 import PasswordField from '../components/common/PasswordField';
 import UserLink from '../components/common/UserLink';
-import { DEFAULT_DAILY_TARGET, HEAD_ROLES, ROLE_OPTIONS, TREE_FILTERS } from '../data/constants';
+import { DEFAULT_DAILY_TARGET, HEAD_ROLES, ROLE_OPTIONS, TREE_FILTERS, USER_LIST_PAGE_SIZE } from '../data/constants';
 import { PATHS } from '../data/navigation';
 import { closeUserForm, setTreeFilter, setUserView, toggleUserForm } from '../redux/slices/uiSlice';
 import { selectScope } from '../redux/selectors';
 import { fmtTs, formatPhone, last10, roleLabel } from '../utils/format';
 import { byRankThenName, isHead, roleRank, statsFor } from '../utils/scope';
 import { appPresence, presenceTitle } from '../utils/stats';
+import { paginate } from '../utils/table';
 import { viewAsUser } from '../utils/actions/syncActions';
 import { deleteUser, saveUser } from '../utils/actions/userActions';
 
@@ -34,6 +36,7 @@ export default function UserManagementPage() {
   const usersState = useSelector(s => s.users);
   const { userForm, userView, treeFilter } = useSelector(s => s.ui);
   const today = usersState.todayMembers;
+  const [listPage, setListPage] = useState(1);
 
   const viewAs = (uid) => {
     const tab = viewAsUser(uid);
@@ -55,6 +58,7 @@ export default function UserManagementPage() {
 
   // ---- User list: signed in to the phone app first (green), then the rest; most connected calls today on top
   let listBody;
+  let listPager = null;
   if (!visible.length || (!usersState.loaded && usersState.error)) {
     listBody = <EmptyState>{usersState.error ? `COULD NOT LOAD USERS — ${usersState.error}` : 'LOADING USERS…'}</EmptyState>;
   } else {
@@ -62,7 +66,8 @@ export default function UserManagementPage() {
     const ordered = visible.map((u, i) => ({ u, i, c: u.role !== 'ADMIN' ? connectedToday(u) : -1, on: onlineNow(u) }))
       .sort((a, b) => (b.on - a.on) || ((b.c > 0) - (a.c > 0)) || (b.c - a.c) || (a.i - b.i))
       .map(x => x.u);
-    listBody = ordered.map(u => {
+    listPager = paginate(ordered, listPage, USER_LIST_PAGE_SIZE);
+    listBody = listPager.rows.map(u => {
       const mgrUser = users.find(x => x.id === u.mgr);
       const mgrName = mgrUser ? `${mgrUser.name} (${roleLabel(mgrUser.role)})` : '—';
       // Everyone except admins makes calls and is counted on the dashboard / leaderboard
@@ -160,9 +165,12 @@ export default function UserManagementPage() {
             <DataTable cols={LIST_COLS} head={<Heads labels={['Name', 'Login email', 'Phone / SIM', 'Role', 'Manager', 'Target', 'Today', 'Status', 'Actions']} />}>
               {listBody}
             </DataTable>
-            <div className="table-pager">
-              <span className="pager-label">{visible.length} TEAM MEMBER{visible.length === 1 ? '' : 'S'} TOTAL</span>
-            </div>
+            <Pager
+              label={`${listPager && listPager.totalPages > 1 ? `PAGE ${listPager.page} / ${listPager.totalPages} · ` : ''}${visible.length} TEAM MEMBER${visible.length === 1 ? '' : 'S'} TOTAL`}
+              page={listPager ? listPager.page : 1}
+              totalPages={listPager ? listPager.totalPages : 1}
+              onPage={listPager && listPager.totalPages > 1 ? setListPage : undefined}
+            />
           </div>
         </div>
       )}

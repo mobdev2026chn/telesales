@@ -22,7 +22,7 @@ import {
 import { onKeyActivate } from '../utils/dom';
 import { exportRows } from '../utils/excel';
 import { fmtLongDay, fmtTs, formatPhone, istDateStr, istMidnight } from '../utils/format';
-import { blockDemoSlot, cancelDemoBooking, fetchDemos, unblockDemoSlot } from '../utils/actions/demoActions';
+import { blockDemoSlot, cancelDemoBooking, fetchDemos, rescheduleDemoBooking, unblockDemoSlot } from '../utils/actions/demoActions';
 
 const COLS = '1.25fr 1.15fr 1.05fr 0.95fr 1fr 1fr 1.5fr 0.95fr';
 
@@ -32,6 +32,13 @@ export default function DemoBookingsPage() {
   const { visible } = useSelector(selectScope);
   const [menu, setMenu] = useState(null);   // { m, rect }
   const closeMenu = useCallback(() => setMenu(null), []);
+  // Demos being sent back to reschedule: they fade out before the list reloads without them
+  const [fading, setFading] = useState(() => new Set());
+  const fadeOut = useCallback((id, on) => setFading(prev => {
+    const next = new Set(prev);
+    if (on) next.add(id); else next.delete(id);
+    return next;
+  }), []);
 
   useEffect(() => {
     if (!ds.loaded && !ds.pending && !ds.error) fetchDemos();
@@ -82,7 +89,7 @@ export default function DemoBookingsPage() {
     body = list.map(d => {
       const isPast = demoEndMs(d) < Date.now();
       return (
-        <TableRow cols={COLS} key={d.id} style={isPast ? { opacity: 0.7 } : undefined}>
+        <TableRow cols={COLS} key={d.id} style={{ opacity: fading.has(d.id) ? 0 : (isPast ? 0.7 : 1), transition: 'opacity .35s ease' }}>
           <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
             <span className="cell-primary" style={{ fontSize: 13 }}>{fmtDemoDay(d.at)}</span>
             <Badge tone={isPast ? 'neutral' : 'lime'}>{d.slot || fmtTs(d.at)}</Badge>
@@ -125,22 +132,26 @@ export default function DemoBookingsPage() {
               <Button shape="circle" size="small" icon={<Icon name="right" size="sm" />} onClick={() => shiftDay(1)} aria-label="Next day" />
             </Tooltip>
             <Chip active={day === istDateStr(new Date())} icon={<Icon name="calendar" size="sm" />} onClick={() => changeDay(null)}>Today</Chip>
-            <DateField id="demoDayInput" value={day} onChange={changeDay} label="Pick a date" allowClear={false} />
+            <DateField id="demoDayInput" value={day} onChange={changeDay} label="Pick a date" allowClear={false} placement="bottomLeft" />
           </div>
           <span className="demo-slot-hint">10:00 AM – 7:00 PM · 30-min slots</span>
         </div>
         <div className="demo-slot-grid">
           {DEMO_SLOTS.map(m => {
             const st = demoSlotState(ds.list, ds.blocks, tl, ds.day, m);
+            const live = st.bookings.filter(d => !fading.has(d.id));
             let cls = 'demo-slot';
             let sub = '';
             if (st.blocks.length) {
               cls += ' is-blocked';
               sub = `Blocked${tl === 'ALL' ? ` · ${st.blocks[0].teamLeaderName || 'All'}` : ''}`;
-            } else if (st.bookings.length) {
+            } else if (live.length) {
               cls += ' is-booked';
+              sub = live[0].clientName || '—';
+              if (live.length > 1) sub += ` +${live.length - 1}`;
+            } else if (st.bookings.length) {
+              cls += ' is-fading';
               sub = st.bookings[0].clientName || '—';
-              if (st.bookings.length > 1) sub += ` +${st.bookings.length - 1}`;
             }
             if (st.past) cls += ' is-past';
             return (
@@ -164,13 +175,13 @@ export default function DemoBookingsPage() {
         </DataTable>
       </div>
 
-      {menu && <SlotMenu menu={menu} tl={tl} visible={visible} onClose={closeMenu} />}
+      {menu && <SlotMenu menu={menu} tl={tl} visible={visible} onClose={closeMenu} onFade={fadeOut} />}
     </>
   );
 }
 
-// Slot action menu (⋯): block / unblock a slot, or cancel the demo booked in it
-function SlotMenu({ menu, tl, visible, onClose }) {
+// Slot action menu (⋯): block / unblock a slot, or cancel / reschedule the demo booked in it
+function SlotMenu({ menu, tl, visible, onClose, onFade }) {
   const ds = useSelector(s => s.demos);
   const ref = useRef(null);
   const [pos, setPos] = useState({ left: 0, top: 0, ready: false });
@@ -208,6 +219,14 @@ function SlotMenu({ menu, tl, visible, onClose }) {
     if (!window.confirm('Cancel this demo booking? The slot becomes free again.')) return;
     act(() => cancelDemoBooking(id));
   };
+  // Sends the demo back to the caller who booked it: the slot becomes free and they book a new one in the app
+  const reschedule = (d) => {
+    if (!window.confirm(`Send this demo back to ${d.agent || 'the caller'} to reschedule? The slot becomes free and they book a new slot in the app.`)) return;
+    act(() => {
+      onFade(d.id, true);
+      setTimeout(() => rescheduleDemoBooking(d.id).finally(() => onFade(d.id, false)), 350);
+    });
+  };
 
   return createPortal(
     <div ref={ref} className="demo-slot-menu" onClick={(e) => e.stopPropagation()}
@@ -218,7 +237,12 @@ function SlotMenu({ menu, tl, visible, onClose }) {
         <div className="demo-menu-item" key={d.id}>
           <strong>{d.clientName || '—'}</strong>
           <span>{[d.clientPhone ? formatPhone(d.clientPhone) : '', d.teamLeaderName, d.agent ? `by ${d.agent}` : ''].filter(Boolean).join(' · ')}</span>
-          {!st.past && <Button size="small" icon={<Icon name="missed" size="sm" />} onClick={() => cancel(d.id)}>Cancel demo</Button>}
+          {!st.past && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <Button size="small" icon={<Icon name="missed" size="sm" />} onClick={() => cancel(d.id)}>Cancel demo</Button>
+              <Button size="small" icon={<Icon name="clock" size="sm" />} onClick={() => reschedule(d)}>Reschedule</Button>
+            </div>
+          )}
         </div>
       ))}
       {st.blocks.map(b => (

@@ -7,8 +7,10 @@ const DemoBooking = require('../models/DemoBooking');
 const DemoBlock = require('../models/DemoBlock');
 const { MANAGERS } = require('../middleware/auth');
 const Employee = require('../models/Employee');
+const Notification = require('../models/Notification');
 const { resolveScope, NOTHING } = require('../services/scope');
 const { exactNameRegex, parseDate, parseLimit, serverError } = require('../utils/common');
+const { publishForEmployee } = require('../services/realtime');
 
 const router = express.Router();
 
@@ -230,10 +232,71 @@ router.post('/api/demos/:id/cancel', async (req, res) => {
       allowed = scope.all || !!(await DemoBooking.exists({ $and: [{ id: demo.id }, demoQueryFor(scope)] }));
     }
     if (!allowed) return res.status(403).json({ success: false, message: 'You can cancel only your own demos.' });
-    if (demo.status !== 'BOOKED') return res.status(400).json({ success: false, message: 'This demo is not active any more.' });
+    // A demo sent back for rescheduling is closed this way too, once the caller rebooks or drops it
+    if (!['BOOKED', 'RESCHEDULE'].includes(demo.status)) return res.status(400).json({ success: false, message: 'This demo is not active any more.' });
     await DemoBooking.updateOne({ id: demo.id }, { $set: { status: 'CANCELLED' } });
+    const updated = await DemoBooking.findOne({ id: demo.id }).lean();
+    const eventDemo = toDemoDTO(updated);
+    try {
+      await publishForEmployee(req, req.user, 'demoUpdated', { demo: eventDemo, id: eventDemo.id }, [demo.teamLeaderId]);
+    } catch (err) {
+      console.error(`[socket] demoUpdated publish failed demoId=${demo.id}: ${err.message}`);
+    }
     res.json({ success: true });
   } catch (err) { serverError(res, err, 'demos.cancel'); }
+});
+
+// "10:00 AM - 10:30 AM" in India time, the same label the app saves on a booking
+function istSlotLabel(start, minutes) {
+  const fmt = (d) => new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit', hour12: true }).format(d);
+  return `${fmt(start)} - ${fmt(new Date(start.getTime() + minutes * MIN))}`;
+}
+
+// POST /api/demos/:id/reschedule: a portal user who can see a demo sends it back to the caller who
+// booked it. The slot becomes free (status RESCHEDULE) and the caller books a new slot from the app;
+// they get a live update and a notification.
+router.post('/api/demos/:id/reschedule', async (req, res) => {
+  try {
+    if (!isManager(req)) return res.status(403).json({ success: false, message: 'You do not have permission for this action.' });
+    const demo = await DemoBooking.findOne({ id: cleanText(req.params.id, 80) }).lean();
+    if (!demo) return res.status(404).json({ success: false, message: 'This demo no longer exists.' });
+    const scope = await resolveScope(req, {});
+    const allowed = scope.all || !!(await DemoBooking.exists({ $and: [{ id: demo.id }, demoQueryFor(scope)] }));
+    if (!allowed) return res.status(403).json({ success: false, message: 'You can reschedule only demos in your team.' });
+    if (demo.status !== 'BOOKED') return res.status(400).json({ success: false, message: 'This demo is not active any more.' });
+    if (!demo.callerId) return res.status(400).json({ success: false, message: 'No caller is linked to this demo. Cancel it instead.' });
+
+    await DemoBooking.updateOne({ id: demo.id }, { $set: { status: 'RESCHEDULE' } });
+    const eventDemo = toDemoDTO(await DemoBooking.findOne({ id: demo.id }).lean());
+    const oldSlot = `${new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short' }).format(new Date(demo.scheduledAt))}, ${demo.slot || istSlotLabel(new Date(demo.scheduledAt), durOf(demo))}`;
+
+    // Tell the caller who booked it: live update in the app and portal, plus a notification
+    const caller = demo.callerId ? await Employee.findOne({ id: demo.callerId }).lean() : null;
+    try {
+      await publishForEmployee(req, caller || req.user, 'demoUpdated', { demo: eventDemo, id: eventDemo.id }, [demo.teamLeaderId, demo.callerId]);
+    } catch (err) {
+      console.error(`[socket] demoUpdated publish failed demoId=${demo.id}: ${err.message}`);
+    }
+    if (caller) {
+      try {
+        await Notification.create({
+          id: `notif_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
+          recipientId: caller.id,
+          recipientPhone: caller.phone || '',
+          recipientName: caller.name || '',
+          senderName: cleanText(req.user.name, 120),
+          senderRole: req.user.role,
+          contactName: demo.clientName || '',
+          title: `Reschedule demo · ${demo.clientName || 'client'}`,
+          message: `${cleanText(req.user.name, 120) || 'Your team'} asked you to reschedule the demo with ${demo.clientName || 'the client'} (was ${oldSlot}). Open BOOK DEMO and book a new slot.`,
+          isRead: false,
+        });
+      } catch (err) {
+        console.error(`demo reschedule notification failed demoId=${demo.id}: ${err.message}`);
+      }
+    }
+    res.json({ success: true, demo: eventDemo });
+  } catch (err) { serverError(res, err, 'demos.reschedule'); }
 });
 
 // POST /api/demos: the signed-in caller books a demo with a Team Leader.
@@ -282,7 +345,13 @@ router.post(['/api/demos', '/api/user/demos'], async (req, res) => {
       course: cleanText(b.course, 120),
       reason: cleanText(b.reason, 2000),
     });
-    res.status(201).json({ success: true, demo: toDemoDTO(demo.toObject()) });
+    const eventDemo = toDemoDTO(demo.toObject());
+    try {
+      await publishForEmployee(req, req.user, 'demoCreated', { demo: eventDemo, id: eventDemo.id }, [eventDemo.teamLeaderId]);
+    } catch (err) {
+      console.error(`[socket] demoCreated publish failed demoId=${eventDemo.id}: ${err.message}`);
+    }
+    res.status(201).json({ success: true, demo: eventDemo });
   } catch (err) { serverError(res, err, 'demos.create'); }
 });
 

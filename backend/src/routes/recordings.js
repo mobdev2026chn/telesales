@@ -17,6 +17,7 @@ const { resolveScope, recordingQueryFor, ownerInScope, findEmployeeByRef } = req
 const { pickClosestCall, recordingStartMs, parseRange, LINK_WINDOW_MS } = require('../services/matching');
 const { applyRecordingToLead } = require('../services/callStats');
 const { getCloudName, decodeBase64, uploadBuffer, deleteAsset } = require('../services/cloudinary');
+const { publishForEmployee } = require('../services/realtime');
 
 const router = express.Router();
 const uploadsDir = path.join(__dirname, '../../uploads/recordings');
@@ -494,7 +495,15 @@ router.post(['/api/recordings', '/api/user/recordings/upload', '/api/admin/recor
       console.warn('CallLog/Lead link warning:', linkErr.message);
     }
 
-    res.status(201).json({ success: true, recording: toRecordingDTO(rec.toObject()) });
+    const dto = toRecordingDTO(rec.toObject());
+    if (uploader) {
+      try {
+        await publishForEmployee(req, uploader, 'recordingUploaded', { recording: dto, id: dto.id });
+      } catch (err) {
+        console.error(`[socket] recordingUploaded publish failed recordingId=${dto.id}: ${err.message}`);
+      }
+    }
+    res.status(201).json({ success: true, recording: dto });
   } catch (err) {
     if (pendingCloudinaryAsset) {
       try {

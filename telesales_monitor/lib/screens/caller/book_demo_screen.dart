@@ -79,8 +79,8 @@ class _Busy {
   }
 }
 
-/// BOOK DEMO tab: pick a team leader, a day and one or more 30-minute slots, then fill in each
-/// slot's client. Booked slots show green, slots blocked from the portal red, the caller's own ★.
+/// BOOK DEMO tab: pick a team leader, a day and one or more 30-minute slots, then fill in one
+/// client form for them. Booked slots show green, slots blocked from the portal red, the caller's own ★.
 class BookDemoScreen extends StatefulWidget {
   const BookDemoScreen({super.key});
 
@@ -102,6 +102,9 @@ class _BookDemoScreenState extends State<BookDemoScreen> {
   String? _mineError;
   String? _teamLeaderError;
   Timer? _refresh;
+  // A demo sent back from the portal that the caller is booking again: its details prefill the form
+  // and it is closed once the new slot(s) are booked
+  Map<String, dynamic>? _rebook;
 
   @override
   void initState() {
@@ -196,6 +199,8 @@ class _BookDemoScreenState extends State<BookDemoScreen> {
     final now = DateTime.now();
     final upcoming =
         list.where((d) {
+          // Sent back from the portal: stays listed until the caller books again or drops it
+          if (d['status'] == 'RESCHEDULE') return true;
           if ((d['status'] ?? 'BOOKED') != 'BOOKED') return false;
           final at = DateTime.tryParse(
             d['scheduledAt']?.toString() ?? '',
@@ -336,13 +341,38 @@ class _BookDemoScreenState extends State<BookDemoScreen> {
         slots: slots,
         teamLeaderId: _teamLeaderId ?? '',
         teamLeaderName: _teamLeaderName,
+        prefill: _rebook,
       ),
     );
     if (!mounted || booked == null) return;
     setState(() => _selected.clear());
+    final rebook = _rebook;
+    if (booked > 0 && rebook != null) {
+      // The new booking replaces the demo sent back for rescheduling
+      await ApiService.cancelDemo((rebook['id'] ?? '').toString());
+      if (!mounted) return;
+      setState(() => _rebook = null);
+    }
     if (booked > 0) _toast('$booked slot${booked > 1 ? 's' : ''} booked ✓');
     _loadDay(quiet: true);
     _loadMine();
+  }
+
+  /// BOOK AGAIN on a demo sent back from the portal: same team leader, its day (or today if it
+  /// has passed), and its client details prefilled in the form once new slot(s) are picked.
+  void _startRebook(Map<String, dynamic> d) {
+    final tlId = (d['teamLeaderId'] ?? '').toString();
+    final at = DateTime.tryParse(d['scheduledAt']?.toString() ?? '')?.toLocal();
+    final today = _dayOnly(DateTime.now());
+    final day = at == null || _dayOnly(at).isBefore(today) ? today : _dayOnly(at);
+    setState(() {
+      _rebook = d;
+      if (tlId.isNotEmpty && (_teamLeaders ?? const []).any((t) => t['id'] == tlId)) {
+        _teamLeaderId = tlId;
+      }
+    });
+    _setDay(day, revealInStrip: true);
+    _toast('Pick new slot(s) above, then BOOK DEMO →');
   }
 
   Future<void> _cancel(String id) async {
@@ -387,6 +417,9 @@ class _BookDemoScreenState extends State<BookDemoScreen> {
     if (ok != true || !mounted) return;
     final err = await ApiService.cancelDemo(id);
     if (!mounted) return;
+    if (err == null && _rebook != null && _rebook!['id'] == id) {
+      setState(() => _rebook = null);
+    }
     _toast(err ?? 'Slot released');
     _loadDay(quiet: true);
     _loadMine();
@@ -797,7 +830,9 @@ class _BookDemoScreenState extends State<BookDemoScreen> {
       opacity: past ? 0.35 : 1,
       child: GestureDetector(
         onTap: () => _tap(m),
-        child: Container(
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeOut,
           height: 40,
           alignment: Alignment.center,
           decoration: BoxDecoration(
@@ -814,12 +849,16 @@ class _BookDemoScreenState extends State<BookDemoScreen> {
             fit: BoxFit.scaleDown,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Text(
-                '${_shortClock(m)}–${_shortClock(m + _slotMinutes)}${mark.isEmpty ? '' : ' $mark'}',
-                style: AppTheme.mono(
-                  size: 11,
-                  color: fg,
-                  weight: FontWeight.w700,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 400),
+                child: Text(
+                  '${_shortClock(m)}–${_shortClock(m + _slotMinutes)}${mark.isEmpty ? '' : ' $mark'}',
+                  key: ValueKey('$mark$fg'),
+                  style: AppTheme.mono(
+                    size: 11,
+                    color: fg,
+                    weight: FontWeight.w700,
+                  ),
                 ),
               ),
             ),
@@ -870,13 +909,21 @@ class _BookDemoScreenState extends State<BookDemoScreen> {
           final m = at == null ? 0 : at.hour * 60 + at.minute;
           final tl = (d['teamLeaderName'] ?? '').toString();
           final client = (d['clientName'] ?? '').toString();
-          return Container(
+          final resched = d['status'] == 'RESCHEDULE';
+          final rebooking = _rebook != null && _rebook!['id'] == d['id'];
+          return AnimatedContainer(
+            key: ValueKey(d['id']),
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeOut,
             margin: const EdgeInsets.only(bottom: 8),
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: const Color(0xFFF4FFF0),
+              color: resched ? const Color(0xFFFFF3E0) : const Color(0xFFF4FFF0),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppTheme.ink900, width: 2),
+              border: Border.all(
+                color: resched ? AppTheme.redMissed : AppTheme.ink900,
+                width: 2,
+              ),
             ),
             child: Row(
               children: [
@@ -884,9 +931,22 @@ class _BookDemoScreenState extends State<BookDemoScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      if (resched)
+                        Text(
+                          rebooking
+                              ? 'RESCHEDULE · PICK NEW SLOT(S) ABOVE'
+                              : 'RESCHEDULE NEEDED · BOOK AGAIN',
+                          style: AppTheme.mono(
+                            size: 10,
+                            color: AppTheme.redMissed,
+                            weight: FontWeight.w700,
+                          ),
+                        ),
                       Text(
                         '${_clock(m)} - ${_clock(m + mins)}',
-                        style: AppTheme.headline(size: 17),
+                        style: AppTheme.headline(size: 17).copyWith(
+                          decoration: resched ? TextDecoration.lineThrough : null,
+                        ),
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -904,18 +964,25 @@ class _BookDemoScreenState extends State<BookDemoScreen> {
                     ],
                   ),
                 ),
-                IconButton(
-                  tooltip: 'Add to Google Calendar',
-                  onPressed: () => _addToGoogleCalendar(d),
-                  icon: const Icon(Icons.event_available_rounded),
-                  color: AppTheme.ink900,
-                  constraints: const BoxConstraints.tightFor(
-                    width: 36,
-                    height: 36,
+                if (resched)
+                  _Btn(
+                    label: rebooking ? 'PICKING…' : 'BOOK AGAIN',
+                    color: AppTheme.limeYellow,
+                    onTap: () => _startRebook(d),
+                  )
+                else
+                  IconButton(
+                    tooltip: 'Add to Google Calendar',
+                    onPressed: () => _addToGoogleCalendar(d),
+                    icon: const Icon(Icons.event_available_rounded),
+                    color: AppTheme.ink900,
+                    constraints: const BoxConstraints.tightFor(
+                      width: 36,
+                      height: 36,
+                    ),
+                    padding: EdgeInsets.zero,
+                    visualDensity: VisualDensity.compact,
                   ),
-                  padding: EdgeInsets.zero,
-                  visualDensity: VisualDensity.compact,
-                ),
                 const SizedBox(width: 4),
                 GestureDetector(
                   onTap: () => _cancel((d['id'] ?? '').toString()),
@@ -1131,76 +1198,64 @@ class _ReadOnlyField extends StatelessWidget {
   );
 }
 
-/// "DEMO DETAILS": one client form per selected slot. Pops the number of slots booked.
+/// "DEMO DETAILS": one client form for all selected slots, which are listed with their times.
+/// Each slot is still booked separately with the same details. Pops the number of slots booked.
 class _DemoDetailsSheet extends StatefulWidget {
   final DateTime day;
   final List<int> slots;
   final String teamLeaderId;
   final String teamLeaderName;
+  final Map<String, dynamic>? prefill; // demo being booked again after a reschedule request
 
   const _DemoDetailsSheet({
     required this.day,
     required this.slots,
     required this.teamLeaderId,
     required this.teamLeaderName,
+    this.prefill,
   });
 
   @override
   State<_DemoDetailsSheet> createState() => _DemoDetailsSheetState();
 }
 
-class _SlotForm {
-  final client = TextEditingController();
-  final phone = TextEditingController();
-  final about = TextEditingController();
-  final notes = TextEditingController();
-  bool done = false;
-
-  void dispose() {
-    client.dispose();
-    phone.dispose();
-    about.dispose();
-    notes.dispose();
-  }
-}
-
 class _DemoDetailsSheetState extends State<_DemoDetailsSheet> {
-  late final List<_SlotForm> _forms = widget.slots
-      .map((_) => _SlotForm())
-      .toList();
+  late final _client = TextEditingController(text: _pre('clientName'));
+  late final _phone = TextEditingController(
+    text: _pre('clientPhone').replaceAll(RegExp(r'\D'), '').replaceFirst(RegExp(r'^91(?=\d{10}$)'), ''),
+  );
+  late final _about = TextEditingController(text: _pre('course'));
+  late final _notes = TextEditingController(text: _pre('reason'));
+
+  String _pre(String key) => (widget.prefill?[key] ?? '').toString();
+  final Set<int> _done = {}; // indexes into widget.slots already booked
   bool _saving = false;
   String? _error;
   int _booked = 0;
 
   @override
   void dispose() {
-    for (final f in _forms) {
-      f.dispose();
-    }
+    _client.dispose();
+    _phone.dispose();
+    _about.dispose();
+    _notes.dispose();
     super.dispose();
   }
 
   Future<void> _confirm() async {
-    // Check every slot first, like the web form, so nothing is half-booked by a typo
-    for (int i = 0; i < widget.slots.length; i++) {
-      final f = _forms[i];
-      if (f.done) continue;
-      final lb = _range(widget.slots[i]);
-      if (f.client.text.trim().isEmpty)
-        return setState(() => _error = '$lb: enter client name');
-      if (!RegExp(r'^\d{10}$').hasMatch(f.phone.text.trim()))
-        return setState(() => _error = '$lb: enter valid 10-digit phone');
-      if (f.about.text.trim().isEmpty)
-        return setState(() => _error = '$lb: enter client need');
-    }
+    if (_client.text.trim().isEmpty)
+      return setState(() => _error = 'Enter client name');
+    if (!RegExp(r'^\d{10}$').hasMatch(_phone.text.trim()))
+      return setState(() => _error = 'Enter valid 10-digit phone');
+    if (_about.text.trim().isEmpty)
+      return setState(() => _error = 'Enter client need');
     setState(() {
       _saving = true;
       _error = null;
     });
     final failures = <String>[];
     for (int i = 0; i < widget.slots.length; i++) {
-      final f = _forms[i];
-      if (f.done) continue;
+      if (_done.contains(i)) continue;
       final m = widget.slots[i];
       final start = widget.day.add(Duration(minutes: m));
       if (!start.isAfter(DateTime.now())) {
@@ -1209,18 +1264,18 @@ class _DemoDetailsSheetState extends State<_DemoDetailsSheet> {
       }
       final err = await ApiService.bookDemo(
         leadId: '',
-        clientName: f.client.text.trim(),
-        clientPhone: f.phone.text.trim(),
+        clientName: _client.text.trim(),
+        clientPhone: _phone.text.trim(),
         scheduledAt: start,
         slot: _range(m),
-        course: f.about.text.trim(),
-        reason: f.notes.text.trim(),
+        course: _about.text.trim(),
+        reason: _notes.text.trim(),
         teamLeaderId: widget.teamLeaderId,
         durationMinutes: _slotMinutes,
       );
       if (!mounted) return;
       if (err == null) {
-        f.done = true;
+        _done.add(i);
         _booked++;
       } else {
         failures.add('${_range(m)}: $err');
@@ -1306,8 +1361,8 @@ class _DemoDetailsSheetState extends State<_DemoDetailsSheet> {
     final sub = [
       DateFormat('EEEE, d MMMM').format(widget.day),
       if (widget.teamLeaderName.isNotEmpty) 'with ${widget.teamLeaderName}',
-      'fill each slot separately',
     ].join(' · ').toUpperCase();
+    final allDone = _done.length == n;
     return Padding(
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
@@ -1333,71 +1388,74 @@ class _DemoDetailsSheetState extends State<_DemoDetailsSheet> {
                     weight: FontWeight.w400,
                   ).copyWith(letterSpacing: 1.5),
                 ),
-                for (int i = 0; i < n; i++)
-                  Container(
-                    margin: const EdgeInsets.only(top: 12),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppTheme.white,
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: AppTheme.ink900, width: 2),
-                      boxShadow: AppTheme.neoShadowSm(),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _forms[i].done
-                                ? AppTheme.greenNeon
-                                : AppTheme.limeYellow,
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(
-                              color: AppTheme.ink900,
-                              width: 2,
-                            ),
-                          ),
-                          child: Text(
-                            'Slot ${i + 1} · ${_range(widget.slots[i])}${_forms[i].done ? ' · BOOKED ✓' : ''}',
-                            style: AppTheme.mono(
-                              size: 11,
-                              weight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                        _label('CLIENT NAME'),
-                        _field(
-                          _forms[i].client,
-                          'Client name',
-                          enabled: !_forms[i].done,
-                        ),
-                        _label('CLIENT PHONE'),
-                        _field(
-                          _forms[i].phone,
-                          '10-digit number',
-                          phone: true,
-                          enabled: !_forms[i].done,
-                        ),
-                        _label('ABOUT / CLIENT NEED'),
-                        _field(
-                          _forms[i].about,
-                          'e.g. Full-stack course, weekend batch',
-                          enabled: !_forms[i].done,
-                        ),
-                        _label('NOTES'),
-                        _field(
-                          _forms[i].notes,
-                          'Anything to know before the demo',
-                          lines: 3,
-                          enabled: !_forms[i].done,
-                        ),
-                      ],
-                    ),
+                Container(
+                  margin: const EdgeInsets.only(top: 12),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.white,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: AppTheme.ink900, width: 2),
+                    boxShadow: AppTheme.neoShadowSm(),
                   ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _label(n > 1 ? 'SELECTED TIMES ($n SLOTS)' : 'SELECTED TIME'),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          for (int i = 0; i < n; i++)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _done.contains(i)
+                                    ? AppTheme.greenNeon
+                                    : AppTheme.limeYellow,
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(
+                                  color: AppTheme.ink900,
+                                  width: 2,
+                                ),
+                              ),
+                              child: Text(
+                                '${_range(widget.slots[i])}${_done.contains(i) ? ' · BOOKED ✓' : ''}',
+                                style: AppTheme.mono(
+                                  size: 11,
+                                  weight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      _label('CLIENT NAME'),
+                      _field(_client, 'Client name', enabled: !allDone),
+                      _label('CLIENT PHONE'),
+                      _field(
+                        _phone,
+                        '10-digit number',
+                        phone: true,
+                        enabled: !allDone,
+                      ),
+                      _label('ABOUT / CLIENT NEED'),
+                      _field(
+                        _about,
+                        'e.g. Full-stack course, weekend batch',
+                        enabled: !allDone,
+                      ),
+                      _label('NOTES'),
+                      _field(
+                        _notes,
+                        'Anything to know before the demo',
+                        lines: 3,
+                        enabled: !allDone,
+                      ),
+                    ],
+                  ),
+                ),
                 if (_error != null) ...[
                   const SizedBox(height: 12),
                   Text(

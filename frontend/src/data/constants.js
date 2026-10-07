@@ -157,6 +157,8 @@ export const REC_SAVE_DEBOUNCE_MS = 700;
 // ==========================================
 export const DASH_TEAM_PAGE_SIZE = 10;
 export const USER_DETAIL_PAGE_SIZE = 25;
+export const USER_LIST_PAGE_SIZE = 10;
+export const LEADERBOARD_PAGE_SIZE = 10;
 export const TREE_FILTERS = [
   { value: 'ALL', label: 'All users' },
   { value: 'MGR', label: 'Managers' },

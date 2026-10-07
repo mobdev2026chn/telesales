@@ -3,7 +3,7 @@
 import {
   ApartmentOutlined, AimOutlined, ArrowDownOutlined, ArrowLeftOutlined, ArrowUpOutlined, BarChartOutlined, CalendarOutlined,
   CaretRightOutlined, CheckCircleOutlined, CheckOutlined, ClockCircleOutlined, CloseCircleOutlined, CloseOutlined,
-  CloudUploadOutlined, CrownFilled, CustomerServiceOutlined, DashboardOutlined, DeleteOutlined, DownloadOutlined,
+  CloudUploadOutlined, CrownFilled, CustomerServiceOutlined, DashboardOutlined, DeleteOutlined, DownloadOutlined, DownOutlined,
   EditOutlined, EllipsisOutlined, ExclamationCircleOutlined, EyeOutlined, FileExcelOutlined, FileOutlined, FlagOutlined,
   FunnelPlotOutlined, HistoryOutlined, InboxOutlined, LeftOutlined, LineChartOutlined, LoginOutlined, LogoutOutlined,
   MenuOutlined, PauseOutlined, PhoneOutlined, PlayCircleOutlined, PlusOutlined, PushpinFilled, PushpinOutlined,
@@ -57,6 +57,7 @@ export const ICONS = {
   'check-plain': CheckOutlined,
   crown: CrownFilled,
   delete: DeleteOutlined,
+  down: DownOutlined,
   edit: EditOutlined,
   ellipsis: EllipsisOutlined,
   excel: FileExcelOutlined,
@@ -77,8 +78,9 @@ export const ICONS = {
   user: UserOutlined,
 };
 
-// Inbound / outbound arrows point diagonally (↙ / ↗), like the old sprite
-export const ICON_ROTATE = { in: 45, out: 45 };
+// Inbound / outbound arrows point diagonally (↙ / ↗), like the old sprite; antd's handset is drawn
+// mirrored, so it turns 90° to the usual call-icon pose (earpiece top-left)
+export const ICON_ROTATE = { in: 45, out: 45, phone: 90 };
 
 // Sidebar icon for each page (navigation.js `tab` keys)
 export const NAV_ICONS = {
@@ -118,8 +120,15 @@ export const ANT_THEME = {
   components: {
     Button: { primaryColor: '#10180C', fontWeight: 600, primaryShadow: 'none', dangerShadow: 'none', defaultShadow: '0 1px 2px rgba(16, 24, 12, 0.05)' },
     Rate: { starColor: '#3DC838', starSize: 17 },
-    Select: { optionSelectedBg: '#F2FBD6', optionSelectedFontWeight: 700 },
+    Select: {
+      optionSelectedBg: '#F2FBD6', optionSelectedFontWeight: 700, optionActiveBg: '#F7F6F1',
+      optionPadding: '8px 12px', optionHeight: 36, selectorBg: '#FFFFFF', activeOutlineColor: 'rgba(61, 200, 56, 0.18)',
+      hoverBorderColor: '#9FD98F', activeBorderColor: '#3DC838',
+    },
     Segmented: { itemSelectedBg: '#FFFFFF', trackBg: '#F0EEE7' },
-    DatePicker: { activeBorderColor: '#2E9E2B' },
+    DatePicker: {
+      activeBorderColor: '#2E9E2B', hoverBorderColor: '#9FD98F', cellHeight: 30, cellWidth: 34, cellActiveWithRangeBg: '#F2FBD6',
+      cellHoverBg: '#F2FBD6', textHeight: 36, withoutTimeCellHeight: 40,
+    },
   },
 };

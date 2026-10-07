@@ -51,3 +51,8 @@ export function unblockDemoSlot(id) {
 export function cancelDemoBooking(id) {
   return demoSlotAction(() => demoService.cancel(id), 'DEMO CANCELLED');
 }
+
+// Send a demo back to the caller who booked it to pick a new slot (the server notifies them)
+export function rescheduleDemoBooking(id) {
+  return demoSlotAction(() => demoService.reschedule(id), 'SENT TO CALLER TO RESCHEDULE');
+}

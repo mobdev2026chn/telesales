@@ -2,6 +2,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:telesales_monitor/services/work_sim.dart';
 
 void main() {
+  group('isSim2SlotIndex', () {
+    test('maps Android slot indices to SIM numbers correctly', () {
+      expect(isSim2SlotIndex(0), isFalse);
+      expect(isSim2SlotIndex(1), isTrue);
+    });
+  });
+
   group('isWorkSimCall', () {
     test('registered on SIM 2: SIM 1 calls are dropped, SIM 2 calls kept', () {
       expect(isWorkSimCall(1, 'sim2Only', 2), isFalse);

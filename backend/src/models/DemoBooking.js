@@ -20,7 +20,7 @@ const DemoBookingSchema = new mongoose.Schema({
   teamLeaderId: { type: String, default: '' },
   teamLeaderName: { type: String, default: '' },
   reason: { type: String, default: '' },
-  status: { type: String, enum: ['BOOKED', 'DONE', 'CANCELLED'], default: 'BOOKED' },
+  status: { type: String, enum: ['BOOKED', 'DONE', 'CANCELLED', 'RESCHEDULE'], default: 'BOOKED' },
 }, { timestamps: true });
 
 DemoBookingSchema.index({ callerId: 1, scheduledAt: -1 });

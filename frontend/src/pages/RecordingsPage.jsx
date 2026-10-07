@@ -159,6 +159,10 @@ function RecordingCard({ rec: c, meta, users }) {
   const mgrUser = agentUser ? users.find(m => m.id === agentUser.mgr) : null;
   const teamName = mgrUser ? mgrUser.name.toUpperCase() : 'MANAGEMENT';
   const on = !!meta.pinned;
+  // Source file and quality audit open from the card's Details toggle
+  const [open, setOpen] = useState(false);
+  const st = meta.status || 'PENDING';
+  const detailsId = `recDetails_${String(c.id).replace(/[^A-Za-z0-9_-]/g, '_')}`;
 
   // Card time: "current / total" — total is the audio file's length once known, else the call's talk time
   const updateClock = (el) => {
@@ -179,7 +183,7 @@ function RecordingCard({ rec: c, meta, users }) {
   }, [c.id]);
 
   return (
-    <div className="card rec-card">
+    <div className={`card rec-card${open ? ' is-open' : ''}`}>
       <div className="rec-card-top">
         <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 12 }}>
           <span className="kpi-icon" style={{ width: 38, height: 38 }}><Icon name="headphones" /></span>
@@ -215,14 +219,23 @@ function RecordingCard({ rec: c, meta, users }) {
             onLoadedMetadata={(e) => updateClock(e.currentTarget)}
             onTimeUpdate={(e) => updateClock(e.currentTarget)}
           />
+          <Button className="rec-toggle" aria-expanded={open} aria-controls={detailsId} onClick={() => setOpen(v => !v)}
+            title={open ? 'Hide details' : 'Show source file and quality audit'}>
+            <Badge tone={st === 'APPROVED' ? 'success' : (st === 'FLAGGED' ? 'danger' : 'neutral')}>{st}</Badge>
+            Details<Icon name="down" size="sm" className="rec-toggle-chevron" />
+          </Button>
         </div>
       </div>
-      <div className="rec-source">
-        <div style={{ minWidth: 0, overflowWrap: 'anywhere' }}><Icon name="file" size="sm" /> <strong>Source file:</strong> <span className="muted">{c.fileName || '—'}</span></div>
-        <div><Icon name="users" size="sm" /> <strong>Team audit:</strong> {teamName}&apos;S TEAM</div>
-      </div>
-      <div className="rec-review">
-        <ReviewSection id={c.id} meta={meta} />
+      <div className="rec-details" id={detailsId} inert={!open}>
+        <div className="rec-details-inner">
+          <div className="rec-source">
+            <div style={{ minWidth: 0, overflowWrap: 'anywhere' }}><Icon name="file" size="sm" /> <strong>Source file:</strong> <span className="muted">{c.fileName || '—'}</span></div>
+            <div><Icon name="users" size="sm" /> <strong>Team audit:</strong> {teamName}&apos;S TEAM</div>
+          </div>
+          <div className="rec-review">
+            <ReviewSection id={c.id} meta={meta} />
+          </div>
+        </div>
       </div>
     </div>
   );

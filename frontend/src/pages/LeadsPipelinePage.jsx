@@ -20,6 +20,12 @@ import { moveLeadStage } from '../utils/actions/leadActions';
 
 const colId = (st) => st.replace(/[- ]/g, '_');
 
+// Two letters for the card avatar; leads saved under a number get a phone icon instead
+function leadInitials(name) {
+  const words = String(name || '').replace(/[^A-Za-z\s]/g, ' ').trim().split(/\s+/).filter(Boolean);
+  return words.slice(0, 2).map(w => w[0].toUpperCase()).join('');
+}
+
 export default function LeadsPipelinePage() {
   const dispatch = useDispatch();
   const leadsState = useSelector(s => s.leads);
@@ -71,7 +77,10 @@ export default function LeadsPipelinePage() {
           const visible = colLeads.slice(0, page * PIPELINE_PAGE_SIZE);
           return (
             <div className={`kanban-col ${STAGE_CLASS[st]}`} key={st}>
-              <div className="kanban-col-head"><span className={`badge ${STAGE_CLASS[st]}`}>{st}</span><span className="chip-count">{colLeads.length}</span></div>
+              <div className="kanban-col-head">
+                <span className={`badge ${STAGE_CLASS[st]}`}>{st}</span>
+                <span className="kanban-col-count" title={`${colLeads.length} lead${colLeads.length === 1 ? '' : 's'} · showing ${visible.length}`}>{colLeads.length}</span>
+              </div>
               <div className="kanban-col-body">
                 {colLeads.length === 0 ? <div className="empty-box">Empty stage</div> : (
                   <>
@@ -81,12 +90,18 @@ export default function LeadsPipelinePage() {
                       const agentName = leadAgentName(users, l);
                       return (
                         <div className="kanban-card" key={l.id}>
-                          <div className="cell-primary">{l.name}</div>
-                          <div className="cell-mono" style={{ marginTop: 2 }}>{formatPhone(l.phone)}</div>
-                          <div className="kanban-card-meta">Agent · <UserLink user={{ id: l.agentId, name: agentName }} label={agentName} /></div>
-                          {rawLabel !== st && <div style={{ marginTop: 6 }}><LeadBadge lead={l} /></div>}
-                          <div className="cell-sub">{l.notes || '—'}</div>
+                          <div className="kanban-card-top">
+                            <span className="kanban-card-avatar" aria-hidden="true">{leadInitials(l.name) || <Icon name="phone" size="sm" />}</span>
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <div className="kanban-card-name" title={l.name}>{l.name}</div>
+                              <div className="kanban-card-phone">{formatPhone(l.phone)}</div>
+                            </div>
+                            {rawLabel !== st && <LeadBadge lead={l} />}
+                          </div>
+                          <div className="kanban-card-meta"><Icon name="user" size="sm" /><UserLink user={{ id: l.agentId, name: agentName }} label={agentName} /></div>
+                          <div className="kanban-card-notes" title={l.notes || ''}>{l.notes || '—'}</div>
                           <div className="kanban-card-foot">
+                            <span className="kanban-card-foot-label" aria-hidden="true">Stage</span>
                             <label htmlFor={selId} className="visually-hidden">Stage for {l.name}</label>
                             <Select id={selId} size="small" className="stage-ant-select" value={l.stage} onChange={(v) => moveLeadStage(l.id, v)}
                               options={PIPELINE_STAGES.map(s => ({ value: s, label: s }))} />
@@ -95,7 +110,7 @@ export default function LeadsPipelinePage() {
                       );
                     })}
                     {visible.length < colLeads.length && (
-                      <Button size="small" block icon={<Icon name="ellipsis" size="sm" />} onClick={() => dispatch(loadMorePipelineStage(cid))}>
+                      <Button size="small" block className="kanban-more" icon={<Icon name="ellipsis" size="sm" />} onClick={() => dispatch(loadMorePipelineStage(cid))}>
                         View more · {colLeads.length - visible.length} more
                       </Button>
                     )}

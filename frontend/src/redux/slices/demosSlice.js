@@ -27,6 +27,11 @@ const demosSlice = createSlice({
       state.loaded = true;
       state.pending = false;
     },
+    demoUpserted(state, { payload }) {
+      const index = state.list.findIndex((demo) => demo.id === payload.id);
+      if (index < 0) state.list.unshift(payload);
+      else state.list[index] = payload;
+    },
     demosFailed(state, { payload }) { state.error = payload; state.pending = false; },
     setDemoDay(state, { payload }) {
       state.dayTouched = true;
@@ -39,5 +44,7 @@ const demosSlice = createSlice({
   },
 });
 
-export const { demosRequested, demosLoaded, demosFailed, setDemoDay, setDemoTl } = demosSlice.actions;
+export const {
+  demosRequested, demosLoaded, demosFailed, demoUpserted, setDemoDay, setDemoTl,
+} = demosSlice.actions;
 export default demosSlice.reducer;

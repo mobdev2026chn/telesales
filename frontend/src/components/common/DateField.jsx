@@ -6,7 +6,7 @@ import Icon from './Icon';
 const MIN_DATE = dayjs('2020-01-01');
 const MAX_DATE = dayjs('2030-12-31');
 
-export default function DateField({ value, onChange, label, title, id, allowClear = true }) {
+export default function DateField({ value, onChange, label, title, id, allowClear = true, placement = 'bottomRight' }) {
   const picker = (
     <DatePicker
       id={id}
@@ -19,6 +19,8 @@ export default function DateField({ value, onChange, label, title, id, allowClea
       format="DD MMM YYYY"
       placeholder="Pick a date"
       suffixIcon={<Icon name="calendar" size="sm" />}
+      placement={placement}
+      classNames={{ popup: { root: 'neat-picker' } }}
       onChange={(d) => onChange(d ? d.format('YYYY-MM-DD') : '')}
     />
   );

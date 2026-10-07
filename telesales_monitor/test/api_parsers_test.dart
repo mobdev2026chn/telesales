@@ -338,25 +338,52 @@ void main() {
       },
     );
 
-    test('configured production host defaults to HTTPS', () {
-      expect(ApiService.configuredBaseUrl, startsWith('https://'));
-      expect(
-        ApiService.candidateBaseUrls.where(
-          (u) => u.startsWith('http://') && !u.contains('10.0.2.2'),
-        ),
-        isEmpty,
-      );
+    test('production host is HTTPS with no local fallback', () {
+      expect(ApiService.productionBaseUrl, startsWith('https://'));
+      expect(ApiService.candidateBaseUrlsFor(ApiService.productionBaseUrl), [
+        ApiService.productionBaseUrl,
+      ]);
     });
 
-    test(
-      'debug builds use the production backend unless USE_LOCAL_API is set',
-      () {
-        final expected = ApiService.useLocalApi
-            ? ApiService.debugEmulatorBaseUrl
-            : ApiService.configuredBaseUrl;
-        expect(ApiService.preferredBaseUrl, expected);
-        expect(ApiService.candidateBaseUrls, [expected]);
-      },
-    );
+    test('local debug default tries USB (adb reverse) before the emulator host', () {
+      expect(ApiService.candidateBaseUrlsFor(ApiService.debugUsbBaseUrl), [
+        'http://127.0.0.1:5000/api',
+        'http://10.0.2.2:5000/api',
+      ]);
+    });
+
+    test('starts from the configured API URL', () {
+      expect(ApiService.preferredBaseUrl, ApiService.configuredBaseUrl);
+      expect(ApiService.candidateBaseUrls.first, ApiService.configuredBaseUrl);
+    });
+
+    test('USB URL help explains the run_on_phone script', () {
+      final help = ApiService.simConnectionHelpFor(ApiService.debugUsbBaseUrl);
+      expect(help, contains('run_on_phone.ps1'));
+      expect(help, contains('adb reverse'));
+    });
+
+    test('custom API URLs do not fall back to another database', () {
+      expect(ApiService.candidateBaseUrlsFor('http://192.168.1.18:5000/api'), [
+        'http://192.168.1.18:5000/api',
+      ]);
+    });
+
+    test('local connection help points to the configured backend', () {
+      final help = ApiService.simConnectionHelpFor(
+        'http://192.168.1.18:5000/api',
+      );
+      expect(help, contains('http://192.168.1.18:5000/api/health'));
+      expect(help, contains('Windows Firewall'));
+      expect(help, isNot(contains('10.0.2.2')));
+    });
+
+    test('emulator URL is identified as unsuitable for physical phones', () {
+      final help = ApiService.simConnectionHelpFor(
+        ApiService.debugEmulatorBaseUrl,
+      );
+      expect(help, contains('Android emulator'));
+      expect(help, contains('physical phone'));
+    });
   });
 }

@@ -14,25 +14,61 @@ import 'api_parsers.dart';
 class ApiService {
   static const String productionBaseUrl = 'https://telesales.askeva.io/api';
 
-  /// Override per build: `flutter build apk --dart-define=API_URL=https://staging.example.com/api`.
-  static const String configuredBaseUrl = String.fromEnvironment(
-    'API_URL',
-    defaultValue: productionBaseUrl,
-  );
+  /// Override per build, e.g. the local testing APK script supplies the PC's LAN URL.
+  /// Debug builds without an override use the local backend (USB first, then the emulator
+  /// host); release builds continue using [productionBaseUrl].
+  static const String _apiUrlOverride = String.fromEnvironment('API_URL');
+  static const String configuredBaseUrl = _apiUrlOverride != ''
+      ? _apiUrlOverride
+      : (kDebugMode ? debugUsbBaseUrl : productionBaseUrl);
 
-  /// Local backend on the Android emulator host. Only reachable from the emulator, never from a
-  /// real phone, so it is used only when asked for: `flutter run --dart-define=USE_LOCAL_API=true`.
+  /// Local backend reached through `adb reverse tcp:5000 tcp:5000`: works on a USB-connected
+  /// phone (set up by `scripts/run_on_phone.ps1`) and on the emulator.
+  static const String debugUsbBaseUrl = 'http://127.0.0.1:5000/api';
+
+  /// Local backend on the Android emulator host (no `adb reverse` needed). Physical phones
+  /// on Wi-Fi use the computer's LAN IP via `scripts/build_testing_apk.ps1`.
   static const String debugEmulatorBaseUrl = 'http://10.0.2.2:5000/api';
-  static const bool useLocalApi = bool.fromEnvironment('USE_LOCAL_API');
-
-  static bool get _useEmulator =>
-      kDebugMode && useLocalApi && configuredBaseUrl == productionBaseUrl;
 
   static List<String> get candidateBaseUrls =>
-      _useEmulator ? [debugEmulatorBaseUrl] : [configuredBaseUrl];
+      candidateBaseUrlsFor(configuredBaseUrl);
 
-  static final String preferredBaseUrl =
-      _useEmulator ? debugEmulatorBaseUrl : configuredBaseUrl;
+  /// The USB address goes first: without `adb reverse` it is refused instantly (a retryable
+  /// connection error), while 10.0.2.2 on a physical phone only times out (not retried).
+  @visibleForTesting
+  static List<String> candidateBaseUrlsFor(String apiBaseUrl) =>
+      apiBaseUrl == debugUsbBaseUrl
+          ? [debugUsbBaseUrl, debugEmulatorBaseUrl]
+          : [apiBaseUrl];
+
+  static String simConnectionHelpFor(String apiBaseUrl) {
+    final baseUrl = apiBaseUrl.replaceFirst(RegExp(r'/+$'), '');
+    final uri = Uri.tryParse(baseUrl);
+    final healthUrl = '$baseUrl/health';
+
+    if (uri?.host == Uri.parse(debugUsbBaseUrl).host) {
+      return 'This debug build connects to the backend on your PC over USB ($healthUrl). '
+          'Plug the phone in and start the app with `scripts/run_on_phone.ps1` '
+          '(it runs `adb reverse tcp:5000 tcp:5000`; re-run it after reconnecting the cable). '
+          'For Wi-Fi instead, rebuild with '
+          '`scripts/build_testing_apk.ps1 -BackendHost <PC-Wi-Fi-IP>`.';
+    }
+    if (uri?.host == Uri.parse(debugEmulatorBaseUrl).host) {
+      return 'This build is configured for the Android emulator ($healthUrl). '
+          'For a physical phone, rebuild with '
+          '`scripts/build_testing_apk.ps1 -BackendHost <PC-Wi-Fi-IP>`. '
+          'Keep the phone and PC on the same Wi-Fi network.';
+    }
+    if (uri?.scheme == 'http') {
+      return 'The local API at $healthUrl is not reachable. Confirm the backend is '
+          'running on port 5000, the phone and PC are on the same Wi-Fi network, '
+          'and Windows Firewall allows inbound TCP port 5000 on the active network.';
+    }
+    return 'The API at $healthUrl is not reachable. Check the phone’s internet '
+        'connection and try opening that address in the phone’s browser.';
+  }
+
+  static final String preferredBaseUrl = configuredBaseUrl;
   static String baseUrl = preferredBaseUrl;
 
   static String _token = '';
@@ -183,6 +219,7 @@ class ApiService {
     if (res == null) return null;
     try {
       final d = jsonDecode(res.body);
+      
       return d is Map<String, dynamic> ? d : null;
     } catch (_) {
       return null;

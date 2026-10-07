@@ -34,6 +34,19 @@ export function funnelRange(period, date) {
   return { start, end: null };
 }
 
+// [start, end) of the whole period including the rest of it (today / this week / this month / one
+// date), for things scheduled ahead such as demo bookings
+export function periodWindow(period, date) {
+  const { start, end } = funnelRange(period, date);
+  if (end) return { start, end };
+  if (period === 'month') {
+    const [y, m] = istDateStr(new Date()).split('-').map(Number);
+    return { start, end: istMidnight(new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10)) };
+  }
+  const days = period === 'week' ? 7 : 1;
+  return { start, end: new Date(start.getTime() + days * 24 * 3600 * 1000) };
+}
+
 // Days in the selected period (India time), so WEEK / MONTH compare against daily target × days
 export function periodTargetDays(period, customDate) {
   if (customDate || !['week', 'month'].includes(period)) return 1;

@@ -60,7 +60,7 @@ async function login(req, res, { allowedRoles, wrongRoleMessage }) {
   }
 
   const token = signToken(emp);
-  presence.touch(emp.id); // online from the moment of login
+  presence.markSignedIn(emp.id); // Online from the moment of login; a socket marks the live connection next
   return res.json({
     success: true,
     token,

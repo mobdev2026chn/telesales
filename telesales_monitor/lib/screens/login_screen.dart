@@ -313,7 +313,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                           ),
                                           child: Center(
                                             child: Text(
-                                              '👔 MANAGER',
+                                              '🧑‍💼 TEAM LEADER',
                                               style: AppTheme.label(
                                                 size: 9.5,
                                                 color: _selectedRole == UserRole.manager ? AppTheme.limeYellow : AppTheme.ink900,
@@ -460,7 +460,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                         )
                                       : Text(
                                           _selectedRole == UserRole.manager
-                                              ? 'SIGN IN AS MANAGER →'
+                                              ? 'SIGN IN AS TEAM LEADER →'
                                               : 'SIGN IN AS CALLER →',
                                           style: AppTheme.label(size: 11.5, color: AppTheme.limeYellow, letterSpacing: 0.14),
                                         ),
