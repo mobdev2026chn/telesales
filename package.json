@@ -1,4 +1,7 @@
 {
+  "scripts": {
+    "build": "npm --prefix frontend ci --include=dev && npm --prefix frontend run build"
+  },
   "dependencies": {
     "qrcode-terminal": "^0.12.0"
   }

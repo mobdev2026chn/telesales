@@ -14,7 +14,7 @@ cd frontend && npm install && npm run dev
 ```
 
 Open http://localhost:5173 and sign in with an admin / manager / team-leader account.
-Optional settings are in `.env.example` (backend URL for the proxy, API base for a hosted build).
+Settings are in `.env`, the frontend's only env file (backend URL for the proxy, API base for a hosted build).
 
 ## Structure (`src/`)
 
