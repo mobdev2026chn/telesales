@@ -53,7 +53,7 @@ export default function DialModal() {
             <div className="avatar dial-avatar" aria-hidden="true">{initialOf(lead.name)}</div>
             <div style={{ minWidth: 0 }}>
               <div className="modal-title" id="dialModalName">{lead.name}</div>
-              <a href={digits ? `tel:${digits}` : '#'} className="mono fw-700 tel-link" style={{ fontSize: 'var(--ds-fs-base)' }} title="Call this number">
+              <a href={digits ? `tel:${digits}` : '#'} className="mono phone-number fw-700 tel-link" style={{ fontSize: 'var(--ds-fs-base)' }} title="Call this number">
                 <Icon name="phone" size="sm" /> {formatPhone(lead.phone)}
               </a>
             </div>

@@ -94,7 +94,7 @@ export default function LeadsPipelinePage() {
                             <span className="kanban-card-avatar" aria-hidden="true">{leadInitials(l.name) || <Icon name="phone" size="sm" />}</span>
                             <div style={{ minWidth: 0, flex: 1 }}>
                               <div className="kanban-card-name" title={l.name}>{l.name}</div>
-                              <div className="kanban-card-phone">{formatPhone(l.phone)}</div>
+                              <div className="kanban-card-phone phone-number">{formatPhone(l.phone)}</div>
                             </div>
                             {rawLabel !== st && <LeadBadge lead={l} />}
                           </div>

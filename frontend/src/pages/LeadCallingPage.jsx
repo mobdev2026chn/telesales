@@ -151,7 +151,7 @@ export default function LeadCallingPage() {
       return (
         <TableRow cols={QUEUE_COLS} key={l.id}>
           <span className="cell-primary">{l.name}</span>
-          <span className="cell-mono">{hasPhone ? formatPhone(l.phone) : <Badge tone="danger">NO PHONE</Badge>}</span>
+          <span className="cell-mono phone-number">{hasPhone ? formatPhone(l.phone) : <Badge tone="danger">NO PHONE</Badge>}</span>
           <span><UserLink user={{ id: l.agentId, name: agentName }} label={agentName} /></span>
           <LeadBadge lead={l} />
           <span className={fresh ? 'cell-muted' : 'text-success fw-600'} style={{ fontSize: 'var(--ds-fs-sm)' }}>{dialActivityText(l, fmtTs)}</span>

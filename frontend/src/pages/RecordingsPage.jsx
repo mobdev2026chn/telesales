@@ -189,7 +189,7 @@ function RecordingCard({ rec: c, meta, users }) {
           <span className="kpi-icon" style={{ width: 38, height: 38 }}><Icon name="headphones" /></span>
           <div style={{ minWidth: 0 }}>
             <div className="rec-card-title">
-              <UserLink user={{ id: c.callerId, phone: c.callerPhone, name: c.agent }} label={c.agent} /> <span className="muted">→</span> {c.client || formatPhone(c.phone)}
+              <UserLink user={{ id: c.callerId, phone: c.callerPhone, name: c.agent }} label={c.agent} /> <span className="muted">→</span> {c.client || <span className="phone-number">{formatPhone(c.phone)}</span>}
             </div>
             <div className="rec-card-meta">
               {fmtTs(c.ts)} · <strong className="text-2">{fmtDur(c.dur)}</strong> <DirBadge dir={c.dir} />{c.sim && <> <span>SIM {c.sim}</span></>}

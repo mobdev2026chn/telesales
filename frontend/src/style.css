@@ -470,8 +470,21 @@ select.form-control, .select { cursor: pointer; padding-right: 8px; }
 .cell-primary { font-weight: 600; color: var(--ds-text); overflow-wrap: anywhere; }
 .cell-sub { display: block; font-size: var(--ds-fs-xs); color: var(--ds-text-3); font-weight: 400; margin-top: 2px; overflow-wrap: anywhere; }
 .cell-mono { font-family: var(--ds-font-mono); font-size: var(--ds-fs-sm); color: var(--ds-text-2); }
+.phone-number, input[type="tel"] { font-family: var(--ds-font-mono); font-variant-numeric: tabular-nums; color: #000000; }
+.cell-phone-number { font-family: var(--ds-font-mono); font-size: var(--ds-fs-sm); font-weight: 600; font-variant-numeric: tabular-nums; color: #000000; }
+.cell-email { color: #111111; font-size: var(--ds-fs-sm); }
+.cell-date-time { color: #000000; font-size: var(--ds-fs-sm); }
 .cell-muted { color: var(--ds-text-3); font-size: var(--ds-fs-sm); }
 .cell-unknown { font-style: italic; color: var(--ds-text-3); }
+.call-log-table .table-body-row .cell-mono,
+.call-log-table .table-body-row .cell-muted,
+.call-log-table .table-body-row .cell-unknown,
+.call-log-table .table-body-row .cell-primary,
+.call-log-table .table-body-row .cell-date-time,
+.call-log-table .table-body-row .muted { color: #000000; }
+.lead-queue-card .table-body-row .cell-mono,
+.lead-queue-card .table-body-row .cell-muted,
+.lead-queue-card .table-body-row .muted { color: #000000; }
 .cell-right { text-align: right; justify-self: end; }
 .cell-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .table-pager {
@@ -593,6 +606,9 @@ select.form-control, .select { cursor: pointer; padding-right: 8px; }
 .hour-bar { width: 100%; max-width: 40px; min-height: 4px; border-radius: 6px 6px 2px 2px; background: var(--ds-surface-sunken); transition: height 0.4s ease; }
 .hour-bar.has-calls { background: var(--ds-green-400); }
 .hour-bar.is-peak { background: var(--ds-green-500); }
+.hour-bar-stack { display: flex; flex-direction: column-reverse; width: 100%; max-width: 40px; min-height: 4px; border-radius: 6px 6px 2px 2px; overflow: hidden; background: var(--ds-surface-sunken); }
+.hour-bar-segment.is-booked { background: var(--ds-green-400); }
+.hour-bar-segment.is-done { background: var(--ds-green-700); }
 .hour-bar-label { font-size: var(--ds-fs-2xs); color: var(--ds-text-3); white-space: nowrap; }
 
 .mix-bar { display: flex; height: 12px; border-radius: var(--ds-radius-pill); overflow: hidden; background: var(--ds-ink-900); margin-bottom: var(--ds-space-3); }

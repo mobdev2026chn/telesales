@@ -106,7 +106,7 @@ export default function ProfilePage() {
             <div className="detail-list">
               <div className="detail-row"><span className="detail-label">Full name</span><span className="detail-value">{me.name}</span></div>
               <div className="detail-row"><span className="detail-label">Login email</span><span className="detail-value">{me.email || '—'}</span></div>
-              <div className="detail-row"><span className="detail-label">Phone / SIM number</span><span className="detail-value mono">{formatPhone(me.phone)}</span></div>
+              <div className="detail-row"><span className="detail-label">Phone / SIM number</span><span className="detail-value mono phone-number">{formatPhone(me.phone)}</span></div>
               <div className="detail-row"><span className="detail-label">Role &amp; permissions</span><span className="detail-value">{roleLabel(me.role)}</span></div>
               <div className="detail-row">
                 <div><span className="detail-label">Reports to</span><span className="detail-help">Direct supervisor for performance reviews</span></div>

@@ -29,7 +29,8 @@ const COLS = '1.25fr 1.15fr 1.05fr 0.95fr 1fr 1fr 1.5fr 0.95fr';
 export default function DemoBookingsPage() {
   const dispatch = useDispatch();
   const ds = useSelector(s => s.demos);
-  const { visible } = useSelector(selectScope);
+  const { visible, me } = useSelector(selectScope);
+  const isTeamLeader = me.role === 'TEAM_LEADER';
   const [menu, setMenu] = useState(null);   // { m, rect }
   const closeMenu = useCallback(() => setMenu(null), []);
   // Demos being sent back to reschedule: they fade out before the list reloads without them
@@ -48,13 +49,17 @@ export default function DemoBookingsPage() {
   const tls = new Map();
   visible.filter(u => u.role === 'TEAM_LEADER').forEach(u => tls.set(u.id, u.name));
   ds.list.forEach(d => { if (d.teamLeaderId && !tls.has(d.teamLeaderId)) tls.set(d.teamLeaderId, d.teamLeaderName || '—'); });
-  const tl = ds.tl && ds.tl !== 'ALL' && !tls.has(ds.tl) ? 'ALL' : (ds.tl || 'ALL');
+  const tl = isTeamLeader
+    ? (me.id || 'ALL')
+    : (ds.tl && ds.tl !== 'ALL' && !tls.has(ds.tl) ? 'ALL' : (ds.tl || 'ALL'));
   useEffect(() => {
-    if (tl !== ds.tl) dispatch(setDemoTl('ALL'));
+    if (tl !== ds.tl) dispatch(setDemoTl(tl));
   }, [tl, ds.tl, dispatch]);
 
   const day = demoDayStr(ds.day);
   const list = dayDemos(ds.list, tl, ds.day);
+  const tlOptions = Array.from(tls.entries()).sort((a, b) => String(a[1]).localeCompare(String(b[1])));
+  if (!isTeamLeader) tlOptions.unshift(['ALL', 'All']);
 
   const changeDay = (val) => { setMenu(null); dispatch(setDemoDay(val)); };
   const shiftDay = (delta) => {
@@ -95,7 +100,7 @@ export default function DemoBookingsPage() {
             <Badge tone={isPast ? 'neutral' : 'lime'}>{d.slot || fmtTs(d.at)}</Badge>
           </div>
           <span className="cell-primary" style={{ overflowWrap: 'anywhere' }}>{d.clientName || '—'}</span>
-          <span className="cell-mono">{d.clientPhone ? formatPhone(d.clientPhone) : '—'}</span>
+          <span className="cell-mono phone-number">{d.clientPhone ? formatPhone(d.clientPhone) : '—'}</span>
           <span style={{ overflowWrap: 'anywhere' }}>{d.course || '—'}</span>
           <span>{d.teamLeaderName ? <UserLink user={{ id: d.teamLeaderId, name: d.teamLeaderName }} label={d.teamLeaderName} /> : <span className="muted">—</span>}</span>
           <span>{d.agent ? <UserLink user={{ id: d.callerId, name: d.agent }} label={d.agent} /> : '—'}</span>
@@ -115,7 +120,7 @@ export default function DemoBookingsPage() {
       <div className="demo-tl-row">
         <span className="demo-tl-label">Team leader</span>
         <div className="pill-group">
-          {[['ALL', 'All'], ...Array.from(tls.entries()).sort((a, b) => String(a[1]).localeCompare(String(b[1])))].map(([id, name]) => (
+          {tlOptions.map(([id, name]) => (
             <Chip key={id} active={tl === id} icon={id === 'ALL' ? <Icon name="users" size="sm" /> : <Icon name="user" size="sm" />} onClick={() => { setMenu(null); dispatch(setDemoTl(id)); }}>{name}</Chip>
           ))}
         </div>
@@ -236,7 +241,7 @@ function SlotMenu({ menu, tl, visible, onClose, onFade }) {
       {st.bookings.map(d => (
         <div className="demo-menu-item" key={d.id}>
           <strong>{d.clientName || '—'}</strong>
-          <span>{[d.clientPhone ? formatPhone(d.clientPhone) : '', d.teamLeaderName, d.agent ? `by ${d.agent}` : ''].filter(Boolean).join(' · ')}</span>
+          <span>{d.clientPhone && <span className="phone-number">{formatPhone(d.clientPhone)}</span>}{d.clientPhone && d.teamLeaderName ? ' · ' : ''}{d.teamLeaderName}{d.agent ? ` · by ${d.agent}` : ''}</span>
           {!st.past && (
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               <Button size="small" icon={<Icon name="missed" size="sm" />} onClick={() => cancel(d.id)}>Cancel demo</Button>

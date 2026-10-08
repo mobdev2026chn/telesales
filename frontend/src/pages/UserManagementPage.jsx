@@ -85,8 +85,8 @@ export default function UserManagementPage() {
           <span className="cell-primary" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Avatar user={u} className="avatar-sm" /><span style={{ minWidth: 0, overflowWrap: 'anywhere' }}><UserLink user={u} /></span>
           </span>
-          <span className="cell-muted" style={{ wordBreak: 'break-all' }}>{u.email || '—'}</span>
-          <span className="cell-mono">{formatPhone(u.phone)}</span>
+          <span className="cell-email" style={{ wordBreak: 'break-all' }}>{u.email || '—'}</span>
+          <span className="cell-phone-number">{formatPhone(u.phone)}</span>
           <span><RoleBadge role={u.role} /></span>
           <span className="cell-muted">{mgrUser ? <UserLink user={mgrUser} label={mgrName} /> : mgrName}</span>
           <span className="tabular">{isAgent ? `${u.target}/day` : '—'}</span>
@@ -197,7 +197,7 @@ export default function UserManagementPage() {
                     <RoleBadge role={u.role} />
                     <span className="muted" style={{ fontSize: 'var(--ds-fs-xs)' }}>{todayCallsText(u)} dials today</span>
                   </div>
-                  <div className="cell-sub" style={{ wordBreak: 'break-word' }}>{u.email || '—'} · {formatPhone(u.phone)} · Target: {u.target || 0}/day</div>
+                  <div className="cell-sub" style={{ wordBreak: 'break-word' }}>{u.email || '—'} · <span className="phone-number">{formatPhone(u.phone)}</span> · Target: {u.target || 0}/day</div>
                 </div>
                 {admin && u.id !== authId && <ActionIcon icon="eye" tone="view" label={`View the portal as ${u.name}`} onClick={() => viewAs(u.id)} />}
               </div>

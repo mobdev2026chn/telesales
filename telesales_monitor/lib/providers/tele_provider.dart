@@ -1224,8 +1224,11 @@ class TeleProvider extends ChangeNotifier {
             }
           } catch (_) {}
         }
-        // New calls stored: refresh the server-counted numbers so the app matches the admin web
-        if (inserted > 0) await _refreshServerStats();
+        // New calls stored: refresh caller metrics and achievement notifications immediately.
+        if (inserted > 0) {
+          await _refreshServerStats();
+          await fetchNotifications();
+        }
       } while (_callSyncPending && _isLoggedIn && _isCurrentSession(gen));
     } finally {
       _callSyncInFlight = false;
@@ -1637,6 +1640,12 @@ class TeleProvider extends ChangeNotifier {
         return {'success': false, 'message': 'Server did not return a session token. Please update the backend.'};
       }
       final userRole = asString(user['role'], asManager ? 'manager' : 'caller').toLowerCase();
+      if (!asManager && userRole == 'team_leader') {
+        return {
+          'success': false,
+          'message': 'Team Leaders cannot use Caller Login. Please use Team Leader Login.',
+        };
+      }
       if (userRole == 'admin') {
         return {
           'success': false,
@@ -1754,7 +1763,7 @@ class TeleProvider extends ChangeNotifier {
   Future<Map<String, dynamic>> _finishCallerLogin(Map<String, dynamic> res, Map<String, dynamic> user, String userRole) async {
     await _beginSession(res, user);
     _currentRole = UserRole.caller;
-    _isManagerCallerMode = userRole == 'manager' || userRole == 'jr_manager' || userRole == 'team_leader';
+    _isManagerCallerMode = userRole == 'manager' || userRole == 'jr_manager';
     _needsWorkSimChoice = false;
     await _savePreferences();
     _pushAutoRecordToNative();
@@ -1996,15 +2005,6 @@ class TeleProvider extends ChangeNotifier {
     }
 
     if (maxKey == null || maxCount <= 1) {
-      if (todayLogs.isNotEmpty) {
-        final first = todayLogs.first;
-        return {
-          'name': first.contactName != 'Unknown' ? first.contactName : first.phoneNumber,
-          'phone': first.phoneNumber,
-          'count': 1,
-          'durationStr': first.durationFormatted,
-        };
-      }
       return null;
     }
 

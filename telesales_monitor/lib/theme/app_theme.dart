@@ -6,8 +6,8 @@ class AppTheme {
   static const Color ink900 = Color(0xFF10180C);
   static const Color ink800 = Color(0xFF1A2314);
   static const Color ink700 = Color(0xFF3A4033);
-  static const Color muted = Color(0xFF7A8172);
-  static const Color lightMuted = Color(0xFF8A9285);
+  static const Color muted = Colors.black;
+  static const Color lightMuted = Colors.black;
   static const Color paper = Color(0xFFEFECE3);
   static const Color white = Color(0xFFFFFFFF);
 
@@ -53,22 +53,22 @@ class AppTheme {
       );
 
   // Typography
-  static TextStyle headline({double size = 24, Color color = ink900}) =>
+  static TextStyle headline({double size = 24, Color color = Colors.black}) =>
       GoogleFonts.anton(fontSize: size, color: color, height: 0.98, letterSpacing: 0.5);
 
   static TextStyle italicSerif({double size = 16, Color color = greenDark}) =>
       GoogleFonts.playfairDisplay(fontSize: size, color: color, fontStyle: FontStyle.italic);
 
-  static TextStyle body({double size = 13, Color color = ink900, FontWeight weight = FontWeight.w400}) =>
+  static TextStyle body({double size = 13, Color color = Colors.black, FontWeight weight = FontWeight.w400}) =>
       GoogleFonts.archivo(fontSize: size, color: color, fontWeight: weight);
 
-  static TextStyle bodyBold({double size = 13, Color color = ink900}) =>
+  static TextStyle bodyBold({double size = 13, Color color = Colors.black}) =>
       body(size: size, color: color, weight: FontWeight.w700);
 
-  static TextStyle mono({double size = 12, Color color = ink900, FontWeight weight = FontWeight.w600}) =>
+  static TextStyle mono({double size = 12, Color color = Colors.black, FontWeight weight = FontWeight.w600}) =>
       GoogleFonts.spaceMono(fontSize: size, color: color, fontWeight: weight);
 
-  static TextStyle label({double size = 9, Color color = muted, double letterSpacing = 0.18}) =>
+  static TextStyle label({double size = 9, Color color = Colors.black, double letterSpacing = 0.18}) =>
       GoogleFonts.archivo(
         fontSize: size,
         color: color,

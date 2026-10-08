@@ -161,7 +161,7 @@ export default function LeaderboardPage() {
             <span className="cell-primary" style={{ minWidth: 0 }}><UserLink user={{ id: s.id, phone: s.phone, name: s.name }} label={s.name} /></span>
           </span>
           <span className="lb-chain"><ManagerChain user={refOf(s)} /></span>
-          <span className="cell-mono lb-phone">{formatPhone(s.phone)}</span>
+          <span className="cell-mono phone-number lb-phone">{formatPhone(s.phone)}</span>
           <span className="lb-stat"><CountPill n={s.total} /><span className="lb-stat-unit">calls</span></span>
           <span className="lb-stat"><CountPill n={s.conn} /><span className="lb-stat-unit">connected</span></span>
           <span className="lb-talk"><Icon name="clock" size="sm" />{fmtTalk(s.talk)}</span>

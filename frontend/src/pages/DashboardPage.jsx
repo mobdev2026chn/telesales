@@ -40,6 +40,7 @@ export default function DashboardPage() {
   const key = useSelector(selectDashKey);
   const usersError = useSelector(s => s.users.error);
   const { users, visible, scoped } = useSelector(selectScope);
+  const dashboardCallers = scoped.filter(u => u.role === 'CALLER');
 
   const server = dash.data && dash.dataKey === key ? dash.data : null;
   const failed = dash.errorKey === key;
@@ -127,7 +128,7 @@ export default function DashboardPage() {
         failed={failed}
         error={dash.error}
         usersError={usersError}
-        callers={scoped}
+        callers={dashboardCallers}
         users={users}
         mgrOptions={mgrOptions}
         mgrValue={mgrValue}
@@ -159,12 +160,12 @@ function HourlyCard({ server, period, customDate }) {
     if (server) bars = <HourBars byHour={hourCounts(Array.isArray(server.hourlyAll) ? server.hourlyAll : server.hourlyCalls)} />;
   } else if (demos.loaded) {
     const { start, end } = periodWindow(period, customDate);
-    const { byHour, status } = demoHourCounts(demos.list, start, end);
-    bars = <HourBars byHour={byHour} unit="demo" />;
+    const { byHour, byStatusHour, status } = demoHourCounts(demos.list, start, end);
+    bars = <HourBars byHour={byHour} byStatusHour={byStatusHour} unit="demo" />;
     footer = (
       <div className="mix-legend">
         <span><span className="legend-swatch" style={{ background: 'var(--ds-green-400)' }} />Booked · <strong>{status.BOOKED}</strong></span>
-        <span><span className="legend-swatch" style={{ background: 'var(--ds-green-500)' }} />Done · <strong>{status.DONE}</strong></span>
+        <span><span className="legend-swatch" style={{ background: 'var(--ds-green-700)' }} />Done · <strong>{status.DONE}</strong></span>
         <span><span className="legend-swatch" style={{ background: 'var(--ds-surface-sunken)' }} />Cancelled · <strong>{status.CANCELLED}</strong></span>
       </div>
     );
@@ -233,7 +234,7 @@ function TeamPerformance({ server, failed, error, usersError, callers, users, mg
             <span className="cell-muted" style={{ fontSize: 12, lineHeight: 1.5, overflowWrap: 'anywhere' }} title={managerChainText(users, u)}>
               <ManagerChain user={u} />
             </span>
-            <span className="cell-mono">{formatPhone(u.phone)}</span>
+            <span className="cell-phone-number">{formatPhone(u.phone)}</span>
             <span><CountPill n={uTotal} /></span>
             <span><CountPill n={uConnected} /></span>
             <span className="tabular">{fmtTalk(uTalk)}</span>

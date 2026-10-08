@@ -91,12 +91,14 @@ router.post('/admin-login', async (req, res) => {
   }
 });
 
-// POST /api/auth/caller-verify — caller app login (managers may also enter as caller)
+// POST /api/auth/caller-verify — callers and non-Team-Leader managers may enter as caller
 router.post('/caller-verify', async (req, res) => {
   try {
     await login(req, res, {
-      allowedRoles: ['caller', ...MANAGERS],
-      wrongRoleMessage: (role) => `Access denied for role ${role.toUpperCase()}.`,
+      allowedRoles: ['caller', 'telecaller', ...MANAGERS.filter(role => role !== 'team_leader')],
+      wrongRoleMessage: (role) => role === 'team_leader'
+        ? 'Team Leaders cannot use Caller Login. Please use Team Leader Login.'
+        : `Access denied for role ${role.toUpperCase()}.`,
     });
   } catch (err) {
     console.error('caller-verify error:', err.message);
@@ -197,7 +199,5 @@ router.post('/check-phone', async (req, res) => {
 
 module.exports = router;
    
-
-
 
 

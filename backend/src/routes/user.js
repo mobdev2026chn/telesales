@@ -5,6 +5,7 @@ const Recording = require('../models/Recording');
 const Lead = require('../models/Lead');
 const Employee = require('../models/Employee');
 const { syncCallsForCaller, findLeadsByLast10 } = require('../services/callStats');
+const { createTargetAchievementNotification } = require('../services/targetAchievementNotifications');
 const { findEmployeeByRef } = require('../services/scope');
 const { breakInfo } = require('../services/presence');
 const { last10, byIdQuery, phoneRegex, serverError } = require('../utils/common');
@@ -39,6 +40,11 @@ router.post(['/api/calls/sync', '/api/user/calls/sync'], async (req, res) => {
       return res.json({ success: true, count: 0, syncedCount: 0, message: 'Caller not registered in system' });
     }
     const insertedCount = await syncCallsForCaller(callerEmp, calls);
+    try {
+      await createTargetAchievementNotification(callerEmp);
+    } catch (err) {
+      console.error(`[notification] target achievement failed callerId=${callerEmp.id}: ${err.message}`);
+    }
     if (insertedCount > 0) {
       try {
         await publishForEmployee(req, callerEmp, 'dashboardUpdated', {

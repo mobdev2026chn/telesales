@@ -154,16 +154,16 @@ export default function CallLogPage() {
             <TableRow cols={COLS} key={c.id}>
               <span className="cell-primary"><UserLink user={{ id: c.callerId, phone: c.callerPhone, name: c.agent }} label={c.agent} /></span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <span className={c.client ? 'fw-600' : 'cell-unknown'}>{clientText}</span>
+                <span className={c.client ? 'cell-primary' : 'cell-unknown'}>{clientText}</span>
                 {showAddLead && (
                   <ActionIcon icon="plus" tone="add" label="Add this caller as a lead" onClick={() => addLeadFromCall(c)} />
                 )}
               </div>
-              <span className="cell-mono">{formatPhone(c.phone)}</span>
+              <span className="cell-mono phone-number">{formatPhone(c.phone)}</span>
               <DirBadge dir={c.dir} />
               <OutcomeBadge out={c.out} />
               <span className="tabular">{c.dur ? fmtDur(c.dur) : '—'}</span>
-              <span className="cell-muted">{fmtTs(c.ts)}</span>
+              <span className="cell-date-time">{fmtTs(c.ts)}</span>
               <span className="cell-muted">SIM {c.sim}</span>
               <span>
                 {playId ? (
@@ -199,7 +199,7 @@ export default function CallLogPage() {
         </div>
       </div>
 
-      <div className="neo-table-card">
+      <div className="neo-table-card call-log-table">
         <DataTable cols={COLS} head={<Heads labels={['Agent', 'Client', 'Phone', 'Type', 'Outcome', 'Duration', 'Date · time', 'SIM', 'Rec']} />}>
           {body}
         </DataTable>

@@ -9,7 +9,7 @@ const { MANAGERS } = require('../middleware/auth');
 const Employee = require('../models/Employee');
 const Notification = require('../models/Notification');
 const { resolveScope, NOTHING } = require('../services/scope');
-const { exactNameRegex, parseDate, parseLimit, serverError } = require('../utils/common');
+const { exactNameRegex, isObjectId, parseDate, parseLimit, serverError } = require('../utils/common');
 const { publishForEmployee } = require('../services/realtime');
 
 const router = express.Router();
@@ -60,14 +60,48 @@ function blockDTO(b) {
 
 // Live bookings and blocks overlapping [from, to) for a Team Leader ('' = bookings made without one).
 // A block with teamLeaderId '' applies to every Team Leader.
-async function occupied(teamLeaderId, from, to) {
+async function occupied(teamLeaderId, from, to, inheritedTeamLeaderIds = []) {
   const since = new Date(from.getTime() - 3 * 60 * MIN); // bookings that started earlier but still run
   const [bookings, blocks] = await Promise.all([
     DemoBooking.find({ teamLeaderId, status: 'BOOKED', scheduledAt: { $gte: since, $lt: to } }).lean(),
-    DemoBlock.find({ teamLeaderId: { $in: [teamLeaderId, ''] }, scheduledAt: { $gte: since, $lt: to } }).lean(),
+    DemoBlock.find({
+      teamLeaderId: { $in: [...new Set([teamLeaderId, '', ...inheritedTeamLeaderIds])] },
+      scheduledAt: { $gte: since, $lt: to },
+    }).lean(),
   ]);
   const live = d => endMs(d) > from.getTime();
   return { bookings: bookings.filter(live), blocks: blocks.filter(live) };
+}
+
+// Callers inherit slot restrictions from every Team Leader above them in the reporting chain.
+async function inheritedTeamLeaderIds(employeeId) {
+  let employee = await Employee.findOne({ id: employeeId }).select('managerId managerName').lean();
+  if (!employee) return [];
+
+  const seen = new Set([employeeId]);
+  const leaders = new Set();
+  let managerId = employee.managerId || '';
+  let managerName = employee.managerName || '';
+
+  for (let depth = 0; depth < 10 && (managerId || managerName); depth += 1) {
+    const refs = [];
+    if (managerId) {
+      refs.push({ id: managerId });
+      if (isObjectId(managerId)) refs.push({ _id: managerId });
+    }
+    if (managerName) refs.push({ name: exactNameRegex(managerName) });
+    employee = await Employee.findOne({ $or: refs })
+      .select('id role managerId managerName')
+      .lean();
+    if (!employee || !employee.id || seen.has(employee.id)) break;
+
+    seen.add(employee.id);
+    if (employee.role === 'team_leader') leaders.add(employee.id);
+    managerId = employee.managerId || '';
+    managerName = employee.managerName || '';
+  }
+
+  return [...leaders];
 }
 
 // Bookings in scope: made by someone in scope, or run by a Team Leader in scope.
@@ -107,7 +141,8 @@ router.get('/api/demos/booked-slots', async (req, res) => {
     const teamLeaderId = cleanText(req.query.teamLeaderId, 80);
     const range = istDayRange(req.query.date);
     if (!teamLeaderId || !range) return res.status(400).json({ success: false, message: 'teamLeaderId and date (YYYY-MM-DD) are required.' });
-    const { bookings, blocks } = await occupied(teamLeaderId, range[0], range[1]);
+    const inherited = req.user.role === 'caller' ? await inheritedTeamLeaderIds(req.user.id) : [];
+    const { bookings, blocks } = await occupied(teamLeaderId, range[0], range[1], inherited);
     // Every half-hour and India hour start a booking or block touches, so the hourly picker sees it too
     const starts = new Set();
     for (const d of [...bookings, ...blocks]) {
@@ -128,7 +163,13 @@ router.get('/api/demos/day', async (req, res) => {
     if (!req.user) return res.status(401).json({ success: false, message: 'Please sign in again.', code: 'AUTH_REQUIRED' });
     const range = istDayRange(req.query.date);
     if (!range) return res.status(400).json({ success: false, message: 'date (YYYY-MM-DD) is required.' });
-    const { bookings, blocks } = await occupied(cleanText(req.query.teamLeaderId, 80), range[0], range[1]);
+    const inherited = req.user.role === 'caller' ? await inheritedTeamLeaderIds(req.user.id) : [];
+    const { bookings, blocks } = await occupied(
+      cleanText(req.query.teamLeaderId, 80),
+      range[0],
+      range[1],
+      inherited
+    );
     res.json({
       success: true,
       bookings: bookings.map(b => {
@@ -321,7 +362,13 @@ router.post(['/api/demos', '/api/user/demos'], async (req, res) => {
       if (!teamLeader) return res.status(400).json({ success: false, message: 'Choose a valid Team Leader.' });
     }
     // One demo at a time per Team Leader, and never in a blocked slot
-    const { bookings, blocks } = await occupied(teamLeaderId, scheduledAt, new Date(scheduledAt.getTime() + durationMinutes * MIN));
+    const inherited = req.user.role === 'caller' ? await inheritedTeamLeaderIds(req.user.id) : [];
+    const { bookings, blocks } = await occupied(
+      teamLeaderId,
+      scheduledAt,
+      new Date(scheduledAt.getTime() + durationMinutes * MIN),
+      inherited
+    );
     if (blocks.length) {
       return res.status(409).json({ success: false, message: 'This slot is blocked by the team leader. Pick another slot.' });
     }

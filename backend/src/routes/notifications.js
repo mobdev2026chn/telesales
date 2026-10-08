@@ -1,6 +1,8 @@
 // Notifications for the signed-in user only (absolute paths).
 const express = require('express');
 const Notification = require('../models/Notification');
+const Employee = require('../models/Employee');
+const { createTargetAchievementNotification } = require('../services/targetAchievementNotifications');
 const { last10, isObjectId, exactNameRegex, phoneRegex, serverError } = require('../utils/common');
 
 const router = express.Router();
@@ -30,6 +32,14 @@ function recipientFilter(req, src) {
 
 router.get(['/api/user/notifications', '/api/notifications'], async (req, res) => {
   try {
+    if (req.user) {
+      try {
+        const employee = await Employee.findOne({ id: req.user.id }).lean();
+        await createTargetAchievementNotification(employee);
+      } catch (err) {
+        console.error(`[notification] target achievement check failed callerId=${req.user.id}: ${err.message}`);
+      }
+    }
     const filter = recipientFilter(req, req.query);
     if (!filter) return res.json({ success: true, unreadCount: 0, notifications: [] });
     const [notifications, unreadCount] = await Promise.all([

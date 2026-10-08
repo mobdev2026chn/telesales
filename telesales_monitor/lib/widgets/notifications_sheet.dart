@@ -101,7 +101,7 @@ class NotificationsSheet extends StatelessWidget {
                     Text('NO NOTIFICATIONS', style: AppTheme.headline(size: 14)),
                     const SizedBox(height: 4),
                     Text(
-                      'When Admin or Manager reviews your calls, comments and ratings will show up here.',
+                      'Daily target achievements and call feedback will show up here.',
                       textAlign: TextAlign.center,
                       style: AppTheme.body(size: 11, color: AppTheme.muted),
                     ),

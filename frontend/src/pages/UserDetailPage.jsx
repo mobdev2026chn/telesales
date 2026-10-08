@@ -144,7 +144,7 @@ export default function UserDetailPage() {
         <TableRow cols={CALL_COLS} key={c.id}>
           <span className="cell-muted">{fmtTs(c.ts)}</span>
           <span className={c.client ? 'cell-primary' : 'cell-unknown'}>{c.client || 'Unknown caller'}</span>
-          <span className="cell-mono">{formatPhone(c.phone)}</span>
+          <span className="cell-mono phone-number">{formatPhone(c.phone)}</span>
           <DirBadge dir={c.dir} />
           <OutcomeBadge out={c.out} />
           <span className="tabular">{fmtDur(c.dur)}</span>
@@ -172,7 +172,7 @@ export default function UserDetailPage() {
       <TableRow cols={REC_COLS} key={r.id}>
         <span className="cell-muted">{fmtTs(r.ts)}</span>
         <span className={r.client ? 'cell-primary' : 'cell-unknown'}>{r.client || 'Unknown caller'}</span>
-        <span className="cell-mono">{formatPhone(r.phone)}</span>
+        <span className="cell-mono phone-number">{formatPhone(r.phone)}</span>
         <DirBadge dir={r.dir} />
         <span className="tabular">{fmtDur(r.dur)}</span>
         <span><PlayButton onClick={() => playCallAudioDirect(r.id, 'log')} label={`Play recording with ${r.client || formatPhone(r.phone)}`} /></span>
@@ -190,7 +190,7 @@ export default function UserDetailPage() {
       : recentLeads.map(l => (
         <TableRow cols={LEAD_COLS} key={l.id}>
           <span className="cell-primary">{l.name}</span>
-          <span className="cell-mono">{formatPhone(l.phone)}</span>
+          <span className="cell-mono phone-number">{formatPhone(l.phone)}</span>
           <LeadBadge lead={l} />
           <span className="cell-muted">{l.lastCallDate ? `${l.attempts || 0}× · LAST ${fmtTs(l.lastCallDate)}` : 'NOT DIALED YET'}</span>
         </TableRow>
@@ -221,7 +221,7 @@ export default function UserDetailPage() {
             </div>
             <div className="detail-list">
               <DetailLine label="Login email">{u.email || '—'}</DetailLine>
-              <DetailLine label="Phone / SIM"><span className="mono">{formatPhone(u.phone)}</span></DetailLine>
+              <DetailLine label="Phone / SIM"><span className="mono phone-number">{formatPhone(u.phone)}</span></DetailLine>
               <DetailLine label="Reports to">{mgrUser ? <><UserLink user={mgrUser} /> ({roleLabel(mgrUser.role)})</> : 'Top Level / Admin'}</DetailLine>
               <DetailLine label="Team">{u.team || '—'}</DetailLine>
               <DetailLine label="App status">

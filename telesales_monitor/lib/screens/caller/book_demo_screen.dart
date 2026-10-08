@@ -312,12 +312,13 @@ class _BookDemoScreenState extends State<BookDemoScreen> {
     if (_isPast(m)) return _toast('Time already passed');
     if (b != null && b.blocked) return _toast('Blocked by team leader');
     if (b != null && b.mine) return _showBooking(b);
-    if (b != null)
+    if (b != null) {
       return _toast(
         b.callerName.isNotEmpty
             ? 'Already booked by ${b.callerName}'
             : 'Already booked',
       );
+    }
     setState(
       () => _selected.contains(m) ? _selected.remove(m) : _selected.add(m),
     );
@@ -511,7 +512,7 @@ class _BookDemoScreenState extends State<BookDemoScreen> {
                 'ASKEVA · TELESALES',
                 style: AppTheme.mono(
                   size: 10,
-                  color: AppTheme.muted,
+                  color: Colors.black,
                   weight: FontWeight.w700,
                 ),
               ),
@@ -566,7 +567,7 @@ class _BookDemoScreenState extends State<BookDemoScreen> {
 
   static final TextStyle _subStyle = AppTheme.mono(
     size: 10,
-    color: AppTheme.muted,
+    color: Colors.black,
     weight: FontWeight.w400,
   );
 
@@ -594,7 +595,7 @@ class _BookDemoScreenState extends State<BookDemoScreen> {
                 label,
                 style: AppTheme.mono(
                   size: 10,
-                  color: AppTheme.muted,
+                  color: Colors.black,
                   weight: FontWeight.w400,
                 ).copyWith(letterSpacing: 1.5),
               ),
@@ -639,7 +640,7 @@ class _BookDemoScreenState extends State<BookDemoScreen> {
     if (_teamLeaders == null) {
       body = Text(
         'Loading team leaders…',
-        style: AppTheme.body(size: 12, color: AppTheme.muted),
+        style: AppTheme.body(size: 12, color: Colors.black),
       );
     } else if (_offline && _teamLeaders!.isEmpty) {
       body = GestureDetector(
@@ -735,7 +736,7 @@ class _BookDemoScreenState extends State<BookDemoScreen> {
         _teamLeaders == null
             ? 'Loading…'
             : 'Choose a team leader to see their free slots.',
-        style: AppTheme.body(size: 12, color: AppTheme.muted),
+        style: AppTheme.body(size: 12, color: Colors.black),
       );
     }
     return Column(
@@ -791,7 +792,7 @@ class _BookDemoScreenState extends State<BookDemoScreen> {
                         m >= 12 * 60 ? 'PM' : 'AM',
                         style: AppTheme.mono(
                           size: 9,
-                          color: AppTheme.muted,
+                          color: Colors.black,
                           weight: FontWeight.w400,
                         ),
                       ),
@@ -880,7 +881,7 @@ class _BookDemoScreenState extends State<BookDemoScreen> {
                 : (_mineError ?? 'No demos booked yet.'),
             style: AppTheme.mono(
               size: 12,
-              color: _mineError == null ? AppTheme.muted : AppTheme.redMissed,
+              color: _mineError == null ? Colors.black : AppTheme.redMissed,
               weight: FontWeight.w400,
             ),
           ),
@@ -1176,7 +1177,7 @@ class _ReadOnlyField extends StatelessWidget {
           label,
           style: AppTheme.mono(
             size: 10,
-            color: AppTheme.muted,
+            color: Colors.black,
             weight: FontWeight.w400,
           ).copyWith(letterSpacing: 1.5),
         ),
@@ -1299,7 +1300,7 @@ class _DemoDetailsSheetState extends State<_DemoDetailsSheet> {
       t,
       style: AppTheme.mono(
         size: 10,
-        color: AppTheme.muted,
+        color: Colors.black,
         weight: FontWeight.w400,
       ).copyWith(letterSpacing: 1.5),
     ),
@@ -1333,7 +1334,7 @@ class _DemoDetailsSheetState extends State<_DemoDetailsSheet> {
       hintText: hint,
       hintStyle: AppTheme.mono(
         size: 13,
-        color: AppTheme.muted,
+        color: Colors.black54,
         weight: FontWeight.w400,
       ),
       isDense: true,
@@ -1384,7 +1385,7 @@ class _DemoDetailsSheetState extends State<_DemoDetailsSheet> {
                   sub,
                   style: AppTheme.mono(
                     size: 10,
-                    color: AppTheme.muted,
+                    color: Colors.black,
                     weight: FontWeight.w400,
                   ).copyWith(letterSpacing: 1.5),
                 ),
