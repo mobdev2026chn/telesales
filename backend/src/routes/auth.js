@@ -58,7 +58,7 @@ async function login(req, res, { allowedRoles, wrongRoleMessage }) {
   }
 
   const token = signToken(emp);
-  presence.markSignedIn(emp.id); // Online from the moment of login; a socket marks the live connection next
+  await presence.markSignedIn(emp.id); // Persist login time before the app fetches dashboard data
   return res.json({
     success: true,
     token,
@@ -199,5 +199,4 @@ router.post('/check-phone', async (req, res) => {
 
 module.exports = router;
    
-
 

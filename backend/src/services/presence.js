@@ -18,18 +18,20 @@ function touch(userId, force = false) {
     .catch(() => lastWrite.delete(userId));
 }
 
-function markSignedIn(userId) {
+async function markSignedIn(userId) {
   if (!userId) return;
   const now = new Date(Date.now() + 1);
   lastWrite.set(userId, now.getTime());
-  Employee.updateOne(
-    { id: userId },
-    { $set: { lastSeenAt: now, socketConnected: null } },
-    { timestamps: false },
-  ).catch((err) => {
+  try {
+    await Employee.updateOne(
+      { id: userId },
+      { $set: { lastLoginAt: now, lastSeenAt: now, socketConnected: null } },
+      { timestamps: false },
+    );
+  } catch (err) {
     lastWrite.delete(userId);
     console.error(`[presence] login timestamp update failed userId=${userId}: ${err.message}`);
-  });
+  }
 }
 
 async function socketConnected(userId) {

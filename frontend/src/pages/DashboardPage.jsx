@@ -22,7 +22,7 @@ import { DASH_TEAM_PAGE_SIZE, PERIOD_OPTIONS } from '../data/constants';
 import { userPath } from '../data/navigation';
 import { setDashDate, setDashMgrFilter, setDashPeriod, setDashTeamPage } from '../redux/slices/dashboardSlice';
 import { selectDashKey, selectScope } from '../redux/selectors';
-import { fmtDur, fmtTalk, fmtTs, formatPhone, validPickerDate } from '../utils/format';
+import { fmtDur, fmtTalk, fmtTime12, fmtTs, formatPhone, validPickerDate } from '../utils/format';
 import { notify } from '../utils/notify';
 import { paginate } from '../utils/table';
 import { periodLabel, periodTargetDays, periodWindow } from '../utils/periods';
@@ -32,6 +32,11 @@ import { fetchDemos } from '../utils/actions/demoActions';
 import { fetchDashboard } from '../utils/actions/statsActions';
 
 const TEAM_COLS = '1.3fr 1.3fr 1.1fr 0.8fr 0.9fr 0.9fr 1.4fr';
+const presenceTime = (value) => {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : fmtTime12(date).toUpperCase();
+};
 
 export default function DashboardPage() {
   const dispatch = useDispatch();
@@ -229,7 +234,13 @@ function TeamPerformance({ server, failed, error, usersError, callers, users, mg
             onClick={(e) => { if (!e.target.closest('a, button, input, select, audio')) onOpen(u.id); }}
           >
             <span className="cell-primary" style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-              <PresenceDot online={online} label={statusTitle} /><span className="truncate"><UserLink user={u} /></span>
+              <PresenceDot online={online} label={statusTitle} />
+              <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                <span className="truncate"><UserLink user={u} /></span>
+                <span className="cell-sub">
+                  LOGIN · {presenceTime(row?.lastLoginAt)} <span aria-hidden="true">|</span> LOGOUT · {presenceTime(row?.loggedOutAt)}
+                </span>
+              </span>
             </span>
             <span className="cell-muted" style={{ fontSize: 12, lineHeight: 1.5, overflowWrap: 'anywhere' }} title={managerChainText(users, u)}>
               <ManagerChain user={u} />

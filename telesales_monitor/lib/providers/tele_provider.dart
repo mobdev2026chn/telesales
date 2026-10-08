@@ -1769,6 +1769,7 @@ class TeleProvider extends ChangeNotifier {
     _pushAutoRecordToNative();
     await fetchDeviceCallLogs();
     await fetchBackendData();
+    await fetchNotifications();
     _startPeriodicSyncTimer();
     refreshRecordingSetupStatus();
     notifyListeners();

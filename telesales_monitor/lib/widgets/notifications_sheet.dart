@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
@@ -8,6 +10,8 @@ class NotificationsSheet extends StatelessWidget {
   const NotificationsSheet({super.key});
 
   static void show(BuildContext context) {
+    final tele = Provider.of<TeleProvider>(context, listen: false);
+    unawaited(tele.fetchNotifications());
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
