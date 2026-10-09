@@ -54,12 +54,20 @@ export async function login(identifier, password) {
   }
 }
 
-export function logout() {
+export async function logout() {
+  let logoutError = null;
+  try {
+    await authService.logout();
+  } catch (err) {
+    logoutError = err;
+  }
   clearSession();
   stopAllAudio();
   dispatch(resetSession());
   dispatch(loginShown());
-  notify('LOGGED OUT');
+  notify(logoutError
+    ? `LOGGED OUT LOCALLY; SERVER LOGOUT TIME COULD NOT BE SAVED — ${logoutError.message}`
+    : 'LOGGED OUT');
 }
 
 // Any API call answered 401: back to the sign-in screen with the reason

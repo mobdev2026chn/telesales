@@ -116,7 +116,6 @@ export default function UserDetailPage() {
   const todayRow = statsFor(usersState.todayMembers, u);
   const todayCalls = todayRow ? num(todayRow.totalCalls) : 0;
   const pct = target > 0 ? Math.min(100, Math.round(todayCalls / target * 100)) : 0;
-  const seenAt = (row && row.lastSeenAt) || (todayRow && todayRow.lastSeenAt);
   const online = !!((row && row.online) || (todayRow && todayRow.online));
   const loadingTxt = data ? '' : 'LOADING…';
 
@@ -226,7 +225,7 @@ export default function UserDetailPage() {
               <DetailLine label="Team">{u.team || '—'}</DetailLine>
               <DetailLine label="App status">
                 {online ? <Badge tone="success" dot>SIGNED IN</Badge>
-                  : <span className="muted">NOT SIGNED IN{seenAt ? ` · LAST ACTIVE ${fmtTs(new Date(seenAt))}` : ''}</span>}
+                  : <span className="muted">NOT SIGNED IN</span>}
               </DetailLine>
             </div>
             {isAgent && (

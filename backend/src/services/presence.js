@@ -1,70 +1,59 @@
-// Online / offline presence. A user is ONLINE when a signed-in request from them arrived within
-// ONLINE_WINDOW_MS and they have not logged out since. The app sends an authenticated heartbeat
-// while active; a phone that is switched off, loses its session or has the app killed turns offline
-// after the window.
+// Online presence is based on the most recent explicit login and logout timestamps.
 const Employee = require('../models/Employee');
 
-const ONLINE_WINDOW_MS = 5 * 60 * 1000;
-const TOUCH_EVERY_MS = 30 * 1000; // at most one write per user per 30 s
+function sessionFilter(userId, sessionId) {
+  return {
+    id: userId,
+    ...(sessionId ? { activeSessionId: sessionId } : { activeSessionId: { $in: [null] } }),
+  };
+}
 
-const lastWrite = new Map(); // userId -> ms of the last lastSeenAt write
-
-function touch(userId, force = false) {
+async function markSignedIn(userId, sessionId) {
   if (!userId) return;
-  const now = Date.now();
-  if (!force && now - (lastWrite.get(userId) || 0) < TOUCH_EVERY_MS) return;
-  lastWrite.set(userId, now);
-  Employee.updateOne({ id: userId }, { $set: { lastSeenAt: new Date(now) } }, { timestamps: false })
-    .catch(() => lastWrite.delete(userId));
-}
-
-async function markSignedIn(userId) {
-  if (!userId) return;
-  const now = new Date(Date.now() + 1);
-  lastWrite.set(userId, now.getTime());
-  try {
-    await Employee.updateOne(
-      { id: userId },
-      { $set: { lastLoginAt: now, lastSeenAt: now, socketConnected: null } },
-      { timestamps: false },
-    );
-  } catch (err) {
-    lastWrite.delete(userId);
-    console.error(`[presence] login timestamp update failed userId=${userId}: ${err.message}`);
-  }
-}
-
-async function socketConnected(userId) {
-  if (!userId) return null;
-  const now = new Date(Date.now() + 1);
-  lastWrite.set(userId, now.getTime());
-  return Employee.updateOne(
-    { id: userId },
-    { $set: { lastSeenAt: now, socketConnected: true } },
-    { timestamps: false },
-  );
-}
-
-async function socketDisconnected(userId) {
-  if (!userId) return null;
   const now = new Date();
-  lastWrite.set(userId, now.getTime());
-  return Employee.updateOne(
+  const result = await Employee.collection.updateOne(
     { id: userId },
-    { $set: { lastSeenAt: now, socketConnected: false } },
-    { timestamps: false },
+    {
+      $set: {
+        lastLoginAt: now,
+        loggedOutAt: null,
+        activeSessionId: sessionId,
+      },
+      // $unset: { lastSeenAt: 1 },
+    },
   );
+  if (result.matchedCount === 0) {
+    throw new Error(`Cannot record login for missing employee userId=${userId}`);
+  }
+  return now;
 }
 
-async function markLoggedOut(userId) {
-  if (!userId) return;
-  lastWrite.delete(userId);
+async function markLoggedOut(userId, sessionId = null, tokenIssuedAt = null) {
+  if (!userId) return false;
+  const now = new Date();
+  const filter = sessionFilter(userId, sessionId);
+  if (!sessionId && Number.isFinite(tokenIssuedAt)) {
+    filter.$or = [
+      { lastLoginAt: null },
+      { lastLoginAt: { $lte: new Date(tokenIssuedAt + 999) } },
+    ];
+  }
   // Logging out also ends any break
-  await Employee.updateOne(
-    { id: userId },
-    { $set: { loggedOutAt: new Date(), socketConnected: false, breakType: '', breakStartedAt: null } },
-    { timestamps: false },
+  const result = await Employee.collection.updateOne(
+    filter,
+    {
+      $set: {
+        loggedOutAt: now,
+      },
+      // $unset: { activeSessionId: 1, lastSeenAt: 1 },
+    },
   );
+  if (result.matchedCount === 0) {
+    const exists = await Employee.exists({ id: userId });
+    if (!exists) throw new Error(`Cannot record logout for missing employee userId=${userId}`);
+    return false;
+  }
+  return now;
 }
 
 // A break shown on the portal: started from the app, not older than MAX_BREAK_MS (a phone that
@@ -79,22 +68,19 @@ function breakInfo(emp, now = Date.now()) {
   return { onBreak: true, breakType: emp.breakType || 'Break', breakStartedAt: new Date(started).toISOString() };
 }
 
-function isOnline(emp, now = Date.now()) {
-  if (!emp || !emp.lastSeenAt) return false;
-  if (emp.socketConnected === false) return false;
-  const seen = new Date(emp.lastSeenAt).getTime();
-  if (now - seen > ONLINE_WINDOW_MS) return false;
-  return !emp.loggedOutAt || seen > new Date(emp.loggedOutAt).getTime();
+function isOnline(emp) {
+  if (!emp || !emp.lastLoginAt) return false;
+  const loggedInAt = new Date(emp.lastLoginAt).getTime();
+  if (!Number.isFinite(loggedInAt)) return false;
+  if (!emp.loggedOutAt) return true;
+  const loggedOutAt = new Date(emp.loggedOutAt).getTime();
+  return !Number.isFinite(loggedOutAt) || loggedInAt > loggedOutAt;
 }
 
 module.exports = {
-  touch,
   markSignedIn,
-  socketConnected,
-  socketDisconnected,
   markLoggedOut,
   isOnline,
   breakInfo,
-  ONLINE_WINDOW_MS,
   MAX_BREAK_MS,
 };

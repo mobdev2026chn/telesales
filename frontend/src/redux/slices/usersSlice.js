@@ -27,7 +27,9 @@ const usersSlice = createSlice({
       if (u) Object.assign(u, payload.fields);
     },
     employeePresenceChanged(state, { payload }) {
-      const patch = { online: payload.online, lastSeenAt: payload.lastSeenAt };
+      const patch = { online: payload.online };
+      if (payload.lastLoginAt !== undefined) patch.lastLoginAt = payload.lastLoginAt;
+      if (payload.loggedOutAt !== undefined) patch.loggedOutAt = payload.loggedOutAt;
       const user = state.list.find((row) => row.id === payload.id);
       if (user) Object.assign(user, patch);
       if (state.todayMembers) {

@@ -23,11 +23,10 @@ const EmployeeSchema = new mongoose.Schema({
   photoBase64: { type: String, default: '' },
   avatarUrl: { type: String, default: '' },
   cloudinaryPhotoPublicId: { type: String, default: '' },
-  // Presence (services/presence.js): last signed-in request, last explicit logout
+  // Presence (services/presence.js): last explicit login and logout
   lastLoginAt: { type: Date, default: null },
-  lastSeenAt: { type: Date, default: null },
   loggedOutAt: { type: Date, default: null },
-  socketConnected: { type: Boolean, default: null },
+  activeSessionId: { type: String, default: null },
   // Break started from the app (Tea break / Lunch); empty / null = working (services/presence.js)
   breakType: { type: String, default: '' },
   breakStartedAt: { type: Date, default: null },

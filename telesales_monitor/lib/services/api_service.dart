@@ -219,7 +219,7 @@ class ApiService {
     if (res == null) return null;
     try {
       final d = jsonDecode(res.body);
-      
+
       return d is Map<String, dynamic> ? d : null;
     } catch (_) {
       return null;
@@ -280,10 +280,22 @@ class ApiService {
     return res != null && _ok(res);
   }
 
-  /// POST /auth/logout: the admin dashboard shows this user as offline straight away. Best effort.
-  static Future<void> logout() async {
-    if (_token.isEmpty) return;
-    await _request('POST', '/auth/logout', timeout: const Duration(seconds: 5));
+  /// POST /auth/logout: records the explicit logout time for the admin dashboard.
+  static Future<bool> logout() async {
+    if (_token.isEmpty) return false;
+    final res = await _request(
+      'POST',
+      '/auth/logout',
+      timeout: const Duration(seconds: 5),
+    );
+    final acknowledged = _ok(res);
+    if (!acknowledged) {
+      debugPrint(
+        'ApiService.logout was not acknowledged'
+        '${res == null ? ': ${lastNetworkError.isNotEmpty ? lastNetworkError : 'no server response'}' : ' (HTTP ${res.statusCode})'}.',
+      );
+    }
+    return acknowledged;
   }
 
   /// POST /user/break: tells the admin / manager portal this user started ([onBreak] true, with

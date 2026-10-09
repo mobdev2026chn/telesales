@@ -34,11 +34,12 @@ const dashboardSlice = createSlice({
     },
     employeePresenceChanged(state, { payload }) {
       if (!state.data) return;
-      const { id, online, lastSeenAt } = payload;
+      const { id, online, lastLoginAt, loggedOutAt } = payload;
       const member = state.data.teamMembers?.find((row) => row.id === id);
       if (member) {
         member.online = online;
-        member.lastSeenAt = lastSeenAt;
+        if (lastLoginAt !== undefined) member.lastLoginAt = lastLoginAt;
+        if (loggedOutAt !== undefined) member.loggedOutAt = loggedOutAt;
       }
       const liveStatus = state.data.callerLiveStatuses?.find((row) => row.id === id);
       if (liveStatus && liveStatus.status !== 'ON CALL') {

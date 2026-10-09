@@ -1,8 +1,10 @@
 const express = require('express');
+const crypto = require('crypto');
 const router = express.Router();
 const Employee = require('../models/Employee');
 const { signToken, verifyAndUpgradePassword, requireAuth, MANAGERS } = require('../middleware/auth');
 const presence = require('../services/presence');
+const { publishForEmployee } = require('../services/realtime');
 
 const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const last10 = (s) => String(s || '').replace(/[^0-9]/g, '').slice(-10);
@@ -57,8 +59,19 @@ async function login(req, res, { allowedRoles, wrongRoleMessage }) {
     return res.status(403).json({ success: false, message: wrongRoleMessage(role) });
   }
 
-  const token = signToken(emp);
-  await presence.markSignedIn(emp.id); // Persist login time before the app fetches dashboard data
+  const sessionId = crypto.randomUUID();
+  const token = signToken(emp, sessionId);
+  const lastLoginAt = await presence.markSignedIn(emp.id, sessionId); // Persist login time before the app fetches dashboard data
+  try {
+    await publishForEmployee(req, emp, 'employeeOnline', {
+      userId: emp.id,
+      status: 'online',
+      lastLoginAt,
+      loggedOutAt: null,
+    });
+  } catch (err) {
+    console.error(`[presence] login event publish failed userId=${emp.id}: ${err.message}`);
+  }
   return res.json({
     success: true,
     token,
@@ -117,7 +130,7 @@ router.get('/me', requireAuth(), async (req, res) => {
   }
 });
 
-// POST /api/auth/heartbeat — "still here" from a signed-in app (the auth middleware records it)
+// POST /api/auth/heartbeat — compatibility endpoint for app builds; presence uses explicit login/logout.
 router.post('/heartbeat', requireAuth(), (req, res) => {
   res.json({ success: true });
 });
@@ -125,8 +138,23 @@ router.post('/heartbeat', requireAuth(), (req, res) => {
 // POST /api/auth/logout — marks the user offline straight away
 router.post('/logout', requireAuth(), async (req, res) => {
   try {
-    await presence.markLoggedOut(req.user.id);
-    res.json({ success: true });
+    const loggedOutAt = await presence.markLoggedOut(
+      req.user.id,
+      req.user.sessionId,
+      req.user.tokenIssuedAt,
+    );
+    if (loggedOutAt) {
+      try {
+        await publishForEmployee(req, req.user, 'employeeOffline', {
+          userId: req.user.id,
+          status: 'offline',
+          loggedOutAt,
+        });
+      } catch (err) {
+        console.error(`[presence] logout event publish failed userId=${req.user.id}: ${err.message}`);
+      }
+    }
+    res.json({ success: true, staleSession: !loggedOutAt });
   } catch (err) {
     res.status(500).json({ success: false, message: 'Could not log out.' });
   }
@@ -199,4 +227,3 @@ router.post('/check-phone', async (req, res) => {
 
 module.exports = router;
    
-

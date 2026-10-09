@@ -29,11 +29,12 @@ const userDetailSlice = createSlice({
     udLoaded(state, { payload }) { state.ud = payload; },
     employeePresenceChanged(state, { payload }) {
       if (!state.ud?.dash) return;
-      const { id, online, lastSeenAt } = payload;
+      const { id, online, lastLoginAt, loggedOutAt } = payload;
       const member = state.ud.dash.teamMembers?.find((row) => row.id === id);
       if (member) {
         member.online = online;
-        member.lastSeenAt = lastSeenAt;
+        if (lastLoginAt !== undefined) member.lastLoginAt = lastLoginAt;
+        if (loggedOutAt !== undefined) member.loggedOutAt = loggedOutAt;
       }
       const liveStatus = state.ud.dash.callerLiveStatuses?.find((row) => row.id === id);
       if (liveStatus && liveStatus.status !== 'ON CALL') {

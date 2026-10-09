@@ -184,7 +184,7 @@ app.set('io', io);
 initializeRealtime(io);
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Telesales Backend API running on http://0.0.0.0:${PORT}`);
+  console.log(`Telesales Backend API running on ${PORT}`);
 });
 
 server.on('error', (err) => {

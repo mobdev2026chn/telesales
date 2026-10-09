@@ -22,7 +22,7 @@ import { DASH_TEAM_PAGE_SIZE, PERIOD_OPTIONS } from '../data/constants';
 import { userPath } from '../data/navigation';
 import { setDashDate, setDashMgrFilter, setDashPeriod, setDashTeamPage } from '../redux/slices/dashboardSlice';
 import { selectDashKey, selectScope } from '../redux/selectors';
-import { fmtDur, fmtTalk, fmtTime12, fmtTs, formatPhone, validPickerDate } from '../utils/format';
+import { fmtDur, fmtTalk, fmtTime12, formatPhone, validPickerDate } from '../utils/format';
 import { notify } from '../utils/notify';
 import { paginate } from '../utils/table';
 import { periodLabel, periodTargetDays, periodWindow } from '../utils/periods';
@@ -221,7 +221,7 @@ function TeamPerformance({ server, failed, error, usersError, callers, users, mg
         const uTotal = row ? Number(row.totalCalls) || 0 : 0;
         const uConnected = row ? Number(row.connectedCalls) || 0 : 0;
         const { online } = appPresence(row);
-        const statusTitle = presenceTitle(row, uConnected, fmtTs);
+        const statusTitle = presenceTitle(row, uConnected);
         const uTalk = row ? Number(row.talkTimeSeconds) || 0 : 0;
         const target = (Number(u.target) || 0) * targetDays;  // daily target × days in the period
         const attain = target > 0 ? Math.round((uTotal / target) * 100) : 0;

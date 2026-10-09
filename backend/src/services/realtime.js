@@ -1,9 +1,6 @@
 const { verifySocketToken, MANAGERS } = require('../middleware/auth');
 const Employee = require('../models/Employee');
-const presence = require('./presence');
 const { exactNameRegex, isObjectId } = require('../utils/common');
-
-const activeSockets = new Map();
 
 function employeeRoom(id) {
   return `employee:${id}`;
@@ -64,53 +61,6 @@ function initializeRealtime(io) {
     }
   });
 
-  io.on('connection', async (socket) => {
-    const user = socket.data.user;
-    let tracked = false;
-    socket.on('disconnect', async () => {
-      if (!tracked) return;
-      const userSockets = activeSockets.get(user.id);
-      if (!userSockets) return;
-      userSockets.delete(socket.id);
-      console.info(`[socket] disconnected userId=${user.id} socketId=${socket.id}`);
-      if (userSockets.size > 0) return;
-      activeSockets.delete(user.id);
-      try {
-        await presence.socketDisconnected(user.id);
-        await emitToEmployee(io, user, 'employeeOffline', {
-          userId: user.id,
-          status: 'offline',
-          lastSeenAt: new Date().toISOString(),
-        });
-      } catch (err) {
-        console.error(`[socket] disconnect presence update failed userId=${user.id}: ${err.message}`);
-      }
-    });
-    try {
-      if (!socket.connected) return;
-
-      let userSockets = activeSockets.get(user.id);
-      const wasOffline = !userSockets || userSockets.size === 0;
-      if (!userSockets) {
-        userSockets = new Set();
-        activeSockets.set(user.id, userSockets);
-      }
-      userSockets.add(socket.id);
-      tracked = true;
-      await presence.socketConnected(user.id);
-
-      console.info(`[socket] connected userId=${user.id} role=${user.role} socketId=${socket.id}`);
-      console.info(`[socket] authenticated userId=${user.id} role=${user.role}`);
-      if (wasOffline && socket.connected) {
-        const payload = { userId: user.id, status: 'online', lastSeenAt: new Date().toISOString() };
-        await emitToEmployee(io, user, 'employeeOnline', payload);
-      }
-    } catch (err) {
-      console.error(`[socket] connection setup failed userId=${user.id}: ${err.message}`);
-      socket.disconnect(true);
-      return;
-    }
-  });
 }
 
 async function recipientRooms(employee, additionalEmployeeIds = []) {

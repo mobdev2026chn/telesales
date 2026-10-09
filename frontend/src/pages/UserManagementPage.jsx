@@ -19,7 +19,7 @@ import { DEFAULT_DAILY_TARGET, HEAD_ROLES, ROLE_OPTIONS, TREE_FILTERS, USER_LIST
 import { PATHS } from '../data/navigation';
 import { closeUserForm, setTreeFilter, setUserView, toggleUserForm } from '../redux/slices/uiSlice';
 import { selectScope } from '../redux/selectors';
-import { fmtTs, formatPhone, last10, roleLabel } from '../utils/format';
+import { formatPhone, last10, roleLabel } from '../utils/format';
 import { byRankThenName, isHead, roleRank, statsFor } from '../utils/scope';
 import { appPresence, presenceTitle } from '../utils/stats';
 import { paginate } from '../utils/table';
@@ -79,7 +79,7 @@ export default function UserManagementPage() {
       const uConnected = connectedToday(u);
       const { online } = appPresence(todayRow(u));
       const todayTotal = (() => { const s = todayRow(u); return s ? Number(s.totalCalls) || 0 : 0; })();
-      const statusTitle = presenceTitle(todayRow(u), uConnected, fmtTs);
+      const statusTitle = presenceTitle(todayRow(u), uConnected);
       return (
         <TableRow cols={LIST_COLS} key={u.id}>
           <span className="cell-primary" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

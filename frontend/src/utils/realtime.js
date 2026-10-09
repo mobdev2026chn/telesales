@@ -39,7 +39,8 @@ function handlePresence(payload, online) {
   const presence = {
     id: String(payload.userId),
     online,
-    lastSeenAt: payload.lastSeenAt || null,
+    ...(payload.lastLoginAt !== undefined ? { lastLoginAt: payload.lastLoginAt } : {}),
+    ...(payload.loggedOutAt !== undefined ? { loggedOutAt: payload.loggedOutAt } : {}),
   };
   store.dispatch(employeePresenceChanged(presence));
   store.dispatch(dashboardPresenceChanged(presence));

@@ -11,6 +11,7 @@ export const authService = {
     noAuth: true,
     body: { identifier, email: identifier, password },
   }),
+  logout: () => apiFetch(ENDPOINTS.logout, { method: 'POST', body: {} }),
 };
 
 export const userService = {

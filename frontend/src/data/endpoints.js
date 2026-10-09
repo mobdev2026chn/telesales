@@ -6,6 +6,7 @@ export const ENDPOINTS = {
   // Auth
   me: '/auth/me',
   adminLogin: '/auth/admin-login',
+  logout: '/auth/logout',
 
   // Users
   users: '/admin/users',

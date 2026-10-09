@@ -1,6 +1,5 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const presence = require('../services/presence');
 const Employee = require('../models/Employee');
 
 const TOKEN_TTL = '30d';
@@ -23,10 +22,11 @@ function normalizeRole(role) {
   return (role || 'caller').toString().toLowerCase();
 }
 
-function signToken(emp) {
+function signToken(emp, sessionId) {
   return jwt.sign(
     {
       sub: emp.id,
+      sid: sessionId,
       role: normalizeRole(emp.role),
       name: emp.name,
       phone: emp.phone || '',
@@ -92,6 +92,7 @@ async function verifySocketToken(token) {
   if (!emp) throw new Error('Account no longer exists');
   return {
     id: emp.id,
+    sessionId: payload.sid || null,
     role: normalizeRole(emp.role),
     name: emp.name || payload.name || '',
     phone: emp.phone || payload.phone || '',
@@ -111,6 +112,8 @@ async function authenticate(req, res, next) {
       const payload = jwt.verify(token, getSecret());
       req.user = {
         id: payload.sub,
+        sessionId: payload.sid || null,
+        tokenIssuedAt: Number.isFinite(payload.iat) ? payload.iat * 1000 : null,
         role: normalizeRole(payload.role),
         name: payload.name,
         phone: payload.phone,
@@ -161,8 +164,6 @@ async function authenticate(req, res, next) {
     };
     pin(req.query);
     if (req.body && typeof req.body === 'object' && !Array.isArray(req.body)) pin(req.body);
-    // Any signed-in request means the user is active (the logout request itself does not count)
-    if (!/\/auth\/logout$/.test(req.path)) presence.touch(req.user.id);
   }
   next();
 }

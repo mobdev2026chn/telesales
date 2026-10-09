@@ -31,16 +31,15 @@ export function demoHourCounts(demos, start, end) {
   return { byHour, byStatusHour, status };
 }
 
-// Phone-app sign-in status of one person, from a server stats row ({ online, lastSeenAt }).
-// online = the app sent a heartbeat in the last 5 minutes and the user has not logged out.
+// Sign-in status comes from the employee's latest explicit login/logout timestamps.
 export function appPresence(row) {
-  return { online: !!(row && row.online), lastSeenAt: (row && row.lastSeenAt) || null };
+  return { online: !!(row && row.online) };
 }
 
 // Hover text for the green / red dot, e.g. "Signed in to the app · 3 connected calls"
-export function presenceTitle(row, connected, fmtTs) {
-  const { online, lastSeenAt } = appPresence(row);
+export function presenceTitle(row, connected) {
+  const { online } = appPresence(row);
   const calls = connected > 0 ? ` · ${connected} connected call${connected === 1 ? '' : 's'}` : '';
   if (online) return `Signed in to the app${calls}`;
-  return `Not signed in to the app${lastSeenAt ? ` · last active ${fmtTs(new Date(lastSeenAt))}` : ''}${calls}`;
+  return `Not signed in to the app${calls}`;
 }
