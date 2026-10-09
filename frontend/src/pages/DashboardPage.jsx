@@ -149,7 +149,7 @@ export default function DashboardPage() {
 
 const HOURLY_VIEWS = [{ value: 'calls', label: 'Calls' }, { value: 'demos', label: 'Demo bookings' }];
 
-// Calls by hour, or (toggle) demo bookings by scheduled hour for the same period with their status
+// Calls by hour, or (toggle) demo bookings grouped by their creation hour
 function HourlyCard({ server, period, customDate }) {
   const [view, setView] = useState('calls');
   const demos = useSelector(s => s.demos);
@@ -185,7 +185,7 @@ function HourlyCard({ server, period, customDate }) {
         <FilterChips options={HOURLY_VIEWS} value={view} onChange={setView} pressed />
       </div>
       <div className="card-subtitle" style={{ marginBottom: 8 }}>
-        {showDemos ? `${periodLabel(period, customDate)} · scheduled time, cancelled not counted · 10 AM – 7 PM IST` : '10 AM – 7 PM IST'}
+        {showDemos ? `${periodLabel(period, customDate)} · booking created time, cancelled not counted · 10 AM – 7 PM IST` : '10 AM – 7 PM IST'}
       </div>
       <div className="hour-bars">{bars}</div>
       {footer}
@@ -238,7 +238,7 @@ function TeamPerformance({ server, failed, error, usersError, callers, users, mg
               <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                 <span className="truncate"><UserLink user={u} /></span>
                 <span className="cell-sub">
-                  LOGIN · {presenceTime(row?.lastLoginAt)} <span aria-hidden="true">|</span> LOGOUT · {presenceTime(row?.loggedOutAt)}
+                  LOGIN · {presenceTime(row?.lastLoginAt)} <span aria-hidden="true">|</span> LOGOUT · {online ? '—' : presenceTime(row?.loggedOutAt)}
                 </span>
               </span>
             </span>

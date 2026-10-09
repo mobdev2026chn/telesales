@@ -51,7 +51,7 @@ async function socketDisconnected(userId) {
   lastWrite.set(userId, now.getTime());
   return Employee.updateOne(
     { id: userId },
-    { $set: { lastSeenAt: now, loggedOutAt: now, socketConnected: false } },
+    { $set: { lastSeenAt: now, socketConnected: false } },
     { timestamps: false },
   );
 }

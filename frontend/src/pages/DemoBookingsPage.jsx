@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { Button, Tooltip } from '../assets/antd';
+import { Button, Select, Tooltip } from '../assets/antd';
 import { Badge } from '../components/common/Badge';
 import DataTable, { Heads, TableRow } from '../components/common/DataTable';
 import DateField from '../components/common/DateField';
@@ -31,6 +31,8 @@ export default function DemoBookingsPage() {
   const ds = useSelector(s => s.demos);
   const { visible, me } = useSelector(selectScope);
   const isTeamLeader = me.role === 'TEAM_LEADER';
+  const [agentSelection, setAgentSelection] = useState({ userId: me.id, id: 'ALL' });
+  const storedAgentFilter = agentSelection.userId === me.id ? agentSelection.id : 'ALL';
   const [menu, setMenu] = useState(null);   // { m, rect }
   const closeMenu = useCallback(() => setMenu(null), []);
   // Demos being sent back to reschedule: they fade out before the list reloads without them
@@ -57,9 +59,20 @@ export default function DemoBookingsPage() {
   }, [tl, ds.tl, dispatch]);
 
   const day = demoDayStr(ds.day);
-  const list = dayDemos(ds.list, tl, ds.day);
+  const dayList = dayDemos(ds.list, tl, ds.day);
   const tlOptions = Array.from(tls.entries()).sort((a, b) => String(a[1]).localeCompare(String(b[1])));
   if (!isTeamLeader) tlOptions.unshift(['ALL', 'All']);
+
+  const agentUsers = visible
+    .filter(u => u.role === 'CALLER' && (!isTeamLeader || u.mgr === me.id))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const selectedAgent = agentUsers.find(u => u.id === storedAgentFilter);
+  const agentFilter = selectedAgent ? storedAgentFilter : 'ALL';
+  const list = !selectedAgent || agentFilter === 'ALL'
+    ? dayList
+    : dayList.filter(d => d.callerId
+      ? d.callerId === selectedAgent.id
+      : String(d.agent || '').trim().toLowerCase() === selectedAgent.name.trim().toLowerCase());
 
   const changeDay = (val) => { setMenu(null); dispatch(setDemoDay(val)); };
   const shiftDay = (delta) => {
@@ -174,6 +187,22 @@ export default function DemoBookingsPage() {
         </div>
       </div>
 
+      <div className="demo-table-toolbar">
+        <label htmlFor="demoAgentFilter" className="demo-tl-label">Agent</label>
+        <Select
+          id="demoAgentFilter"
+          className={`toolbar-ant-select${agentFilter !== 'ALL' ? ' is-active' : ''}`}
+          value={agentFilter}
+          onChange={id => setAgentSelection({ userId: me.id, id })}
+          showSearch
+          optionFilterProp="label"
+          popupMatchSelectWidth={false}
+          options={[
+            { value: 'ALL', label: 'ALL AGENTS' },
+            ...agentUsers.map(u => ({ value: u.id, label: u.name.toUpperCase() })),
+          ]}
+        />
+      </div>
       <div className="neo-table-card">
         <DataTable cols={COLS} head={<Heads labels={['Demo date · slot', 'Client', 'Phone', 'Course', 'Team leader', 'Agent', 'Notes', 'Booked on']} />}>
           {body}

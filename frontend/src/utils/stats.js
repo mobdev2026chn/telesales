@@ -10,8 +10,7 @@ export function hourCounts(rows) {
 
 const istHourFmt = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', hourCycle: 'h23' });
 
-// Demo bookings scheduled in [start, end) → 24 counts by India time hour (only booked / done ones;
-// cancelled and sent back for rescheduling are left out) plus the number per status
+// Demo bookings created in [start, end) → counts by creation hour and status, in India time.
 export function demoHourCounts(demos, start, end) {
   const byHour = new Array(24).fill(0);
   const byStatusHour = {
@@ -20,13 +19,13 @@ export function demoHourCounts(demos, start, end) {
   };
   const status = { BOOKED: 0, DONE: 0, CANCELLED: 0, RESCHEDULE: 0 };
   (Array.isArray(demos) ? demos : []).forEach(d => {
-    if (!d.at || d.at < start || d.at >= end) return;
+    if (!d.bookedAt || Number.isNaN(d.bookedAt.getTime()) || d.bookedAt < start || d.bookedAt >= end) return;
     status[d.status] = (status[d.status] || 0) + 1;
     if (d.status !== 'BOOKED' && d.status !== 'DONE') return;
-    const h = Number(istHourFmt.format(d.at));
-    if (h >= 0 && h <= 23) {
-      byHour[h] += 1;
-      byStatusHour[d.status][h] += 1;
+    const hour = Number(istHourFmt.format(d.bookedAt));
+    if (hour >= 0 && hour <= 23) {
+      byHour[hour] += 1;
+      byStatusHour[d.status][hour] += 1;
     }
   });
   return { byHour, byStatusHour, status };

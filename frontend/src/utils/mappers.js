@@ -158,6 +158,7 @@ export function mapLead(l) {
 
 export function mapDemo(d) {
   const at = d.scheduledAt ? new Date(d.scheduledAt) : null;
+  const bookedAt = d.createdAt ? new Date(d.createdAt) : null;
   return {
     id: String(d.id || ''),
     clientName: d.clientName || '',
@@ -172,7 +173,7 @@ export function mapDemo(d) {
     course: d.course || '',
     reason: d.reason || '',
     status: d.status || 'BOOKED',
-    bookedAt: d.createdAt ? new Date(d.createdAt) : null,
+    bookedAt: bookedAt && !isNaN(bookedAt.getTime()) ? bookedAt : null,
   };
 }
 
