@@ -35,10 +35,12 @@ class CallRecordingSetupPanel extends StatefulWidget {
   const CallRecordingSetupPanel({super.key});
 
   @override
-  State<CallRecordingSetupPanel> createState() => _CallRecordingSetupPanelState();
+  State<CallRecordingSetupPanel> createState() =>
+      _CallRecordingSetupPanelState();
 }
 
-class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel> with WidgetsBindingObserver {
+class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel>
+    with WidgetsBindingObserver {
   RecordingSetupStatus? _status;
   bool _loading = true;
 
@@ -96,7 +98,9 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel> with 
     if (_loading) {
       return const Padding(
         padding: EdgeInsets.all(32),
-        child: Center(child: CircularProgressIndicator(color: AppTheme.greenDark)),
+        child: Center(
+          child: CircularProgressIndicator(color: AppTheme.greenDark),
+        ),
       );
     }
     final s = _status;
@@ -119,14 +123,22 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel> with 
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('STATUS', style: AppTheme.label(size: 9, color: AppTheme.ink900)),
+              Text(
+                'STATUS',
+                style: AppTheme.label(size: 9, color: AppTheme.ink900),
+              ),
               const SizedBox(height: 8),
               _statusRow(
                 'Call tracking running',
                 s?.serviceRunning == true,
-                subtitle: tele.isLoggedIn ? null : 'Starts after you sign in as a caller',
+                subtitle: tele.isLoggedIn
+                    ? null
+                    : 'Starts after you sign in as a caller',
                 action: tele.isLoggedIn && s?.serviceRunning != true
-                    ? _ActionLink('Start', () => _run(() => tele.syncCallMonitor()))
+                    ? _ActionLink(
+                        'Start',
+                        () => _run(() => tele.syncCallMonitor()),
+                      )
                     : null,
               ),
               _statusRow(
@@ -134,21 +146,33 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel> with 
                 s?.micPermission == true,
                 action: s?.micPermission == true
                     ? null
-                    : _ActionLink('Allow', () => _run(() async {
+                    : _ActionLink(
+                        'Allow',
+                        () => _run(() async {
                           await tele.requestNativePermissions();
                           await tele.syncCallMonitor();
-                        })),
+                        }),
+                      ),
               ),
               _statusRow(
                 'Access to call recordings (audio files)',
                 s?.mediaPermission == true,
-                subtitle: 'Lets AskEVA find the recording your phone made of each work call',
+                subtitle:
+                    'Lets AskEVA find the recording your phone made of each work call',
                 action: s?.mediaPermission == true
                     ? null
-                    : _ActionLink('Allow', () => _run(() async {
-                          final ok = await CallRecordingChannel.requestMediaPermission();
-                          if (!ok) _snack('Allow "Music and audio" / "Files" access in the app\'s permission settings.');
-                        })),
+                    : _ActionLink(
+                        'Allow',
+                        () => _run(() async {
+                          final ok =
+                              await CallRecordingChannel.requestMediaPermission();
+                          if (!ok) {
+                            _snack(
+                              'Allow "Music and audio" / "Files" access in the app\'s permission settings.',
+                            );
+                          }
+                        }),
+                      ),
               ),
               _statusRow(
                 'Battery optimisation off',
@@ -156,7 +180,13 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel> with 
                 subtitle: 'Keeps tracking alive all day',
                 action: s?.batteryOptimizationIgnored == true
                     ? null
-                    : _ActionLink('Fix', () => _run(() => CallRecordingChannel.requestIgnoreBatteryOptimizations())),
+                    : _ActionLink(
+                        'Fix',
+                        () => _run(
+                          () =>
+                              CallRecordingChannel.requestIgnoreBatteryOptimizations(),
+                        ),
+                      ),
               ),
               _statusRow(
                 'Call recording permission (Accessibility)',
@@ -166,10 +196,18 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel> with 
                     : 'Without it Android mutes the microphone during calls, and recordings are silent',
                 action: s?.accessibilityEnabled == true
                     ? null
-                    : _ActionLink('Turn on', () => _run(() async {
-                          final ok = await CallRecordingChannel.openAccessibilitySettings();
-                          if (!ok) _snack('Open Settings → Accessibility → AskEVA Call Recording and turn it on.');
-                        })),
+                    : _ActionLink(
+                        'Turn on',
+                        () => _run(() async {
+                          final ok =
+                              await CallRecordingChannel.openAccessibilitySettings();
+                          if (!ok) {
+                            _snack(
+                              'Open Settings → Accessibility → AskEVA Call Recording and turn it on.',
+                            );
+                          }
+                        }),
+                      ),
               ),
               if ((s?.lastCaptureStatus ?? '').isNotEmpty)
                 _statusRow(
@@ -178,8 +216,38 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel> with 
                   pendingLabel: 'SILENT',
                   subtitle: s?.lastCaptureStatus == 'ok'
                       ? 'Audio was captured on the last work call'
-                      : 'Android muted the microphone on the last work call, so nothing was uploaded. '
-                          'Turn on the Accessibility permission above.',
+                      : s?.accessibilityEnabled != true
+                      ? 'Android muted the microphone on the last work call. Turn on the Accessibility permission, '
+                            'then make another test call.'
+                      : s?.lastCaptureA11y != true
+                      ? 'Accessibility is enabled now, but it was off during the last call. Make another test call '
+                            'to check recording.'
+                      : 'Accessibility was enabled during the last call, but no audio was detected. Try your phone\'s '
+                            'built-in call recorder or test with speakerphone.',
+                  action: s?.lastCaptureStatus != 'silent'
+                      ? null
+                      : s?.accessibilityEnabled != true
+                      ? _ActionLink('Turn on', () async {
+                          final ok =
+                              await CallRecordingChannel.openAccessibilitySettings();
+                          if (!ok) {
+                            _snack(
+                              'Open Settings → Accessibility → AskEVA Call Recording and turn it on.',
+                            );
+                          }
+                          await _refresh();
+                        })
+                      : s?.lastCaptureA11y == true
+                      ? _ActionLink('Phone settings', () async {
+                          final ok =
+                              await CallRecordingChannel.openDialerRecordingSettings();
+                          if (!ok) {
+                            _snack(
+                              'Could not open phone recording settings. Open your Phone app settings manually.',
+                            );
+                          }
+                        })
+                      : null,
                 ),
               _statusRow(
                 'Built-in recorder detected on this phone',
@@ -202,14 +270,19 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel> with 
         const SizedBox(height: 14),
 
         // ---- Google Phone app on a phone that has its own dialer: its recordings cannot be read
-        if (s != null && s.usesGoogleDialerOnOemPhone && !s.nativeRecorderDetected) ...[
+        if (s != null &&
+            s.usesGoogleDialerOnOemPhone &&
+            !s.nativeRecorderDetected) ...[
           NeoCard(
             backgroundColor: AppTheme.limeYellow,
             padding: const EdgeInsets.all(14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('USE YOUR PHONE\'S OWN PHONE APP', style: AppTheme.label(size: 9, color: AppTheme.ink900)),
+                Text(
+                  'USE YOUR PHONE\'S OWN PHONE APP',
+                  style: AppTheme.label(size: 9, color: AppTheme.ink900),
+                ),
                 const SizedBox(height: 6),
                 Text(
                   'Your default Phone app is "Phone by Google". It keeps call recordings inside its own app, '
@@ -223,10 +296,19 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel> with 
                   style: AppTheme.bodyBold(size: 12),
                 ),
                 const SizedBox(height: 10),
-                _button('OPEN DEFAULT APPS', Icons.phone_forwarded_outlined, () async {
-                  final ok = await CallRecordingChannel.openDefaultAppsSettings();
-                  if (!ok) _snack('Open Settings → Apps → Default apps → Phone app.');
-                }),
+                _button(
+                  'OPEN DEFAULT APPS',
+                  Icons.phone_forwarded_outlined,
+                  () async {
+                    final ok =
+                        await CallRecordingChannel.openDefaultAppsSettings();
+                    if (!ok) {
+                      _snack(
+                        'Open Settings → Apps → Default apps → Phone app.',
+                      );
+                    }
+                  },
+                ),
               ],
             ),
           ),
@@ -239,7 +321,10 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel> with 
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('TURN ON AUTOMATIC CALL RECORDING', style: AppTheme.label(size: 9, color: AppTheme.ink900)),
+              Text(
+                'TURN ON AUTOMATIC CALL RECORDING',
+                style: AppTheme.label(size: 9, color: AppTheme.ink900),
+              ),
               const SizedBox(height: 4),
               Text(
                 '${guide.brandLabel}${(s?.model ?? '').isNotEmpty ? ' · ${s!.model}' : ''}',
@@ -252,19 +337,38 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel> with 
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      SizedBox(width: 20, child: Text('${i + 1}.', style: AppTheme.bodyBold(size: 12.5))),
-                      Expanded(child: Text(guide.steps[i], style: AppTheme.body(size: 12.5))),
+                      SizedBox(
+                        width: 20,
+                        child: Text(
+                          '${i + 1}.',
+                          style: AppTheme.bodyBold(size: 12.5),
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          guide.steps[i],
+                          style: AppTheme.body(size: 12.5),
+                        ),
+                      ),
                     ],
                   ),
                 ),
               if (guide.note != null) ...[
                 const SizedBox(height: 4),
-                Text(guide.note!, style: AppTheme.body(size: 11.5, color: AppTheme.muted)),
+                Text(
+                  guide.note!,
+                  style: AppTheme.body(size: 11.5, color: AppTheme.muted),
+                ),
               ],
               const SizedBox(height: 12),
               _button('OPEN PHONE APP SETTINGS', Icons.settings_phone, () async {
-                final ok = await CallRecordingChannel.openDialerRecordingSettings();
-                if (!ok) _snack('Could not open the dialer settings. Open your Phone app manually.');
+                final ok =
+                    await CallRecordingChannel.openDialerRecordingSettings();
+                if (!ok) {
+                  _snack(
+                    'Could not open the dialer settings. Open your Phone app manually.',
+                  );
+                }
               }),
             ],
           ),
@@ -277,7 +381,10 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel> with 
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('ALLOW AUTOSTART', style: AppTheme.label(size: 9, color: AppTheme.ink900)),
+                Text(
+                  'ALLOW AUTOSTART',
+                  style: AppTheme.label(size: 9, color: AppTheme.ink900),
+                ),
                 const SizedBox(height: 6),
                 Text(
                   '${guide.brandLabel} phones close background apps. Allow AskEVA to "Autostart" / run in the '
@@ -285,9 +392,13 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel> with 
                   style: AppTheme.body(size: 12.5),
                 ),
                 const SizedBox(height: 10),
-                _button('OPEN AUTOSTART SETTINGS', Icons.rocket_launch_outlined, () async {
-                  await CallRecordingChannel.openAutostartSettings();
-                }),
+                _button(
+                  'OPEN AUTOSTART SETTINGS',
+                  Icons.rocket_launch_outlined,
+                  () async {
+                    await CallRecordingChannel.openAutostartSettings();
+                  },
+                ),
               ],
             ),
           ),
@@ -300,7 +411,10 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel> with 
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('TURN ON CALL RECORDING PERMISSION', style: AppTheme.label(size: 9, color: AppTheme.ink900)),
+                Text(
+                  'TURN ON CALL RECORDING PERMISSION',
+                  style: AppTheme.label(size: 9, color: AppTheme.ink900),
+                ),
                 const SizedBox(height: 8),
                 for (final step in const [
                   'Tap the button below (or open Settings → Accessibility).',
@@ -314,14 +428,23 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel> with 
                     child: Text('• $step', style: AppTheme.body(size: 12.5)),
                   ),
                 const SizedBox(height: 6),
-                _button('OPEN ACCESSIBILITY SETTINGS', Icons.accessibility_new, () async {
-                  final ok = await CallRecordingChannel.openAccessibilitySettings();
-                  if (!ok) _snack('Open Settings → Accessibility manually.');
-                }),
+                _button(
+                  'OPEN ACCESSIBILITY SETTINGS',
+                  Icons.accessibility_new,
+                  () async {
+                    final ok =
+                        await CallRecordingChannel.openAccessibilitySettings();
+                    if (!ok) _snack('Open Settings → Accessibility manually.');
+                  },
+                ),
                 const SizedBox(height: 8),
-                _button('OPEN APP INFO (RESTRICTED SETTINGS)', Icons.info_outline, () async {
-                  await CallRecordingChannel.openAppInfo();
-                }),
+                _button(
+                  'OPEN APP INFO (RESTRICTED SETTINGS)',
+                  Icons.info_outline,
+                  () async {
+                    await CallRecordingChannel.openAppInfo();
+                  },
+                ),
               ],
             ),
           ),
@@ -337,7 +460,13 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel> with 
     );
   }
 
-  Widget _statusRow(String title, bool ok, {String? subtitle, _ActionLink? action, String pendingLabel = 'OFF'}) {
+  Widget _statusRow(
+    String title,
+    bool ok, {
+    String? subtitle,
+    _ActionLink? action,
+    String pendingLabel = 'OFF',
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -354,7 +483,11 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel> with 
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(title, style: AppTheme.bodyBold(size: 13)),
-                if (subtitle != null) Text(subtitle, style: AppTheme.body(size: 11, color: AppTheme.muted)),
+                if (subtitle != null)
+                  Text(
+                    subtitle,
+                    style: AppTheme.body(size: 11, color: AppTheme.muted),
+                  ),
               ],
             ),
           ),
@@ -366,12 +499,18 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel> with 
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 minimumSize: const Size(0, 32),
               ),
-              child: Text(action.label.toUpperCase(), style: AppTheme.label(size: 10, color: AppTheme.greenDark)),
+              child: Text(
+                action.label.toUpperCase(),
+                style: AppTheme.label(size: 10, color: AppTheme.greenDark),
+              ),
             )
           else if (!ok)
             Padding(
               padding: const EdgeInsets.only(top: 2),
-              child: Text(pendingLabel, style: AppTheme.label(size: 9, color: AppTheme.orangePill)),
+              child: Text(
+                pendingLabel,
+                style: AppTheme.label(size: 9, color: AppTheme.orangePill),
+              ),
             ),
         ],
       ),
@@ -384,7 +523,14 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel> with 
       child: OutlinedButton.icon(
         onPressed: () => _run(onTap),
         icon: Icon(icon, size: 16, color: AppTheme.ink900),
-        label: Text(label, style: AppTheme.label(size: 10.5, color: AppTheme.ink900, letterSpacing: 0.1)),
+        label: Text(
+          label,
+          style: AppTheme.label(
+            size: 10.5,
+            color: AppTheme.ink900,
+            letterSpacing: 0.1,
+          ),
+        ),
         style: OutlinedButton.styleFrom(
           backgroundColor: AppTheme.limeYellow,
           side: const BorderSide(color: AppTheme.ink900, width: 1.2),
@@ -404,7 +550,12 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel> with 
         children: [
           Icon(icon, size: 20, color: AppTheme.ink900),
           const SizedBox(width: 10),
-          Expanded(child: Text(text, style: AppTheme.body(size: 12.5, color: AppTheme.ink700))),
+          Expanded(
+            child: Text(
+              text,
+              style: AppTheme.body(size: 12.5, color: AppTheme.ink700),
+            ),
+          ),
         ],
       ),
     );

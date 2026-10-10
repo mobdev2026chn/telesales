@@ -496,8 +496,9 @@ class _BookDemoScreenState extends State<BookDemoScreen> {
         RefreshIndicator(
           color: AppTheme.ink900,
           onRefresh: () async {
-            if (_teamLeaders == null || _teamLeaders!.isEmpty)
+            if (_teamLeaders == null || _teamLeaders!.isEmpty) {
               await _loadTeamLeaders();
+            }
             await Future.wait([_loadDay(quiet: true), _loadMine()]);
           },
           child: ListView(
@@ -600,7 +601,7 @@ class _BookDemoScreenState extends State<BookDemoScreen> {
                 ).copyWith(letterSpacing: 1.5),
               ),
             ),
-            if (trailing != null) trailing,
+            trailing ?? const SizedBox.shrink(),
           ],
         ),
         const SizedBox(height: 8),
@@ -1244,12 +1245,15 @@ class _DemoDetailsSheetState extends State<_DemoDetailsSheet> {
   }
 
   Future<void> _confirm() async {
-    if (_client.text.trim().isEmpty)
+    if (_client.text.trim().isEmpty) {
       return setState(() => _error = 'Enter client name');
-    if (!RegExp(r'^\d{10}$').hasMatch(_phone.text.trim()))
+    }
+    if (!RegExp(r'^\d{10}$').hasMatch(_phone.text.trim())) {
       return setState(() => _error = 'Enter valid 10-digit phone');
-    if (_about.text.trim().isEmpty)
+    }
+    if (_about.text.trim().isEmpty) {
       return setState(() => _error = 'Enter client need');
+    }
     setState(() {
       _saving = true;
       _error = null;

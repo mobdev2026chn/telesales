@@ -97,8 +97,9 @@ class ApiService {
   static String describeNetworkError(Object e) {
     final raw = e.toString();
     final msg = raw.toLowerCase();
-    if (e is TimeoutException)
+    if (e is TimeoutException) {
       return 'The server took too long to answer (slow or unstable internet).';
+    }
     if (e is HandshakeException ||
         msg.contains('certificate') ||
         msg.contains('handshake')) {
@@ -205,8 +206,9 @@ class ApiService {
     if (res.statusCode != 401) return;
     final cleanPath = path.split('?').first;
     if (_publicAuthPaths.contains(cleanPath)) return;
-    if (tokenAtSend != _token)
+    if (tokenAtSend != _token) {
       return; // a newer session already replaced this one
+    }
     try {
       final data = jsonDecode(res.body);
       if (data is Map && data['code'] == 'AUTH_REQUIRED') {
