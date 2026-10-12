@@ -90,6 +90,7 @@ router.get('/dashboard', async (req, res) => {
         dailyTarget: target,
         online: isOnline(emp),
         lastLoginAt: emp.lastLoginAt || null,
+        lastSeenAt: emp.lastSeenAt || null,
         loggedOutAt: emp.loggedOutAt && (!emp.lastLoginAt || emp.loggedOutAt >= emp.lastLoginAt)
           ? emp.loggedOutAt
           : null,

@@ -205,7 +205,9 @@ class ApiService {
   ) {
     if (res.statusCode != 401) return;
     final cleanPath = path.split('?').first;
-    if (_publicAuthPaths.contains(cleanPath)) return;
+    if (_publicAuthPaths.contains(cleanPath) || cleanPath == '/auth/logout') {
+      return;
+    }
     if (tokenAtSend != _token) {
       return; // a newer session already replaced this one
     }

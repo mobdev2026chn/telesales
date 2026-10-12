@@ -1884,10 +1884,16 @@ class TeleProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> logout() async {
-    // Before the token is cleared: the dashboard turns this user offline immediately
-    await ApiService.logout();
+  Future<bool> logout() async {
+    try {
+      // Keep the local session until the server confirms the explicit logout.
+      if (!await ApiService.logout()) return false;
+    } catch (error) {
+      debugPrint('Logout request failed: $error');
+      return false;
+    }
     await purgeUserSession();
+    return true;
   }
 
   void setTabIndex(int index) {

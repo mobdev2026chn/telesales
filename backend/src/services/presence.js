@@ -2,6 +2,7 @@
 const Employee = require('../models/Employee');
 
 const MAX_BREAK_MS = 4 * 60 * 60 * 1000;
+const LAST_SEEN_WRITE_INTERVAL_MS = 20 * 1000;
 
 // Match the correct employee and, when supplied, the active session.
 function sessionFilter(userId, sessionId) {
@@ -50,23 +51,34 @@ async function updateAppPresence(userId, sessionId, isForeground) {
 
   const now = new Date();
 
-  const updateFields = {
-    appInForeground: isForeground,
-    presenceUpdatedAt: now,
-  };
-  if (isForeground) {
-    updateFields.loggedOutAt = null;
-  }
-
   const result = await Employee.collection.updateOne(
     {
       id: userId,
       ...(sessionId ? { activeSessionId: sessionId } : {}),
+      loggedOutAt: null,
     },
     {
-      $set: updateFields,
+      $set: {
+        appInForeground: isForeground,
+        presenceUpdatedAt: now,
+      },
     }
   );
+
+  if (result.matchedCount > 0 && isForeground) {
+    await Employee.collection.updateOne(
+      {
+        id: userId,
+        ...(sessionId ? { activeSessionId: sessionId } : {}),
+        loggedOutAt: null,
+        $or: [
+          { lastSeenAt: null },
+          { lastSeenAt: { $lte: new Date(now.getTime() - LAST_SEEN_WRITE_INTERVAL_MS) } },
+        ],
+      },
+      { $set: { lastSeenAt: now } }
+    );
+  }
 
   return result.matchedCount > 0;
 }
@@ -90,7 +102,7 @@ async function markLoggedOut(
   }
 
   const result = await Employee.collection.updateOne(
-    filter,
+    { ...filter, loggedOutAt: null },
     {
       $set: {
         loggedOutAt: now,
@@ -100,19 +112,36 @@ async function markLoggedOut(
     }
   );
 
-  if (result.matchedCount === 0) {
-    const exists = await Employee.exists({ id: userId });
+  if (result.matchedCount > 0) return now;
 
+  const existing = await Employee.collection.findOne(filter, {
+    projection: { lastLoginAt: 1, loggedOutAt: 1 },
+  });
+
+  if (!existing) {
+    const exists = await Employee.exists({ id: userId });
     if (!exists) {
       throw new Error(
         `Cannot record logout for missing employee userId=${userId}`
       );
     }
-
     return false;
   }
 
-  return now;
+  const loginTime = existing.lastLoginAt
+    ? new Date(existing.lastLoginAt).getTime()
+    : 0;
+  const logoutTime = existing.loggedOutAt
+    ? new Date(existing.loggedOutAt).getTime()
+    : 0;
+  const tokenMatchesLogin =
+    !Number.isFinite(tokenIssuedAt) ||
+    !loginTime ||
+    loginTime <= tokenIssuedAt + 999;
+
+  return tokenMatchesLogin && logoutTime > 0 && logoutTime >= loginTime
+    ? existing.loggedOutAt
+    : false;
 }
 
 // Current app presence.
@@ -193,4 +222,5 @@ module.exports = {
   isOnline,
   breakInfo,
   MAX_BREAK_MS,
+  LAST_SEEN_WRITE_INTERVAL_MS,
 };

@@ -124,9 +124,10 @@ router.get('/me', requireAuth(), async (req, res) => {
   try {
     const emp = await Employee.findOne({ id: req.user.id });
     if (!emp) return res.status(401).json({ success: false, message: 'Account no longer exists.', code: 'AUTH_REQUIRED' });
-    presence.updateAppPresence(req.user.id, req.user.sessionId, true).catch(() => {});
+    await presence.updateAppPresence(req.user.id, req.user.sessionId, true);
     res.json({ success: true, user: publicUser(emp) });
   } catch (err) {
+    console.error(`[auth] could not refresh profile presence userId=${req.user.id}: ${err.message}`);
     res.status(500).json({ success: false, message: 'Could not load profile.' });
   }
 });
@@ -139,7 +140,7 @@ router.post('/heartbeat', requireAuth(), async (req, res) => {
     }
     res.json({ success: true });
   } catch (_) {
-    res.json({ success: true });
+    res.status(500).json({ success: false, message: 'Could not update app presence.' });
   }
 });
 
@@ -151,18 +152,23 @@ router.post('/logout', requireAuth(), async (req, res) => {
       req.user.sessionId,
       req.user.tokenIssuedAt,
     );
-    if (loggedOutAt) {
-      try {
-        await publishForEmployee(req, req.user, 'employeeOffline', {
-          userId: req.user.id,
-          status: 'offline',
-          loggedOutAt,
-        });
-      } catch (err) {
-        console.error(`[presence] logout event publish failed userId=${req.user.id}: ${err.message}`);
-      }
+    if (!loggedOutAt) {
+      return res.status(409).json({
+        success: false,
+        staleSession: true,
+        message: 'This session could not be logged out. Please sign in again.',
+      });
     }
-    res.json({ success: true, staleSession: !loggedOutAt });
+    try {
+      await publishForEmployee(req, req.user, 'employeeOffline', {
+        userId: req.user.id,
+        status: 'offline',
+        loggedOutAt,
+      });
+    } catch (err) {
+      console.error(`[presence] logout event publish failed userId=${req.user.id}: ${err.message}`);
+    }
+    res.json({ success: true, loggedOutAt, staleSession: false });
   } catch (err) {
     res.status(500).json({ success: false, message: 'Could not log out.' });
   }

@@ -40,6 +40,7 @@ function handlePresence(payload, online) {
     id: String(payload.userId),
     online,
     ...(payload.lastLoginAt !== undefined ? { lastLoginAt: payload.lastLoginAt } : {}),
+    ...(payload.lastSeenAt !== undefined ? { lastSeenAt: payload.lastSeenAt } : {}),
     ...(payload.loggedOutAt !== undefined ? { loggedOutAt: payload.loggedOutAt } : {}),
   };
   store.dispatch(employeePresenceChanged(presence));

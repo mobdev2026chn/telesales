@@ -243,7 +243,15 @@ class TopHeader extends StatelessWidget {
             onPressed: () async {
               final navigator = Navigator.of(context);
               Navigator.of(ctx).pop();
-              await tele.logout();
+              final loggedOut = await tele.logout();
+              if (!loggedOut) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Could not log out. Please check your connection and try again.')),
+                );
+                return;
+              }
+              if (!context.mounted) return;
               navigator.pushAndRemoveUntil(
                 PageRouteBuilder(
                   pageBuilder: (context, animation, secondaryAnimation) => const LoginScreen(),

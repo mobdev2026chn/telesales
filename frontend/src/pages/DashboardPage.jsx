@@ -223,6 +223,10 @@ function TeamPerformance({ server, failed, error, usersError, callers, users, mg
         const { online } = appPresence(row);
         const statusTitle = presenceTitle(row, uConnected);
         const uTalk = row ? Number(row.talkTimeSeconds) || 0 : 0;
+        const logoutTime = row?.loggedOutAt &&
+          (!row.lastLoginAt || new Date(row.loggedOutAt) >= new Date(row.lastLoginAt))
+          ? row.loggedOutAt
+          : null;
         const target = (Number(u.target) || 0) * targetDays;  // daily target × days in the period
         const attain = target > 0 ? Math.round((uTotal / target) * 100) : 0;
         return (
@@ -237,8 +241,10 @@ function TeamPerformance({ server, failed, error, usersError, callers, users, mg
               <PresenceDot online={online} label={statusTitle} />
               <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                 <span className="truncate"><UserLink user={u} /></span>
-                <span className="cell-sub">
-                  LOGIN · {presenceTime(row?.lastLoginAt)} <span aria-hidden="true">|</span> LOGOUT · {online ? '—' : presenceTime(row?.loggedOutAt)}
+                <span className="cell-sub" style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span>LOGIN · {presenceTime(row?.lastLoginAt)}</span>
+                  <span>LAST SEEN · {presenceTime(row?.lastSeenAt)}</span>
+                  <span>LOGOUT · {presenceTime(logoutTime)}</span>
                 </span>
               </span>
             </span>

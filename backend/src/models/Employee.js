@@ -25,6 +25,7 @@ const EmployeeSchema = new mongoose.Schema({
   cloudinaryPhotoPublicId: { type: String, default: '' },
   // Presence (services/presence.js): last explicit login and logout
   lastLoginAt: { type: Date, default: null },
+  lastSeenAt: { type: Date, default: null },
   loggedOutAt: { type: Date, default: null },
   activeSessionId: { type: String, default: null },
   appInForeground: { type: Boolean, default: false },
