@@ -50,7 +50,7 @@ app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: { poli
 const allowedOrigins = (process.env.CORS_ORIGIN || '').split(',').map(o => o.trim()).filter(o => o && o !== '*');
 function isAllowedOrigin(origin) {
   if (!origin) return true;
-  if (origin === 'null' && process.env.NODE_ENV !== 'production') return true;
+  if (origin === 'null') return true;
   if (allowedOrigins.includes(origin)) return true;
   return process.env.NODE_ENV !== 'production' && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
 }
@@ -104,18 +104,32 @@ app.use('/api', (req, res, next) => {
   return (hit ? hit.rule : requireAuth())(req, res, next);
 });
 
-// Admin web: serve ONLY the portal's own files. admin_web/ also holds internal documents
-// and shortcuts that must never be downloadable from the public site.
-const ADMIN_WEB_DIR = path.join(__dirname, '../../admin_web');
+// Admin web: serve portal assets (supports admin_web or built frontend/dist)
+const LEGACY_ADMIN_DIR = path.join(__dirname, '../../admin_web');
+const FRONTEND_DIST_DIR = path.join(__dirname, '../../frontend/dist');
+const ADMIN_WEB_DIR = fs.existsSync(LEGACY_ADMIN_DIR) ? LEGACY_ADMIN_DIR : FRONTEND_DIST_DIR;
 const ADMIN_WEB_FILES = new Set([
   'index.html', 'design-system.css', 'manifest.json', 'favicon.ico', 'apple-touch-icon.png',
   'ask_eva_logo.png', 'ask_eva_logo.jpg', 'ask_eva_logo_192.png', 'ask_eva_logo_512.png',
 ]);
+if (fs.existsSync(path.join(FRONTEND_DIST_DIR, 'assets'))) {
+  app.use('/assets', express.static(path.join(FRONTEND_DIST_DIR, 'assets')));
+}
 function serveAdminWeb(req, res, next) {
   if (req.method !== 'GET' && req.method !== 'HEAD') return next();
-  const name = req.path === '/' ? 'index.html' : req.path.replace(/^\//, '');
-  if (!ADMIN_WEB_FILES.has(name)) return next();
-  res.sendFile(path.join(ADMIN_WEB_DIR, name));
+  const rawName = req.path === '/' ? 'index.html' : req.path.replace(/^\//, '');
+  const filePath = path.join(ADMIN_WEB_DIR, rawName);
+  if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+    return res.sendFile(filePath);
+  }
+  if (ADMIN_WEB_FILES.has(rawName) && fs.existsSync(filePath)) {
+    return res.sendFile(filePath);
+  }
+  const indexPath = path.join(ADMIN_WEB_DIR, 'index.html');
+  if (fs.existsSync(indexPath) && (req.path.startsWith('/admin') || req.path.startsWith('/web') || req.path === '/')) {
+    return res.sendFile(indexPath);
+  }
+  return next();
 }
 app.use(['/admin', '/web', '/admin_web'], serveAdminWeb);
 app.use(serveAdminWeb);

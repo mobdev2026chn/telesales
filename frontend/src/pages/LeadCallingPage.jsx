@@ -182,7 +182,7 @@ export default function LeadCallingPage() {
               <Button type="text" size="small" icon={<Icon name="excel" size="sm" />} onClick={downloadLeadTemplate}>Template</Button>
             </div>
             <label className="dropzone" role="button" tabIndex={0} aria-label="Upload lead sheet (Excel or CSV)"
-              onKeyDown={onKeyActivate(() => fileRef.current && fileRef.current.click())}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileRef.current?.click(); } }}
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => { e.preventDefault(); onFile(e.dataTransfer.files[0]); }}>
               <input type="file" ref={fileRef} accept=".csv,.xlsx,.xls" style={{ display: 'none' }}

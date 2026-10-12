@@ -124,15 +124,23 @@ router.get('/me', requireAuth(), async (req, res) => {
   try {
     const emp = await Employee.findOne({ id: req.user.id });
     if (!emp) return res.status(401).json({ success: false, message: 'Account no longer exists.', code: 'AUTH_REQUIRED' });
+    presence.updateAppPresence(req.user.id, req.user.sessionId, true).catch(() => {});
     res.json({ success: true, user: publicUser(emp) });
   } catch (err) {
     res.status(500).json({ success: false, message: 'Could not load profile.' });
   }
 });
 
-// POST /api/auth/heartbeat — compatibility endpoint for app builds; presence uses explicit login/logout.
-router.post('/heartbeat', requireAuth(), (req, res) => {
-  res.json({ success: true });
+// POST /api/auth/heartbeat — keeps mobile app callers online in the admin portal
+router.post('/heartbeat', requireAuth(), async (req, res) => {
+  try {
+    if (req.user && req.user.id) {
+      await presence.updateAppPresence(req.user.id, req.user.sessionId, true);
+    }
+    res.json({ success: true });
+  } catch (_) {
+    res.json({ success: true });
+  }
 });
 
 // POST /api/auth/logout — marks the user offline straight away

@@ -135,7 +135,7 @@ class RecordingSetupStatus {
         lastCaptureAt: asInt(m['lastCaptureAt']) > 0
             ? DateTime.fromMillisecondsSinceEpoch(asInt(m['lastCaptureAt']))
             : null,
-        lastCaptureA11y: m['lastCaptureA11y'] != false,
+        lastCaptureA11y: m['lastCaptureA11y'] == true,
         a11ySelfRepair: m['a11ySelfRepair'] == true,
         dialerPackage: asString(m['dialerPackage']),
       );

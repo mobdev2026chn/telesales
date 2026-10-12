@@ -50,17 +50,21 @@ async function updateAppPresence(userId, sessionId, isForeground) {
 
   const now = new Date();
 
+  const updateFields = {
+    appInForeground: isForeground,
+    presenceUpdatedAt: now,
+  };
+  if (isForeground) {
+    updateFields.loggedOutAt = null;
+  }
+
   const result = await Employee.collection.updateOne(
     {
       id: userId,
       ...(sessionId ? { activeSessionId: sessionId } : {}),
-      loggedOutAt: null,
     },
     {
-      $set: {
-        appInForeground: isForeground,
-        presenceUpdatedAt: now,
-      },
+      $set: updateFields,
     }
   );
 
@@ -114,27 +118,39 @@ async function markLoggedOut(
 // Current app presence.
 // Explicit logout always means offline.
 function isOnline(emp) {
-  if (!emp || !emp.lastLoginAt) return false;
+  if (!emp) return false;
 
-  const loginTime = new Date(emp.lastLoginAt).getTime();
+  const now = Date.now();
+  const presenceTime = emp.presenceUpdatedAt ? new Date(emp.presenceUpdatedAt).getTime() : 0;
+  const loginTime = emp.lastLoginAt ? new Date(emp.lastLoginAt).getTime() : 0;
+  const logoutTime = emp.loggedOutAt ? new Date(emp.loggedOutAt).getTime() : 0;
 
-  if (!Number.isFinite(loginTime)) return false;
+  // Explicit logout newer than both login and presence heartbeat means offline
+  if (logoutTime > 0 && logoutTime >= loginTime && logoutTime >= presenceTime) {
+    return false;
+  }
 
-  if (emp.loggedOutAt) {
-    const logoutTime = new Date(emp.loggedOutAt).getTime();
+  // Active heartbeat within the last 3 minutes
+  if (presenceTime > 0 && (now - presenceTime) < 3 * 60 * 1000) {
+    return emp.appInForeground !== false;
+  }
 
-    if (Number.isFinite(logoutTime) && logoutTime >= loginTime) {
+  // Foreground state when recently updated
+  if (typeof emp.appInForeground === 'boolean') {
+    if (emp.appInForeground && presenceTime > 0 && (now - presenceTime) < 5 * 60 * 1000) {
+      return true;
+    }
+    if (!emp.appInForeground) {
       return false;
     }
   }
 
-  // Use foreground state when available.
-  // Legacy records without this field retain timestamp-based behavior.
-  if (typeof emp.appInForeground === 'boolean') {
-    return emp.appInForeground;
+  // Recent login within 15 minutes if no subsequent logout
+  if (loginTime > 0 && (now - loginTime) < 15 * 60 * 1000) {
+    return true;
   }
 
-  return true;
+  return false;
 }
 
 // Break status.

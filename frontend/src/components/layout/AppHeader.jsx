@@ -1,4 +1,4 @@
-// App header: the open page's name, "Synced 10:42 AM" and today's date (India time)
+import { useMemo } from 'react';
 import { useSelector } from 'react-redux';
 import { TAB_TITLES } from '../../data/navigation';
 import { fmtLongDay, fmtTime12 } from '../../utils/format';
@@ -7,7 +7,8 @@ import Icon from '../common/Icon';
 export default function AppHeader() {
   const tab = useSelector(s => s.ui.tab);
   const lastSync = useSelector(s => s.ui.lastSync);
-  const time = lastSync ? fmtTime12(new Date(lastSync)) : '';
+  const time = useMemo(() => (lastSync ? fmtTime12(new Date(lastSync)) : ''), [lastSync]);
+  const todayFormatted = useMemo(() => fmtLongDay(new Date()), []);
 
   return (
     <header className="app-header">
@@ -16,7 +17,7 @@ export default function AppHeader() {
       </div>
       <div className="app-header-meta">
         <span><span className="sync-dot" aria-hidden="true" />{time ? `Synced ${time}` : 'Syncing…'}</span>
-        <span><Icon name="calendar" size="sm" /> {fmtLongDay(new Date())}</span>
+        <span><Icon name="calendar" size="sm" /> {todayFormatted}</span>
       </div>
     </header>
   );

@@ -91,7 +91,11 @@ export default function LeaderboardPage() {
   const shownRows = lbSet ? rows.filter(s => { const u = refOf(s); return u && lbSet.has(u.id); }) : rows;
   // Table pages (ranks are worked out on the whole list first; the export still takes every row)
   const [page, setPage] = useState(1);
-  useEffect(() => { setPage(1); }, [key, mgrValue]);
+  const [prevFilter, setPrevFilter] = useState({ key, mgrValue });
+  if (prevFilter.key !== key || prevFilter.mgrValue !== mgrValue) {
+    setPrevFilter({ key, mgrValue });
+    setPage(1);
+  }
   const pager = paginate(shownRows, page, LEADERBOARD_PAGE_SIZE);
 
   const onDate = (val) => {

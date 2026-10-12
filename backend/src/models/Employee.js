@@ -27,6 +27,8 @@ const EmployeeSchema = new mongoose.Schema({
   lastLoginAt: { type: Date, default: null },
   loggedOutAt: { type: Date, default: null },
   activeSessionId: { type: String, default: null },
+  appInForeground: { type: Boolean, default: false },
+  presenceUpdatedAt: { type: Date, default: null },
   // Break started from the app (Tea break / Lunch); empty / null = working (services/presence.js)
   breakType: { type: String, default: '' },
   breakStartedAt: { type: Date, default: null },

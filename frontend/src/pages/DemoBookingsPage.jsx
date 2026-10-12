@@ -1,7 +1,7 @@
 // ==========================================
 // DEMO BOOKINGS (booked by callers in the app; slots can be blocked here)
 // ==========================================
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { Button, Select, Tooltip } from '../assets/antd';
@@ -33,6 +33,8 @@ export default function DemoBookingsPage() {
   const isTeamLeader = me.role === 'TEAM_LEADER';
   const [agentSelection, setAgentSelection] = useState({ userId: me.id, id: 'ALL' });
   const storedAgentFilter = agentSelection.userId === me.id ? agentSelection.id : 'ALL';
+  const todayDateStr = useMemo(() => istDateStr(new Date()), []);
+  const now = useRef(Date.now()).current;
   const [menu, setMenu] = useState(null);   // { m, rect }
   const closeMenu = useCallback(() => setMenu(null), []);
   // Demos being sent back to reschedule: they fade out before the list reloads without them
@@ -105,7 +107,7 @@ export default function DemoBookingsPage() {
     body = <EmptyState>No demo bookings on this day</EmptyState>;
   } else {
     body = list.map(d => {
-      const isPast = demoEndMs(d) < Date.now();
+      const isPast = demoEndMs(d) < now;
       return (
         <TableRow cols={COLS} key={d.id} style={{ opacity: fading.has(d.id) ? 0 : (isPast ? 0.7 : 1), transition: 'opacity .35s ease' }}>
           <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
@@ -149,7 +151,7 @@ export default function DemoBookingsPage() {
             <Tooltip title="Next day">
               <Button shape="circle" size="small" icon={<Icon name="right" size="sm" />} onClick={() => shiftDay(1)} aria-label="Next day" />
             </Tooltip>
-            <Chip active={day === istDateStr(new Date())} icon={<Icon name="calendar" size="sm" />} onClick={() => changeDay(null)}>Today</Chip>
+            <Chip active={day === todayDateStr} icon={<Icon name="calendar" size="sm" />} onClick={() => changeDay(null)}>Today</Chip>
             <DateField id="demoDayInput" value={day} onChange={changeDay} label="Pick a date" allowClear={false} placement="bottomLeft" />
           </div>
           <span className="demo-slot-hint">10:00 AM – 7:00 PM · 30-min slots</span>
