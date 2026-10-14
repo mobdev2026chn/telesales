@@ -22,6 +22,17 @@ String asString(dynamic v, [String fallback = '']) {
   return s.isEmpty ? fallback : s;
 }
 
+bool asBool(dynamic v, [bool fallback = false]) {
+  if (v is bool) return v;
+  if (v is num) return v != 0;
+  if (v is String) {
+    final s = v.trim().toLowerCase();
+    if (s == 'true' || s == '1' || s == 'yes' || s == 'y') return true;
+    if (s == 'false' || s == '0' || s == 'no' || s == 'n') return false;
+  }
+  return fallback;
+}
+
 DateTime? parseServerDate(dynamic v) {
   if (v == null) return null;
   final parsed = DateTime.tryParse(v.toString());
@@ -138,7 +149,7 @@ RecordingModel recordingFromJson(Map<String, dynamic> r, String baseUrl) {
     rating: asInt(r['rating']),
     comment: asString(r['comment']),
     commentedBy: asString(r['commentedBy']),
-    pinned: r['pinned'] == true,
+    pinned: asBool(r['pinned']),
   );
 }
 

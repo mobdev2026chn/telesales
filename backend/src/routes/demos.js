@@ -21,6 +21,7 @@ function toDemoDTO(d) {
     id: d.id,
     leadId: d.leadId || '',
     clientName: d.clientName || '',
+    companyName: d.companyName || '',
     clientPhone: d.clientPhone || '',
     callerId: d.callerId || '',
     callerName: d.callerName || '',
@@ -180,7 +181,7 @@ router.get('/api/demos/day', async (req, res) => {
           durationMinutes: durOf(b),
           callerName: b.callerName || '',
           mine,
-          ...(mine ? { clientName: b.clientName || '', clientPhone: b.clientPhone || '', course: b.course || '', reason: b.reason || '' } : {}),
+          ...(mine ? { clientName: b.clientName || '', companyName: b.companyName || '', clientPhone: b.clientPhone || '', course: b.course || '', reason: b.reason || '' } : {}),
         };
       }),
       blocks: blocks.map(blockDTO),
@@ -287,6 +288,28 @@ router.post('/api/demos/:id/cancel', async (req, res) => {
   } catch (err) { serverError(res, err, 'demos.cancel'); }
 });
 
+// POST /api/demos/:id/done: a manager marks a booked demo as completed.
+router.post('/api/demos/:id/done', async (req, res) => {
+  try {
+    if (!isManager(req)) return res.status(403).json({ success: false, message: 'You do not have permission for this action.' });
+    const demo = await DemoBooking.findOne({ id: cleanText(req.params.id, 80) }).lean();
+    if (!demo) return res.status(404).json({ success: false, message: 'This demo no longer exists.' });
+    const scope = await resolveScope(req, {});
+    const allowed = scope.all || !!(await DemoBooking.exists({ $and: [{ id: demo.id }, demoQueryFor(scope)] }));
+    if (!allowed) return res.status(403).json({ success: false, message: 'You can update only demos in your team.' });
+    if (demo.status !== 'BOOKED') return res.status(400).json({ success: false, message: 'This demo is not active any more.' });
+
+    await DemoBooking.updateOne({ id: demo.id }, { $set: { status: 'DONE' } });
+    const eventDemo = toDemoDTO(await DemoBooking.findOne({ id: demo.id }).lean());
+    try {
+      await publishForEmployee(req, req.user, 'demoUpdated', { demo: eventDemo, id: eventDemo.id }, [demo.teamLeaderId, demo.callerId]);
+    } catch (err) {
+      console.error(`[socket] demoUpdated publish failed demoId=${demo.id}: ${err.message}`);
+    }
+    res.json({ success: true, demo: eventDemo });
+  } catch (err) { serverError(res, err, 'demos.done'); }
+});
+
 // "10:00 AM - 10:30 AM" in India time, the same label the app saves on a booking
 function istSlotLabel(start, minutes) {
   const fmt = (d) => new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit', hour12: true }).format(d);
@@ -380,6 +403,7 @@ router.post(['/api/demos', '/api/user/demos'], async (req, res) => {
       id: crypto.randomUUID(),
       leadId: cleanText(b.leadId, 80),
       clientName,
+      companyName: cleanText(b.companyName, 160),
       clientPhone: cleanText(b.clientPhone, 40),
       callerId: req.user.id,
       callerName: cleanText(req.user.name, 120),

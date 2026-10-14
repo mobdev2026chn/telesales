@@ -1,6 +1,17 @@
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 
+bool _asBool(dynamic value, [bool fallback = false]) {
+  if (value is bool) return value;
+  if (value is num) return value != 0;
+  if (value is String) {
+    final s = value.trim().toLowerCase();
+    if (s == 'true' || s == '1' || s == 'yes' || s == 'y') return true;
+    if (s == 'false' || s == '0' || s == 'no' || s == 'n') return false;
+  }
+  return fallback;
+}
+
 class RecordingModel {
   final String id;
   final String agentName;
@@ -70,7 +81,7 @@ class RecordingModel {
       commentedBy: json['commentedBy']?.toString() ?? '',
       commentedByRole: json['commentedByRole']?.toString() ?? '',
       commentedAt: json['commentedAt'] != null ? DateTime.tryParse(json['commentedAt'].toString()) : null,
-      pinned: json['pinned'] == true,
+      pinned: _asBool(json['pinned']),
     );
   }
 

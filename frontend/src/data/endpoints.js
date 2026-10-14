@@ -39,6 +39,7 @@ export const ENDPOINTS = {
   demoBlock: (id) => `/demos/blocks/${enc(id)}`,
   demoCancel: (id) => `/demos/${enc(id)}/cancel`,
   demoReschedule: (id) => `/demos/${enc(id)}/reschedule`,
+  demoDone: (id) => `/demos/${enc(id)}/done`,
 };
 
 export default ENDPOINTS;

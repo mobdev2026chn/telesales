@@ -42,11 +42,16 @@ export function tlBlocks(blocks, tl) {
 // Bookings on the selected day, soonest first (the table and the export)
 export function dayDemos(demos, tl, day) {
   const d = demoDayStr(day);
-  return tlDemos(demos, tl).filter(x => istDateStr(x.at) === d).sort((a, b) => a.at - b.at);
+  return (demos || [])
+    .filter(x => ['BOOKED', 'DONE'].includes(x.status) && x.at && (!tl || tl === 'ALL' || x.teamLeaderId === tl))
+    .filter(x => istDateStr(x.at) === d)
+    .sort((a, b) => a.at - b.at);
 }
 
 export function demoSlotState(demos, blocks, tl, day, m) {
-  const bookings = tlDemos(demos, tl).filter(d => overlapsSlot(day, d, m));
+  const bookings = (demos || [])
+    .filter(d => ['BOOKED', 'DONE'].includes(d.status) && d.at && (!tl || tl === 'ALL' || d.teamLeaderId === tl))
+    .filter(d => overlapsSlot(day, d, m));
   const blks = tlBlocks(blocks, tl).filter(b => overlapsSlot(day, b, m));
   const past = demoSlotStart(day, m).getTime() + DEMO_SLOT_MIN * 60000 <= Date.now();
   return { bookings, blocks: blks, past };

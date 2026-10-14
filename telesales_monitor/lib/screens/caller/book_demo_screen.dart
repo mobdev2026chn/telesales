@@ -36,6 +36,7 @@ class _Busy {
   final bool mine;
   final String callerName;
   final String clientName;
+  final String companyName;
   final String clientPhone;
   final String course;
   final String notes;
@@ -48,6 +49,7 @@ class _Busy {
     this.mine = false,
     this.callerName = '',
     this.clientName = '',
+    this.companyName = '',
     this.clientPhone = '',
     this.course = '',
     this.notes = '',
@@ -72,6 +74,7 @@ class _Busy {
       mine: m['mine'] == true,
       callerName: m['callerName']?.toString() ?? '',
       clientName: m['clientName']?.toString() ?? '',
+      companyName: m['companyName']?.toString() ?? '',
       clientPhone: m['clientPhone']?.toString() ?? '',
       course: m['course']?.toString() ?? '',
       notes: m['reason']?.toString() ?? '',
@@ -454,6 +457,7 @@ class _BookDemoScreenState extends State<BookDemoScreen> {
                 style: _subStyle,
               ),
               _ReadOnlyField(label: 'PHONE', value: b.clientPhone),
+              _ReadOnlyField(label: 'COMPANY', value: b.companyName),
               _ReadOnlyField(label: 'ABOUT', value: b.course),
               _ReadOnlyField(label: 'NOTES', value: b.notes),
               const SizedBox(height: 16),
@@ -1027,6 +1031,8 @@ class _BookDemoScreenState extends State<BookDemoScreen> {
       'Client: $clientName',
       if ((demo['clientPhone'] ?? '').toString().isNotEmpty)
         'Phone: ${demo['clientPhone']}',
+      if ((demo['companyName'] ?? '').toString().isNotEmpty)
+        'Company: ${demo['companyName']}',
       if ((demo['course'] ?? '').toString().isNotEmpty)
         'Course: ${demo['course']}',
       if ((demo['teamLeaderName'] ?? '').toString().isNotEmpty)
@@ -1223,6 +1229,7 @@ class _DemoDetailsSheet extends StatefulWidget {
 
 class _DemoDetailsSheetState extends State<_DemoDetailsSheet> {
   late final _client = TextEditingController(text: _pre('clientName'));
+  late final _company = TextEditingController(text: _pre('companyName'));
   late final _phone = TextEditingController(
     text: _pre('clientPhone').replaceAll(RegExp(r'\D'), '').replaceFirst(RegExp(r'^91(?=\d{10}$)'), ''),
   );
@@ -1238,6 +1245,7 @@ class _DemoDetailsSheetState extends State<_DemoDetailsSheet> {
   @override
   void dispose() {
     _client.dispose();
+    _company.dispose();
     _phone.dispose();
     _about.dispose();
     _notes.dispose();
@@ -1270,6 +1278,7 @@ class _DemoDetailsSheetState extends State<_DemoDetailsSheet> {
       final err = await ApiService.bookDemo(
         leadId: '',
         clientName: _client.text.trim(),
+        companyName: _company.text.trim(),
         clientPhone: _phone.text.trim(),
         scheduledAt: start,
         slot: _range(m),
@@ -1438,6 +1447,8 @@ class _DemoDetailsSheetState extends State<_DemoDetailsSheet> {
                       ),
                       _label('CLIENT NAME'),
                       _field(_client, 'Client name', enabled: !allDone),
+                      _label('COMPANY NAME'),
+                      _field(_company, 'Company name', enabled: !allDone),
                       _label('CLIENT PHONE'),
                       _field(
                         _phone,

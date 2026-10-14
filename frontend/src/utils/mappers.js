@@ -162,6 +162,7 @@ export function mapDemo(d) {
   return {
     id: String(d.id || ''),
     clientName: d.clientName || '',
+    companyName: d.companyName || '',
     clientPhone: d.clientPhone || '',
     callerId: d.callerId || '',
     agent: d.callerName || '',

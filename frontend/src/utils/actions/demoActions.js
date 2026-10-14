@@ -56,3 +56,7 @@ export function cancelDemoBooking(id) {
 export function rescheduleDemoBooking(id) {
   return demoSlotAction(() => demoService.reschedule(id), 'SENT TO CALLER TO RESCHEDULE');
 }
+
+export function markDemoDone(id) {
+  return demoSlotAction(() => demoService.done(id), 'DEMO MARKED AS DONE');
+}

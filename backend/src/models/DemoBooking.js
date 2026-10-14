@@ -5,6 +5,7 @@ const DemoBookingSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
   leadId: { type: String, default: '' },
   clientName: { type: String, default: '' },
+  companyName: { type: String, default: '' },
   clientPhone: { type: String, default: '' },
   // Employee who booked it (from the token, never from the request body)
   callerId: { type: String, default: '' },

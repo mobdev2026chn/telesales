@@ -285,6 +285,7 @@ function TeamPerformance({ server, failed, error, usersError, callers, users, mg
         totalPages={pager.totalPages}
         onPage={onPage}
       />
+      <p></p>
     </div>
   );
 }

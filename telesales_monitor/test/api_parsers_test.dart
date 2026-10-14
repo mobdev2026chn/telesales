@@ -163,6 +163,12 @@ void main() {
       },
     );
 
+    test('recordingFromJson accepts true-like values for pinned', () {
+      expect(recordingFromJson({'pinned': 1}, 'https://example.com').pinned, isTrue);
+      expect(recordingFromJson({'pinned': 'true'}, 'https://example.com').pinned, isTrue);
+      expect(recordingFromJson({'pinned': '0'}, 'https://example.com').pinned, isFalse);
+    });
+
     test('withTokenQuery appends the token once', () {
       expect(
         withTokenQuery('https://h/api/recordings/1/audio', 'abc'),

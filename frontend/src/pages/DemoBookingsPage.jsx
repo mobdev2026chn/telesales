@@ -22,9 +22,9 @@ import {
 import { onKeyActivate } from '../utils/dom';
 import { exportRows } from '../utils/excel';
 import { fmtLongDay, fmtTs, formatPhone, istDateStr, istMidnight } from '../utils/format';
-import { blockDemoSlot, cancelDemoBooking, fetchDemos, rescheduleDemoBooking, unblockDemoSlot } from '../utils/actions/demoActions';
+import { blockDemoSlot, cancelDemoBooking, fetchDemos, markDemoDone, rescheduleDemoBooking, unblockDemoSlot } from '../utils/actions/demoActions';
 
-const COLS = '1.25fr 1.15fr 1.05fr 0.95fr 1fr 1fr 1.5fr 0.95fr';
+const COLS = '1.25fr 1.1fr 1.1fr 1.05fr 0.95fr 1fr 1fr 1.5fr 0.95fr';
 
 export default function DemoBookingsPage() {
   const dispatch = useDispatch();
@@ -91,11 +91,13 @@ export default function DemoBookingsPage() {
       'Demo date': fmtDemoDay(d.at),
       'Time slot': d.slot,
       Client: d.clientName,
+      Company: d.companyName,
       Phone: d.clientPhone,
       Course: d.course,
       'Team leader': d.teamLeaderName,
       Agent: d.agent,
       Notes: d.reason,
+      Status: d.status === 'DONE' ? 'Done' : 'Booked',
       'Booked on': d.bookedAt ? fmtTs(d.bookedAt) : '',
     })), 'Demo bookings', `demo-bookings-${day}.xlsx`);
   };
@@ -113,8 +115,10 @@ export default function DemoBookingsPage() {
           <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
             <span className="cell-primary" style={{ fontSize: 13 }}>{fmtDemoDay(d.at)}</span>
             <Badge tone={isPast ? 'neutral' : 'lime'}>{d.slot || fmtTs(d.at)}</Badge>
+            {d.status === 'DONE' && <Badge tone="success">Done</Badge>}
           </div>
           <span className="cell-primary" style={{ overflowWrap: 'anywhere' }}>{d.clientName || '—'}</span>
+          <span style={{ overflowWrap: 'anywhere' }}>{d.companyName || '—'}</span>
           <span className="cell-mono phone-number">{d.clientPhone ? formatPhone(d.clientPhone) : '—'}</span>
           <span style={{ overflowWrap: 'anywhere' }}>{d.course || '—'}</span>
           <span>{d.teamLeaderName ? <UserLink user={{ id: d.teamLeaderId, name: d.teamLeaderName }} label={d.teamLeaderName} /> : <span className="muted">—</span>}</span>
@@ -166,8 +170,8 @@ export default function DemoBookingsPage() {
               cls += ' is-blocked';
               sub = `Blocked${tl === 'ALL' ? ` · ${st.blocks[0].teamLeaderName || 'All'}` : ''}`;
             } else if (live.length) {
-              cls += ' is-booked';
-              sub = live[0].clientName || '—';
+              cls += live[0].status === 'DONE' ? ' is-done' : ' is-booked';
+              sub = live[0].status === 'DONE' ? `${live[0].clientName || '—'} · Done` : (live[0].clientName || '—');
               if (live.length > 1) sub += ` +${live.length - 1}`;
             } else if (st.bookings.length) {
               cls += ' is-fading';
@@ -184,7 +188,7 @@ export default function DemoBookingsPage() {
           })}
         </div>
         <div className="demo-slot-legend">
-          <span><i className="lg-free" />Free</span><span><i className="lg-booked" />Booked</span><span><i className="lg-blocked" />Blocked</span>
+          <span><i className="lg-free" />Free</span><span><i className="lg-booked" />Booked</span><span><i className="lg-done" />Done</span><span><i className="lg-blocked" />Blocked</span>
           <span className="muted">Use <Icon name="ellipsis" size="sm" /> on a slot to block or unblock it. Blocked slots show red in the callers&apos; app.</span>
         </div>
       </div>
@@ -206,7 +210,7 @@ export default function DemoBookingsPage() {
         />
       </div>
       <div className="neo-table-card">
-        <DataTable cols={COLS} head={<Heads labels={['Demo date · slot', 'Client', 'Phone', 'Course', 'Team leader', 'Agent', 'Notes', 'Booked on']} />}>
+        <DataTable cols={COLS} head={<Heads labels={['Demo date · slot', 'Client', 'Company', 'Phone', 'Course', 'Team leader', 'Agent', 'Notes', 'Booked on']} />}>
           {body}
         </DataTable>
       </div>
@@ -263,6 +267,10 @@ function SlotMenu({ menu, tl, visible, onClose, onFade }) {
       setTimeout(() => rescheduleDemoBooking(d.id).finally(() => onFade(d.id, false)), 350);
     });
   };
+  const markDone = (d) => {
+    if (!window.confirm('Mark this demo booking as done? It will be counted as done on the admin dashboard.')) return;
+    act(() => markDemoDone(d.id));
+  };
 
   return createPortal(
     <div ref={ref} className="demo-slot-menu" onClick={(e) => e.stopPropagation()}
@@ -273,10 +281,14 @@ function SlotMenu({ menu, tl, visible, onClose, onFade }) {
         <div className="demo-menu-item" key={d.id}>
           <strong>{d.clientName || '—'}</strong>
           <span>{d.clientPhone && <span className="phone-number">{formatPhone(d.clientPhone)}</span>}{d.clientPhone && d.teamLeaderName ? ' · ' : ''}{d.teamLeaderName}{d.agent ? ` · by ${d.agent}` : ''}</span>
-          {!st.past && (
+          {d.status === 'DONE' && <Badge tone="success">Done</Badge>}
+          {d.status === 'BOOKED' && (
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              <Button size="small" icon={<Icon name="missed" size="sm" />} onClick={() => cancel(d.id)}>Cancel demo</Button>
-              <Button size="small" icon={<Icon name="clock" size="sm" />} onClick={() => reschedule(d)}>Reschedule</Button>
+              {!st.past && <>
+                <Button size="small" icon={<Icon name="missed" size="sm" />} onClick={() => cancel(d.id)}>Cancel demo</Button>
+                <Button size="small" icon={<Icon name="clock" size="sm" />} onClick={() => reschedule(d)}>Reschedule</Button>
+              </>}
+              <Button size="small" icon={<Icon name="check" size="sm" />} onClick={() => markDone(d)}>Done</Button>
             </div>
           )}
         </div>

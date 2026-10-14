@@ -1,5 +1,16 @@
 import 'package:intl/intl.dart';
 
+bool _asBool(dynamic value, [bool fallback = false]) {
+  if (value is bool) return value;
+  if (value is num) return value != 0;
+  if (value is String) {
+    final s = value.trim().toLowerCase();
+    if (s == 'true' || s == '1' || s == 'yes' || s == 'y') return true;
+    if (s == 'false' || s == '0' || s == 'no' || s == 'n') return false;
+  }
+  return fallback;
+}
+
 class NotificationItem {
   final String id;
   final String recipientPhone;
@@ -44,7 +55,7 @@ class NotificationItem {
       message: json['message']?.toString() ?? '',
       comment: json['comment']?.toString() ?? '',
       rating: (json['rating'] is num) ? (json['rating'] as num).toInt() : 0,
-      isRead: json['isRead'] == true,
+      isRead: _asBool(json['isRead']),
       createdAt: json['createdAt'] != null
           ? (DateTime.tryParse(json['createdAt'].toString()) ?? DateTime.now())
           : DateTime.now(),

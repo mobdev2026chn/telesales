@@ -56,4 +56,5 @@ export const demoService = {
   unblock: (id) => apiFetch(ENDPOINTS.demoBlock(id), { method: 'DELETE' }),
   cancel: (id) => apiFetch(ENDPOINTS.demoCancel(id), { method: 'POST', body: {} }),
   reschedule: (id) => apiFetch(ENDPOINTS.demoReschedule(id), { method: 'POST', body: {} }),
+  done: (id) => apiFetch(ENDPOINTS.demoDone(id), { method: 'POST', body: {} }),
 };

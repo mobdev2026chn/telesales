@@ -912,6 +912,8 @@ select.form-control, .select { cursor: pointer; padding-right: 8px; }
 .demo-slot-time { font-size: 13px; font-weight: 800; color: var(--ds-text); white-space: nowrap; }
 .demo-slot-sub { font-size: 11px; color: var(--ds-ink-700); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .demo-slot.is-booked { background: #8BE04E; border-color: #6CC530; }
+.demo-slot.is-done { background: var(--ds-success-bg); border-color: var(--ds-green-700); }
+.demo-slot.is-done .demo-slot-sub { color: var(--ds-green-700); }
 .demo-slot-sub { transition: opacity .35s ease; }
 .demo-slot.is-fading .demo-slot-sub { opacity: 0; }
 .demo-slot.is-blocked { background: var(--ds-danger-dot); border-color: var(--ds-danger); }
@@ -925,6 +927,7 @@ select.form-control, .select { cursor: pointer; padding-right: 8px; }
 .demo-slot-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; border: 1px solid var(--ds-border-strong); }
 .demo-slot-legend .lg-free { background: var(--ds-surface); }
 .demo-slot-legend .lg-booked { background: #8BE04E; border-color: #6CC530; }
+.demo-slot-legend .lg-done { background: var(--ds-success-bg); border-color: var(--ds-green-700); }
 .demo-slot-legend .lg-blocked { background: var(--ds-danger-dot); border-color: var(--ds-danger); }
 .demo-slot-menu { position: absolute; z-index: 1000; width: 260px; background: var(--ds-surface); border: 1px solid var(--ds-border-strong); border-radius: var(--ds-radius-md); box-shadow: var(--ds-shadow-lg); padding: 12px; display: flex; flex-direction: column; gap: 10px; }
 .demo-menu-head { font-family: var(--ds-font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: var(--ds-text-2); }
