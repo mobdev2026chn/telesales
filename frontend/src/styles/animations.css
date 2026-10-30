@@ -1,0 +1,318 @@
+/* ==========================================================================
+   ADMIN PORTAL ANIMATIONS & ANTD INTERACTIVE STYLES
+   Micro-interactions, floating physics, card ambient glow, 
+   light-sweeps, and vibrant UI effects.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. CORE KEYFRAME DEFINITIONS
+   -------------------------------------------------------------------------- */
+
+@keyframes animeCardEntrance {
+  0% {
+    opacity: 0;
+    transform: translateY(20px) scale(0.97);
+  }
+  60% {
+    opacity: 0.9;
+    transform: translateY(-3px) scale(1.01);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes animeLightSweep {
+  0% {
+    left: -120%;
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.8;
+  }
+  80% {
+    opacity: 0.8;
+  }
+  100% {
+    left: 200%;
+    opacity: 0;
+  }
+}
+
+@keyframes animeGlowPulse {
+  0%, 100% {
+    box-shadow: 0 4px 20px rgba(61, 200, 56, 0.15), 0 0 0 0 rgba(61, 200, 56, 0.2);
+  }
+  50% {
+    box-shadow: 0 8px 30px rgba(61, 200, 56, 0.35), 0 0 0 6px rgba(61, 200, 56, 0.1);
+  }
+}
+
+@keyframes animeDarkPulse {
+  0%, 100% {
+    box-shadow: 0 4px 20px rgba(16, 24, 12, 0.12);
+  }
+  50% {
+    box-shadow: 0 8px 28px rgba(16, 24, 12, 0.22);
+  }
+}
+
+@keyframes animeNumberCountIn {
+  0% {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes animeShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes animeBarGrow {
+  0% {
+    transform: scaleY(0);
+    opacity: 0.3;
+  }
+  100% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   2. KPI DASHBOARD TILES - MODERN, CLEAN, SHADOW-FREE
+   -------------------------------------------------------------------------- */
+
+.kpi {
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.28s cubic-bezier(0.34, 1.56, 0.64, 1),
+              border-color 0.22s ease !important;
+  will-change: transform, box-shadow;
+  cursor: pointer;
+}
+
+/* Diagonal glass light-sweep line on all cards */
+.kpi::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -120%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.45) 50%,
+    transparent 100%
+  );
+  transform: skewX(-22deg);
+  pointer-events: none;
+  z-index: 2;
+  transition: opacity 0.3s ease;
+}
+
+/* Hover shine sweep */
+.kpi:hover::before {
+  animation: animeLightSweep 0.9s ease-out;
+}
+
+/* Hover lift without hard black shadow */
+.kpi:hover {
+  transform: translateY(-5px) scale(1.015) !important;
+  box-shadow: 0 12px 32px rgba(16, 24, 12, 0.08), 0 2px 6px rgba(16, 24, 12, 0.04) !important;
+}
+
+.kpi:active {
+  transform: translateY(1px) scale(0.99) !important;
+  box-shadow: 0 2px 8px rgba(16, 24, 12, 0.06) !important;
+}
+
+/* Numbers bounce slightly on card hover */
+.kpi:hover .kpi-value,
+.kpi:hover .kpi-num {
+  transform: scale(1.04);
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.kpi-value,
+.kpi-num {
+  transition: transform 0.25s ease;
+  display: inline-block;
+}
+
+/* Connected calls card (Card 04) - High performance glowing pulse */
+.kpi--brand {
+  animation: animeGlowPulse 3s infinite ease-in-out;
+}
+.kpi--brand:hover {
+  box-shadow: 0 14px 36px rgba(61, 200, 56, 0.4) !important;
+}
+
+/* Total calls card (Card 01) - Elegant dark breathing pulse */
+.kpi--dark {
+  animation: animeDarkPulse 3.5s infinite ease-in-out;
+}
+
+/* Staggered dynamic card entrance sequence */
+.kpi-row > .ant-col:nth-child(1) .kpi { animation: animeCardEntrance 0.5s 0.04s cubic-bezier(0.16, 1, 0.3, 1) backwards, animeDarkPulse 3.5s 0.5s infinite ease-in-out; }
+.kpi-row > .ant-col:nth-child(2) .kpi { animation: animeCardEntrance 0.5s 0.08s cubic-bezier(0.16, 1, 0.3, 1) backwards; }
+.kpi-row > .ant-col:nth-child(3) .kpi { animation: animeCardEntrance 0.5s 0.12s cubic-bezier(0.16, 1, 0.3, 1) backwards; }
+.kpi-row > .ant-col:nth-child(4) .kpi { animation: animeCardEntrance 0.5s 0.16s cubic-bezier(0.16, 1, 0.3, 1) backwards, animeGlowPulse 3s 0.5s infinite ease-in-out; }
+.kpi-row > .ant-col:nth-child(5) .kpi { animation: animeCardEntrance 0.5s 0.20s cubic-bezier(0.16, 1, 0.3, 1) backwards; }
+.kpi-row > .ant-col:nth-child(6) .kpi { animation: animeCardEntrance 0.5s 0.24s cubic-bezier(0.16, 1, 0.3, 1) backwards; }
+.kpi-row > .ant-col:nth-child(7) .kpi { animation: animeCardEntrance 0.5s 0.28s cubic-bezier(0.16, 1, 0.3, 1) backwards; }
+.kpi-row > .ant-col:nth-child(8) .kpi { animation: animeCardEntrance 0.5s 0.32s cubic-bezier(0.16, 1, 0.3, 1) backwards; }
+
+/* --------------------------------------------------------------------------
+   3. ANTD BUTTONS & CONTROLS INTERACTIVE ANIME
+   -------------------------------------------------------------------------- */
+
+.ant-btn {
+  transition: all 0.22s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+.ant-btn-primary {
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.06);
+}
+
+.ant-btn-primary:not(:disabled):hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 4px 10px rgba(61, 200, 56, 0.35) !important;
+}
+
+.ant-btn-primary:not(:disabled):active {
+  transform: translateY(1px) scale(0.97) !important;
+  box-shadow: 0 1px 2px rgba(61, 200, 56, 0.2) !important;
+}
+
+/* Ant Design Select, Inputs & DatePicker focus animation */
+.ant-select-selector,
+.ant-input,
+.ant-picker {
+  transition: all 0.2s cubic-bezier(0.2, 0, 0, 1) !important;
+}
+
+.ant-select-focused:not(.ant-select-disabled) .ant-select-selector,
+.ant-input:focus,
+.ant-picker-focused {
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 3px rgba(61, 200, 56, 0.18) !important;
+}
+
+/* Ant Design Segmented pill switches */
+.ant-segmented-item {
+  transition: color 0.2s ease, transform 0.15s ease !important;
+}
+
+.ant-segmented-item-selected {
+  animation: animeNumberCountIn 0.24s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* --------------------------------------------------------------------------
+   4. SIDEBAR NAVIGATION HOVER & ACTIVE ANIME
+   -------------------------------------------------------------------------- */
+
+.nav-pill {
+  transition: background 0.2s ease, color 0.2s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+.nav-pill:hover {
+  transform: translateX(4px);
+}
+
+.nav-pill.active {
+  transform: translateX(2px);
+}
+
+.nav-pill .ant-ico {
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), color 0.2s ease;
+}
+
+.nav-pill:hover .ant-ico {
+  transform: scale(1.15) rotate(3deg);
+}
+
+/* --------------------------------------------------------------------------
+   5. HOUR BARS & CHART ANIMATIONS
+   -------------------------------------------------------------------------- */
+
+.hour-bar {
+  transform-origin: bottom center;
+  animation: animeBarGrow 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  transition: transform 0.2s ease, filter 0.2s ease !important;
+}
+
+.hour-bar:hover {
+  transform: scaleY(1.06) scaleX(1.1);
+  filter: brightness(1.15);
+  cursor: pointer;
+}
+
+/* Stagger for bar chart columns */
+.hour-bars .hour-bar-col:nth-child(1) .hour-bar { animation-delay: 0.03s; }
+.hour-bars .hour-bar-col:nth-child(2) .hour-bar { animation-delay: 0.06s; }
+.hour-bars .hour-bar-col:nth-child(3) .hour-bar { animation-delay: 0.09s; }
+.hour-bars .hour-bar-col:nth-child(4) .hour-bar { animation-delay: 0.12s; }
+.hour-bars .hour-bar-col:nth-child(5) .hour-bar { animation-delay: 0.15s; }
+.hour-bars .hour-bar-col:nth-child(6) .hour-bar { animation-delay: 0.18s; }
+.hour-bars .hour-bar-col:nth-child(7) .hour-bar { animation-delay: 0.21s; }
+.hour-bars .hour-bar-col:nth-child(8) .hour-bar { animation-delay: 0.24s; }
+.hour-bars .hour-bar-col:nth-child(9) .hour-bar { animation-delay: 0.27s; }
+.hour-bars .hour-bar-col:nth-child(10) .hour-bar { animation-delay: 0.30s; }
+
+/* --------------------------------------------------------------------------
+   6. TABLES, PODIUM & BADGES
+   -------------------------------------------------------------------------- */
+
+.neo-table-card,
+.card {
+  transition: box-shadow 0.25s ease, border-color 0.2s ease;
+}
+
+.table-body-row {
+  transition: background-color 0.15s ease, transform 0.15s ease !important;
+}
+
+.table-body-row:hover {
+  background-color: rgba(61, 200, 56, 0.04) !important;
+  transform: translateX(3px);
+}
+
+/* Leaderboard podium cards */
+.podium-card {
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.25s ease !important;
+}
+
+.podium-card:hover {
+  transform: translateY(-6px) !important;
+  box-shadow: 0 12px 28px rgba(16, 24, 12, 0.14) !important;
+}
+
+/* Respect user's motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .kpi:hover, .podium-card:hover, .nav-pill:hover {
+    transform: none !important;
+  }
+}

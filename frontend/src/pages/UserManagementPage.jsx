@@ -15,7 +15,7 @@ import PageHeader from '../components/common/PageHeader';
 import Pager from '../components/common/Pager';
 import PasswordField from '../components/common/PasswordField';
 import UserLink from '../components/common/UserLink';
-import { DEFAULT_DAILY_TARGET, HEAD_ROLES, ROLE_OPTIONS, TREE_FILTERS, USER_LIST_PAGE_SIZE } from '../data/constants';
+import { DEFAULT_DAILY_TARGET, EMPLOYEE_TYPE_OPTIONS, EMPLOYEE_TYPE_LABELS, HEAD_ROLES, ROLE_OPTIONS, TREE_FILTERS, USER_LIST_PAGE_SIZE } from '../data/constants';
 import { PATHS } from '../data/navigation';
 import { closeUserForm, setTreeFilter, setUserView, toggleUserForm } from '../redux/slices/uiSlice';
 import { selectScope } from '../redux/selectors';
@@ -26,7 +26,7 @@ import { paginate } from '../utils/table';
 import { viewAsUser } from '../utils/actions/syncActions';
 import { deleteUser, saveUser } from '../utils/actions/userActions';
 
-const LIST_COLS = '1fr 1.6fr 1.2fr 1fr 1fr 0.9fr 0.8fr 0.8fr 1.4fr';
+const LIST_COLS = '1fr 1.5fr 1.1fr 0.9fr 1.1fr 1fr 0.8fr 0.7fr 0.8fr 1.4fr';
 
 export default function UserManagementPage() {
   const dispatch = useDispatch();
@@ -88,6 +88,7 @@ export default function UserManagementPage() {
           <span className="cell-email" style={{ wordBreak: 'break-all' }}>{u.email || '—'}</span>
           <span className="cell-phone-number">{formatPhone(u.phone)}</span>
           <span><RoleBadge role={u.role} /></span>
+          <span><span className="role-badge" style={{ background: 'var(--ds-paper)', border: '1px solid var(--ds-border)', fontSize: '11px', fontWeight: 600, padding: '2px 6px', borderRadius: '4px' }}>{EMPLOYEE_TYPE_LABELS[u.employeeType] || u.employeeType || 'Sales Team'}</span></span>
           <span className="cell-muted">{mgrUser ? <UserLink user={mgrUser} label={mgrName} /> : mgrName}</span>
           <span className="tabular">{isAgent ? `${u.target}/day` : '—'}</span>
           <span className="tabular">
@@ -162,7 +163,7 @@ export default function UserManagementPage() {
       {userView === 'list' && (
         <div style={{ marginBottom: 'var(--ds-space-5)' }}>
           <div className="neo-table-card users-table">
-            <DataTable cols={LIST_COLS} head={<Heads labels={['Name', 'Login email', 'Phone / SIM', 'Role', 'Manager', 'Target', 'Today', 'Status', 'Actions']} />}>
+            <DataTable cols={LIST_COLS} head={<Heads labels={['Name', 'Login email', 'Phone / SIM', 'Role', 'Type', 'Manager', 'Target', 'Today', 'Status', 'Actions']} />}>
               {listBody}
             </DataTable>
             <Pager
@@ -220,9 +221,9 @@ function UserForm({ editingId, scope }) {
 
   const [form, setForm] = useState(() => (editUser ? {
     name: editUser.name, email: editUser.email, phone: editUser.phone || '', password: '',
-    role: editUser.role, mgr: editUser.mgr || firstMgr, target: String(editUser.target),
+    role: editUser.role, employeeType: editUser.employeeType || 'sales_team', mgr: editUser.mgr || firstMgr, target: String(editUser.target),
   } : {
-    name: '', email: '', phone: '', password: '', role: 'CALLER',
+    name: '', email: '', phone: '', password: '', role: 'CALLER', employeeType: 'sales_team',
     mgr: (me.role !== 'ADMIN' && mgrChoices.some(m => m.id === me.id)) ? me.id : firstMgr,
     target: String(DEFAULT_DAILY_TARGET),
   }));
@@ -241,7 +242,7 @@ function UserForm({ editingId, scope }) {
     const name = form.name.trim();
     const email = form.email.trim();
     const phone = form.phone.trim();
-    const { password, role, mgr } = form;
+    const { password, role, employeeType, mgr } = form;
     const rawTarget = form.target.trim();
     const target = rawTarget === '' ? (role === 'CALLER' ? DEFAULT_DAILY_TARGET : 0) : Number(rawTarget);
 
@@ -260,6 +261,7 @@ function UserForm({ editingId, scope }) {
       email,
       phone,
       role: role.toLowerCase(),
+      employeeType: employeeType || 'sales_team',
       dailyTarget: Math.round(target),
       managerId: mgr || '',
       managerName: mgrUser ? mgrUser.name : '',
@@ -302,6 +304,11 @@ function UserForm({ editingId, scope }) {
           <label className="user-form-label" htmlFor="fUserRole">Role</label>
           <Select id="fUserRole" className="form-ant-select" value={form.role} onChange={set('role')}
             options={ROLE_OPTIONS.map(o => ({ ...o, disabled: roleDisabled(o.value) }))} />
+        </div>
+        <div>
+          <label className="user-form-label" htmlFor="fUserType">Type</label>
+          <Select id="fUserType" className="form-ant-select" value={form.employeeType} onChange={set('employeeType')}
+            options={EMPLOYEE_TYPE_OPTIONS} />
         </div>
         <div>
           <label className="user-form-label" htmlFor="fUserMgr">Reports to</label>

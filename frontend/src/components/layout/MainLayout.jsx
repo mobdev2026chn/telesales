@@ -38,14 +38,9 @@ export default function MainLayout() {
     dispatch(setSidebarOpen(false));
   }, [tab, dispatch]);
 
-  // First load after sign-in. Landing on the dashboard, managers then see Demo Bookings.
-  const landingRef = useRef(location.pathname);
+    // First load after sign-in: sync with backend (stays on user-selected page / dashboard without auto-redirecting to demos)
   useEffect(() => {
-    const landing = landingRef.current;
-    const showDemosByDefault = canSeeDemosTab(me) && (landing === '/' || landing === PATHS.dash);
-    syncWithBackend().then(() => {
-      if (showDemosByDefault && window.location.hash.replace(/^#/, '') === PATHS.dash) navigate(PATHS.demos);
-    });
+    syncWithBackend();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

@@ -75,6 +75,7 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel>
       _status = s;
       _loading = false;
     });
+    await tele.refreshRecordings();
   }
 
   Future<void> _run(Future<void> Function() action) async {
@@ -105,6 +106,12 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel>
     }
     final s = _status;
     final tele = context.watch<TeleProvider>();
+    final recordingsWithUrl =
+        tele.recordings
+            .where((recording) => recording.audioUrl.isNotEmpty)
+            .toList()
+          ..sort((a, b) => b.date.compareTo(a.date));
+    final latestRecording = recordingsWithUrl.firstOrNull;
     final guide = dialerGuideFor(s?.manufacturer ?? '', s?.brand ?? '');
 
     return Column(
@@ -249,6 +256,18 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel>
                         })
                       : null,
                 ),
+              if (latestRecording != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'LATEST UPLOADED RECORDING URL',
+                  style: AppTheme.label(size: 9, color: AppTheme.ink900),
+                ),
+                const SizedBox(height: 4),
+                SelectableText(
+                  latestRecording.audioUrl,
+                  style: AppTheme.mono(size: 10, color: AppTheme.ink700),
+                ),
+              ],
               _statusRow(
                 'Built-in recorder detected on this phone',
                 s?.nativeRecorderDetected == true,

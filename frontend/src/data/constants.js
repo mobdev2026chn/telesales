@@ -26,6 +26,25 @@ export const ROLE_BADGE_CLASS = {
 export const MGR_FILTER_PLURAL = { MANAGER: 'MANAGERS', JR_MANAGER: 'JR MANAGERS', TEAM_LEADER: 'TEAM LEADERS', CALLER: 'CALLERS' };
 
 // User form role choices
+export const LEADERBOARD_TYPE_OPTIONS = [
+  { value: 'ALL', label: 'ALL TYPES' },
+  { value: 'sales_team', label: 'Sales Team' },
+  { value: 'project_coordinator', label: 'Project Coordinator' },
+  { value: 'others', label: 'Others' },
+];
+
+export const EMPLOYEE_TYPE_OPTIONS = [
+  { value: 'sales_team', label: 'Sales Team' },
+  { value: 'project_coordinator', label: 'Project Coordinator' },
+  { value: 'others', label: 'Others' },
+];
+
+export const EMPLOYEE_TYPE_LABELS = {
+  sales_team: 'Sales Team',
+  project_coordinator: 'Project Coordinator',
+  others: 'Others',
+};
+
 export const ROLE_OPTIONS = [
   { value: 'CALLER', label: 'CALLER' },
   { value: 'TEAM_LEADER', label: 'TEAM LEADER' },

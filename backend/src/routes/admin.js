@@ -84,6 +84,7 @@ router.get('/dashboard', async (req, res) => {
         email: emp.email || '',
         phone: emp.phone,
         role: emp.role || 'caller',
+        employeeType: emp.employeeType || 'sales_team',
         team: emp.team || DEFAULT_TEAM,
         managerId: emp.managerId || '',
         managerName: emp.managerName || '',
@@ -304,6 +305,8 @@ router.post('/users', async (req, res) => {
     const password = typeof b.password === 'string' ? b.password : '';
     const email = typeof b.email === 'string' && b.email.trim() ? b.email.toLowerCase().trim() : undefined;
     const role = b.role ? String(b.role).toLowerCase() : 'caller';
+    const EMPLOYEE_TYPES = ['sales_team', 'project_coordinator', 'others'];
+    const employeeType = b.employeeType && EMPLOYEE_TYPES.includes(String(b.employeeType).toLowerCase()) ? String(b.employeeType).toLowerCase() : 'sales_team';
 
     if (!name) return res.status(400).json({ success: false, message: 'Name is required' });
     if (last10(phone).length !== 10) return res.status(400).json({ success: false, message: 'A valid 10-digit phone number is required' });
@@ -328,6 +331,7 @@ router.post('/users', async (req, res) => {
       phone,
       password: await hashPassword(password.trim()),
       role,
+      employeeType,
       team: typeof b.team === 'string' && b.team.trim() ? b.team.trim() : DEFAULT_TEAM,
       dailyTarget,
       managerId,
@@ -376,6 +380,11 @@ router.put('/users/:id', async (req, res) => {
       set.role = role;
     }
     if (b.team !== undefined) set.team = String(b.team || '').trim() || DEFAULT_TEAM;
+    if (b.employeeType !== undefined) {
+      const EMPLOYEE_TYPES = ['sales_team', 'project_coordinator', 'others'];
+      const et = String(b.employeeType).toLowerCase();
+      set.employeeType = EMPLOYEE_TYPES.includes(et) ? et : 'sales_team';
+    }
     if (b.dailyTarget !== undefined && b.dailyTarget !== '') {
       const n = Number(b.dailyTarget);
       if (!Number.isFinite(n) || n < 0) return res.status(400).json({ success: false, message: 'dailyTarget must be a positive number' });

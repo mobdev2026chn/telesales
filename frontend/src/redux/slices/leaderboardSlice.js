@@ -11,6 +11,7 @@ const initialState = {
   period: 'today',
   customDate: null,
   mgrFilter: 'ALL',
+  typeFilter: 'ALL',
 };
 
 const leaderboardSlice = createSlice({
@@ -36,11 +37,12 @@ const leaderboardSlice = createSlice({
     setLbPeriod(state, { payload }) { state.period = payload; state.customDate = null; },
     setLbDate(state, { payload }) { state.customDate = payload || null; },
     setLbMgrFilter(state, { payload }) { state.mgrFilter = payload || 'ALL'; },
+    setLbTypeFilter(state, { payload }) { state.typeFilter = payload || 'ALL'; },
   },
   extraReducers: (b) => {
     b.addCase(resetSession, () => initialState);
   },
 });
 
-export const { lbRequested, lbSucceeded, lbFailed, lbInvalidated, setLbPeriod, setLbDate, setLbMgrFilter } = leaderboardSlice.actions;
+export const { lbRequested, lbSucceeded, lbFailed, lbInvalidated, setLbPeriod, setLbDate, setLbMgrFilter, setLbTypeFilter } = leaderboardSlice.actions;
 export default leaderboardSlice.reducer;

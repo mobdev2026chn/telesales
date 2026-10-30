@@ -12,6 +12,7 @@ const EmployeeSchema = new mongoose.Schema({
   // explicitly requested with .select('+password').
   password: { type: String, default: '', select: false },
   role: { type: String, enum: ['caller', 'team_leader', 'jr_manager', 'manager', 'admin'], default: 'caller' },
+  employeeType: { type: String, enum: ['sales_team', 'project_coordinator', 'others'], default: 'sales_team' },
   team: { type: String, default: 'Telesales Team' },
   totalCalls: { type: Number, default: 0 },
   connectedCalls: { type: Number, default: 0 },

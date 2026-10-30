@@ -929,6 +929,8 @@ class TeleProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> refreshRecordings() => _refreshRecordings();
+
   // Caller Notifications
   final List<NotificationItem> _notifications = [];
   int _unreadNotificationCount = 0;

@@ -6,6 +6,7 @@ import App from './App.jsx'
 import { ANT_THEME, AntApp, ConfigProvider } from './assets/antd'
 import store from './redux/store'
 import './style.css'
+import './styles/animations.css'
 
 // HashRouter: links look like /#/dashboard and /#/user/<id>, so the built portal works from any
 // static host (or the backend) without server-side route rewrites.

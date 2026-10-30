@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
-import { Button } from '../assets/antd';
+import { Button, Select } from '../assets/antd';
 import Avatar from '../components/common/Avatar';
 import { Badge, CountPill } from '../components/common/Badge';
 import DataTable, { TableRow } from '../components/common/DataTable';
@@ -21,11 +21,12 @@ import PageHeader from '../components/common/PageHeader';
 import Progress from '../components/common/Progress';
 import UserLink from '../components/common/UserLink';
 
-import { LEADERBOARD_PAGE_SIZE, PERIOD_OPTIONS } from '../data/constants';
+import { LEADERBOARD_PAGE_SIZE, LEADERBOARD_TYPE_OPTIONS, PERIOD_OPTIONS } from '../data/constants';
 import {
   setLbDate,
   setLbMgrFilter,
   setLbPeriod,
+  setLbTypeFilter,
 } from '../redux/slices/leaderboardSlice';
 
 import { selectLbKey, selectScope } from '../redux/selectors';
@@ -148,19 +149,29 @@ export default function LeaderboardPage() {
 
   const lbSet = mgrFilterSet(users, mgrValue);
 
-  const shownRows = lbSet
+    const typeValue = lb.typeFilter || 'ALL';
+
+  const typeFilteredRows = typeValue !== 'ALL'
     ? rows.filter((s) => {
         const u = refOf(s);
-        return u && lbSet.has(u.id);
+        const empType = (u && u.employeeType) || s.employeeType || 'sales_team';
+        return empType === typeValue;
       })
     : rows;
 
+  const shownRows = lbSet
+    ? typeFilteredRows.filter((s) => {
+        const u = refOf(s);
+        return u && lbSet.has(u.id);
+      })
+    : typeFilteredRows;
+
   // Table pagination.
   const [page, setPage] = useState(1);
-  const [prevFilter, setPrevFilter] = useState({ key, mgrValue });
+  const [prevFilter, setPrevFilter] = useState({ key, mgrValue, typeValue });
 
-  if (prevFilter.key !== key || prevFilter.mgrValue !== mgrValue) {
-    setPrevFilter({ key, mgrValue });
+  if (prevFilter.key !== key || prevFilter.mgrValue !== mgrValue || prevFilter.typeValue !== typeValue) {
+    setPrevFilter({ key, mgrValue, typeValue });
     setPage(1);
   }
 
@@ -202,7 +213,7 @@ export default function LeaderboardPage() {
   };
 
   // Podium: #2 · #1 · #3
-  const top = rows.slice(0, 3);
+  const top = typeFilteredRows.slice(0, 3);
   const podium = [];
 
   if (top[1]) {
@@ -409,8 +420,17 @@ export default function LeaderboardPage() {
 
       <div id="leaderboardPodium">{podiumEl}</div>
 
-      <div className="toolbar">
-        <div className="pill-group toolbar-spacer">
+      <div className="toolbar" style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 'var(--ds-space-4)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'nowrap' }}>
+          <label htmlFor="lbTypeFilter" className="visually-hidden">Filter by type</label>
+          <Select
+            id="lbTypeFilter"
+            className="toolbar-ant-select"
+            value={typeValue}
+            options={LEADERBOARD_TYPE_OPTIONS}
+            onChange={(v) => dispatch(setLbTypeFilter(v))}
+            style={{ width: 170 }}
+          />
           <MgrFilterSelect
             id="lbMgrFilter"
             value={mgrValue}

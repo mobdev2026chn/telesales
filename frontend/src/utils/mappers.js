@@ -14,6 +14,7 @@ export function mapUser(u) {
     phone: u.phone || '',
     role,
     team: u.team || '',
+    employeeType: u.employeeType || 'sales_team',
     target: Number.isFinite(t) && u.dailyTarget !== null && u.dailyTarget !== '' ? t : (role === 'CALLER' ? DEFAULT_DAILY_TARGET : 0),
     mgr: u.managerId ? String(u.managerId) : null,
     photoBase64: safeImage(u.photoBase64 || ''),
