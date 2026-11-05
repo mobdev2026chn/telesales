@@ -12,6 +12,7 @@ const initialState = {
   customDate: null,
   teamPage: 1,
   mgrFilter: 'ALL',   // "Managed by" filter (person id or ALL)
+  typeFilter: 'ALL',  // "Type" filter (sales_team, project_coordinator, others, or ALL)
 };
 
 const dashboardSlice = createSlice({
@@ -53,6 +54,7 @@ const dashboardSlice = createSlice({
     setDashDate(state, { payload }) { state.customDate = payload || null; },
     setDashTeamPage(state, { payload }) { state.teamPage = Math.max(1, payload); },
     setDashMgrFilter(state, { payload }) { state.mgrFilter = payload || 'ALL'; state.teamPage = 1; },
+    setDashTypeFilter(state, { payload }) { state.typeFilter = payload || 'ALL'; state.teamPage = 1; },
   },
   extraReducers: (b) => {
     b.addCase(resetSession, () => initialState);
@@ -61,6 +63,6 @@ const dashboardSlice = createSlice({
 
 export const {
   dashRequested, dashSucceeded, dashFailed, dashInvalidated, employeePresenceChanged,
-  setDashPeriod, setDashDate, setDashTeamPage, setDashMgrFilter,
+  setDashPeriod, setDashDate, setDashTeamPage, setDashMgrFilter, setDashTypeFilter,
 } = dashboardSlice.actions;
 export default dashboardSlice.reducer;

@@ -122,7 +122,7 @@ object CallMonitorStore {
     // connected work call tries the next candidate; the first that works is kept for this phone.
 
     /** MediaRecorder.AudioSource values: VOICE_RECOGNITION, VOICE_COMMUNICATION, MIC, UNPROCESSED, CAMCORDER. */
-    val SOURCE_CANDIDATES = intArrayOf(6, 7, 1, 9, 5)
+    val SOURCE_CANDIDATES = intArrayOf(1, 6, 7, 9, 5)
 
     fun sourceName(source: Int): String = when (source) {
         1 -> "MIC"; 5 -> "CAMCORDER"; 6 -> "VOICE_RECOGNITION"; 7 -> "VOICE_COMMUNICATION"

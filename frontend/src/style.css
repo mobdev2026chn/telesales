@@ -539,7 +539,26 @@ select.form-control, .select { cursor: pointer; padding-right: 8px; }
   overflow: hidden;
   min-width: 0;
 }
-.table-scroll-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.table-scroll-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(61, 200, 56, 0.28) transparent;
+}
+.table-scroll-wrap::-webkit-scrollbar {
+  height: 6px;
+}
+.table-scroll-wrap::-webkit-scrollbar-track {
+  background: transparent;
+}
+.table-scroll-wrap::-webkit-scrollbar-thumb {
+  background: rgba(61, 200, 56, 0.25);
+  border-radius: 999px;
+}
+.table-scroll-wrap::-webkit-scrollbar-thumb:hover {
+  background: rgba(61, 200, 56, 0.45);
+}
 .table-scroll-wrap > div { min-width: 820px; }
 .table-head-row {
   display: grid;
@@ -553,6 +572,9 @@ select.form-control, .select { cursor: pointer; padding-right: 8px; }
   font-weight: 700;
   letter-spacing: var(--ds-tracking-label);
   text-transform: uppercase;
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 .table-body-row {
   display: grid;
@@ -1232,17 +1254,7 @@ select.form-control, .select { cursor: pointer; padding-right: 8px; }
 .tab-view.active > *:nth-child(4) { animation-delay: .15s; }
 .tab-view.active > *:nth-child(5) { animation-delay: .2s; }
 .tab-view.active > *:nth-child(n+6) { animation-delay: .25s; }
-.table-body-row { animation: rowIn .3s ease backwards; transition: background-color .15s ease; }
-.table-body-row:nth-child(2) { animation-delay: .02s; }
-.table-body-row:nth-child(3) { animation-delay: .04s; }
-.table-body-row:nth-child(4) { animation-delay: .06s; }
-.table-body-row:nth-child(5) { animation-delay: .08s; }
-.table-body-row:nth-child(6) { animation-delay: .1s; }
-.table-body-row:nth-child(7) { animation-delay: .12s; }
-.table-body-row:nth-child(8) { animation-delay: .14s; }
-.table-body-row:nth-child(9) { animation-delay: .16s; }
-.table-body-row:nth-child(n+10) { animation-delay: .18s; }
-@keyframes rowIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.table-body-row { transition: background-color .15s ease; }
 .neo-card, .card, .neo-table-card, .podium-card, .kpi { transition: box-shadow .2s ease, transform .2s ease; }
 .podium-card:hover, .kpi:hover { transform: translateY(-2px); box-shadow: var(--ds-shadow-md); }
 .ant-btn { transition: background-color .18s ease, border-color .18s ease, color .18s ease, box-shadow .18s ease, transform .08s ease; }

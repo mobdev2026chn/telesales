@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:telesales_monitor/services/call_recording_setup.dart';
 
 void main() {
-  group('shouldRunCallMonitor', () {
+  group('shouldRunCallMonitor',() {
     test('runs for a signed-in caller with auto-record on', () {
       expect(
         shouldRunCallMonitor(isLoggedIn: true, isCallerContext: true, autoRecordEnabled: true, authToken: 'eyJ.abc.def'),

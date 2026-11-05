@@ -39,7 +39,12 @@ export const selectScopedLeads = createSelector(
 );
 
 // Request keys: the server numbers are cached per period + scope
-export const selectDashKey = (s) => `?${whenParam(s.dashboard.period, s.dashboard.customDate)}${selectScope(s).scopeParam}`;
+export const selectDashKey = (s) => {
+  const typeParam = s.dashboard.typeFilter && s.dashboard.typeFilter !== 'ALL'
+    ? `&employeeType=${encodeURIComponent(s.dashboard.typeFilter)}`
+    : '';
+  return `?${whenParam(s.dashboard.period, s.dashboard.customDate)}${selectScope(s).scopeParam}${typeParam}`;
+};
 export const selectLbKey = (s) => `?${whenParam(s.leaderboard.period, s.leaderboard.customDate)}${selectScope(s).scopeParam}`;
 export const selectUdKey = (s) => `${s.userDetail.userId}|${s.userDetail.date || s.userDetail.period}`;
 

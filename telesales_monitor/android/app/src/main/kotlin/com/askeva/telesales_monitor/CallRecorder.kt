@@ -281,8 +281,8 @@ class CallRecorder(private val ctx: Context) {
 
     private fun startMediaRecorder(file: File): Boolean {
         val sources = intArrayOf(
-            MediaRecorder.AudioSource.VOICE_COMMUNICATION,
             MediaRecorder.AudioSource.MIC,
+            MediaRecorder.AudioSource.VOICE_COMMUNICATION,
         )
         for (source in sources) {
             try {

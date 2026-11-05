@@ -97,9 +97,16 @@ async function resolveScope(req, params = null) {
 
   const isAdmin = role === 'admin';
   // Base: admin -> everyone, manager/jr_manager/team_leader -> own team
-  const base = isAdmin ? await Employee.find({}).select(EMP_FIELDS).lean() : await teamOf(me);
+  let base = isAdmin ? await Employee.find({}).select(EMP_FIELDS).lean() : await teamOf(me);
+
+  // Narrow by employee type (sales_team, project_coordinator, others)
+  const rawType = q.employeeType || q.typeFilter || q.type;
+  if (rawType && !isAllValue(rawType)) {
+    const et = String(rawType).trim().toLowerCase();
+    base = base.filter(e => (e.employeeType || 'sales_team').toLowerCase() === et);
+  }
+
   const inBase = (list) => {
-    if (isAdmin) return list;
     const ids = new Set(base.map(e => e.id));
     return list.filter(e => ids.has(e.id));
   };

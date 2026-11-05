@@ -285,12 +285,11 @@
 }
 
 .table-body-row {
-  transition: background-color 0.15s ease, transform 0.15s ease !important;
+  transition: background-color 0.15s ease !important;
 }
 
 .table-body-row:hover {
   background-color: rgba(61, 200, 56, 0.04) !important;
-  transform: translateX(3px);
 }
 
 /* Leaderboard podium cards */

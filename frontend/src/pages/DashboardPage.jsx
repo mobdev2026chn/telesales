@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { Col, Row } from '../assets/antd';
+import { Col, Row, Select } from '../assets/antd';
 import { CountPill, PresenceDot } from '../components/common/Badge';
 import DataTable, { TableRow } from '../components/common/DataTable';
 import DateField from '../components/common/DateField';
@@ -18,9 +18,9 @@ import PageHeader from '../components/common/PageHeader';
 import Pager from '../components/common/Pager';
 import Progress from '../components/common/Progress';
 import UserLink from '../components/common/UserLink';
-import { DASH_TEAM_PAGE_SIZE, PERIOD_OPTIONS } from '../data/constants';
+import { DASH_TEAM_PAGE_SIZE, LEADERBOARD_TYPE_OPTIONS, PERIOD_OPTIONS } from '../data/constants';
 import { userPath } from '../data/navigation';
-import { setDashDate, setDashMgrFilter, setDashPeriod, setDashTeamPage } from '../redux/slices/dashboardSlice';
+import { setDashDate, setDashMgrFilter, setDashPeriod, setDashTeamPage, setDashTypeFilter } from '../redux/slices/dashboardSlice';
 import { selectDashKey, selectScope } from '../redux/selectors';
 import { fmtDur, fmtTalk, fmtTs, formatPhone, validPickerDate } from '../utils/format';
 import { notify } from '../utils/notify';
@@ -73,11 +73,32 @@ export default function DashboardPage() {
   };
 
   const n = (v) => Number(v) || 0;
-  const m = server ? {
+  const typeValue = dash.typeFilter || 'ALL';
+
+  // Client-side fallback / instant filter over teamMembers when a type is chosen
+  const typeMembers = server && Array.isArray(server.teamMembers) && typeValue !== 'ALL'
+    ? server.teamMembers.filter(member => {
+        const u = users.find(x => x.id === member.id || x.phone === member.phone);
+        const empType = (u && u.employeeType) || member.employeeType || 'sales_team';
+        return empType === typeValue;
+      })
+    : null;
+
+  const m = server ? (typeMembers ? {
+    total: typeMembers.reduce((s, r) => s + n(r.totalCalls), 0),
+    connected: typeMembers.reduce((s, r) => s + n(r.connectedCalls), 0),
+    talkSeconds: typeMembers.reduce((s, r) => s + n(r.talkTimeSeconds), 0),
+    incoming: typeMembers.reduce((s, r) => s + n(r.incomingCalls), 0),
+    outgoing: typeMembers.reduce((s, r) => s + n(r.outgoingCalls), 0),
+    missed: typeMembers.reduce((s, r) => s + n(r.missedCalls), 0),
+    rejected: typeMembers.reduce((s, r) => s + n(r.rejectedCalls), 0),
+    neverAttended: typeMembers.reduce((s, r) => s + n(r.neverAttendedCalls), 0),
+    uniqueClients: n(server.uniqueClients),
+  } : {
     total: n(server.totalCalls), connected: n(server.connectedCalls), talkSeconds: n(server.talkSeconds),
     incoming: n(server.incoming), outgoing: n(server.outgoing), missed: n(server.missed), rejected: n(server.rejected),
     neverAttended: n(server.neverAttended), uniqueClients: n(server.uniqueClients),
-  } : null;
+  }) : null;
   const rate = m && m.total ? Math.round((m.connected / m.total) * 100) : 0;
   const avgDur = m && m.connected ? Math.round(m.talkSeconds / m.connected) : 0;
   const inPct = m && m.total ? Math.round((m.incoming / m.total) * 100) : 0;
@@ -86,7 +107,16 @@ export default function DashboardPage() {
 
   return (
     <>
-      <PageHeader title="Dashboard" subtitle="Team performance and call metrics" actionsClass="">
+      <PageHeader title="Dashboard" subtitle="Team performance and call metrics">
+        <label htmlFor="dashTypeFilter" className="visually-hidden">Filter by type</label>
+        <Select
+          id="dashTypeFilter"
+          className="toolbar-ant-select"
+          value={typeValue}
+          options={LEADERBOARD_TYPE_OPTIONS}
+          onChange={(v) => dispatch(setDashTypeFilter(v))}
+          style={{ width: 175 }}
+        />
         <FilterChips options={PERIOD_OPTIONS} value={dash.customDate ? null : dash.period} onChange={(p) => dispatch(setDashPeriod(p))}>
           <DateField id="dashDateInput" value={dash.customDate} onChange={onDate} label="Dashboard date" title="Filter by date (2020-2030)" />
         </FilterChips>
@@ -134,6 +164,7 @@ export default function DashboardPage() {
         error={dash.error}
         usersError={usersError}
         callers={dashboardCallers}
+        typeFilter={typeValue}
         users={users}
         mgrOptions={mgrOptions}
         mgrValue={mgrValue}
@@ -194,7 +225,7 @@ function HourlyCard({ server, period, customDate }) {
 }
 
 // Team table: the people in the active scope, numbers from the same server response
-function TeamPerformance({ server, failed, error, usersError, callers, users, mgrOptions, mgrValue, page, targetDays, onMgr, onPage, onOpen }) {
+function TeamPerformance({ server, failed, error, usersError, callers, typeFilter = 'ALL', users, mgrOptions, mgrValue, page, targetDays, onMgr, onPage, onOpen }) {
   let body;
   let pager = { page: 1, totalPages: 1, count: 0 };
   if (!server) {
@@ -207,7 +238,10 @@ function TeamPerformance({ server, failed, error, usersError, callers, users, mg
     const connectedOf = (u) => { const r = statsFor(server.teamMembers, u); return r ? Number(r.connectedCalls) || 0 : 0; };
     const onlineOf = (u) => appPresence(statsFor(server.teamMembers, u)).online;
     const set = mgrFilterSet(users, mgrValue);
-    const ordered = callers.map((u, i) => ({ u, i, c: connectedOf(u), on: onlineOf(u) }))
+    const typeFilteredCallers = typeFilter !== 'ALL'
+      ? callers.filter(u => ((u && u.employeeType) || 'sales_team') === typeFilter)
+      : callers;
+    const ordered = typeFilteredCallers.map((u, i) => ({ u, i, c: connectedOf(u), on: onlineOf(u) }))
       .sort((a, b) => (b.on - a.on) || ((b.c > 0) - (a.c > 0)) || (b.c - a.c) || (a.i - b.i))
       .map(x => x.u)
       .filter(u => !set || set.has(u.id));

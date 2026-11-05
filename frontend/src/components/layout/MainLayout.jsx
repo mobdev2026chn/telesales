@@ -30,7 +30,16 @@ export default function MainLayout() {
   const modals = { dial, lead, batch };
   const modalsRef = useRef(modals);
   modalsRef.current = modals;
+  const viewportRef = useRef(null);
   const tab = tabFromPath(location.pathname);
+
+  // Reset viewport scroll to top when changing pages so tables and headers start cleanly
+  useEffect(() => {
+    if (viewportRef.current) {
+      viewportRef.current.scrollTop = 0;
+    }
+    window.scrollTo(0, 0);
+  }, [location.pathname]);
 
   // The open page drives the live refresh; the mobile menu closes on navigation
   useEffect(() => {
@@ -79,7 +88,7 @@ export default function MainLayout() {
         <Sidebar />
         <div className="main-column">
           <AppHeader />
-          <main className="main-viewport">
+          <main ref={viewportRef} className="main-viewport">
             <div className="main-inner">
               <ImpersonationBanner />
               <div className="tab-view active" key={tab === 'user' ? location.pathname : tab}>
