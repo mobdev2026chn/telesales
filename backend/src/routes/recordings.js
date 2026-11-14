@@ -72,8 +72,19 @@ function toRecordingDTO(r, extra = {}) {
     dateStr: r.dateStr || '',
     timeStr: r.timeStr || '',
     storageSizeBytes: r.storageSizeBytes || 0,
+    captureSource: r.captureSource || '',
+    speaker: r.speaker || '',
+    customerVoiceAtRisk: customerVoiceAtRisk(r),
     ...extra,
   };
+}
+
+// Loudspeaker results after which a microphone recording should contain the customer too
+const SPEAKER_ON = ['on', 'on_api', 'already_on'];
+
+// AskEVA's own microphone recording without a confirmed loudspeaker: the customer may be missing
+function customerVoiceAtRisk(r) {
+  return r.captureSource === 'mic' && !SPEAKER_ON.includes(r.speaker || '');
 }
 
 // ---- Audio helpers -----------------------------------------------------------------------------
@@ -436,6 +447,9 @@ router.post(['/api/recordings', '/api/user/recordings/upload', '/api/admin/recor
     const bodyType = String(body.type || '').toUpperCase();
     const type = bodyType === 'INCOMING' || bodyType === 'OUTGOING' ? bodyType : deriveType({ originalFileName: originalName });
     const simSlot = Number.isFinite(Number(body.simSlot)) && body.simSlot !== null && body.simSlot !== '' ? Math.round(Number(body.simSlot)) : null;
+    // Sent by current app builds: the phone's own recording or AskEVA's microphone (+ loudspeaker outcome)
+    const captureSource = ['builtin', 'mic'].includes(body.captureSource) ? body.captureSource : '';
+    const speaker = captureSource === 'mic' && typeof body.speaker === 'string' ? body.speaker.slice(0, 40) : '';
 
     const rec = await Recording.create({
       id: recId,
@@ -456,6 +470,8 @@ router.post(['/api/recordings', '/api/user/recordings/upload', '/api/admin/recor
       audioData: '',
       transcript: typeof transcript === 'string' ? transcript.slice(0, 5000) : '',
       storageSizeBytes,
+      captureSource,
+      speaker,
       dateStr: typeof dateStr === 'string' ? dateStr.slice(0, 40) : '',
       timeStr: typeof timeStr === 'string' ? timeStr.slice(0, 40) : '',
     });
