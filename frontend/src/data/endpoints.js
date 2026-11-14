@@ -29,6 +29,7 @@ export const ENDPOINTS = {
 
   // Recordings
   recordings: (qs) => `/admin/recordings${qs}`,
+  recordingIssues: (qs) => `/admin/recording-issues${qs}`,
   recordingAudio: (id) => `/recordings/${enc(id)}/audio`,
   recordingReview: (id) => `/recordings/${enc(id)}/review`,
   recordingPin: (id) => `/recordings/${enc(id)}/pin`,

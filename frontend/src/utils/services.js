@@ -45,6 +45,8 @@ export const leadService = {
 
 export const recordingService = {
   list: (qs) => apiFetch(ENDPOINTS.recordings(qs)),
+  // Calls whose recording is missing or mic-only (customer voice may be missing), reported by the phones
+  issues: (qs) => apiFetch(ENDPOINTS.recordingIssues(qs)),
   review: (id, body) => apiFetch(ENDPOINTS.recordingReview(id), { method: 'POST', body }),
   pin: (id, pinned) => apiFetch(ENDPOINTS.recordingPin(id), { method: 'POST', body: { pinned } }),
 };

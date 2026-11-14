@@ -22,6 +22,7 @@ import { newRecMeta } from '../utils/mappers';
 import { rangeBounds } from '../utils/periods';
 import { isShortRecording, reviewAverage } from '../utils/recordings';
 import { callBelongsTo } from '../utils/scope';
+import { recordingService } from '../utils/services';
 import { paginate } from '../utils/table';
 import { changeRecAgent, changeRecRange, fetchRecordings, reviewRecording, saveRecordingFeedback, setRecordingStar, toggleRecordingPin } from '../utils/actions/recordingActions';
 
@@ -144,6 +145,7 @@ export default function RecordingsPage() {
         </div>
       </div>
 
+      <RecordingProblems range={rs.range} queryKey={queryKey} />
       <div className="stack" style={{ gap: 'var(--ds-space-4)' }}>{listBody}</div>
       <Pager className="pager-bar" label={`PAGE ${pg.page} / ${pg.totalPages} · ${recs.length} RECORDINGS`} page={pg.page} totalPages={pg.totalPages} onPage={changePage}>
         {rs.hasMore && <Chip icon={<Icon name="history" size="sm" />} onClick={() => fetchRecordings(true)}>Load older</Chip>}
@@ -193,6 +195,7 @@ function RecordingCard({ rec: c, meta, users }) {
             </div>
             <div className="rec-card-meta">
               {fmtTs(c.ts)} · <strong className="text-2">{fmtDur(c.dur)}</strong> <DirBadge dir={c.dir} />{c.sim && <> <span>SIM {c.sim}</span></>}
+              {c.voiceAtRisk && <> <Badge tone="warning" title={captureLabel(c)}>Mic only · customer voice may be missing</Badge></>}
             </div>
           </div>
           <span>
@@ -230,6 +233,7 @@ function RecordingCard({ rec: c, meta, users }) {
         <div className="rec-details-inner">
           <div className="rec-source">
             <div style={{ minWidth: 0, overflowWrap: 'anywhere' }}><Icon name="file" size="sm" /> <strong>Source file:</strong> <span className="muted">{c.fileName || '—'}</span></div>
+            <div><Icon name="headphones" size="sm" /> <strong>Recorded by:</strong> {captureLabel(c)}</div>
             <div><Icon name="users" size="sm" /> <strong>Team audit:</strong> {teamName}&apos;S TEAM</div>
           </div>
           <div className="rec-review">
@@ -237,6 +241,77 @@ function RecordingCard({ rec: c, meta, users }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+const SPEAKER_LABELS = {
+  on: 'loudspeaker on', on_api: 'loudspeaker on', already_on: 'loudspeaker on',
+  tapped: 'loudspeaker tapped, not confirmed', tap_no_effect: 'loudspeaker tap had no effect',
+  not_found: 'Speaker button not found', headset: 'headset connected', no_accessibility: 'Accessibility off',
+  requested: 'loudspeaker not confirmed',
+};
+
+// Where a recording's audio came from, in words
+function captureLabel(c) {
+  if (c.capture === 'builtin') return "Phone's own call recorder (both voices)";
+  if (c.capture === 'mic') {
+    const spk = SPEAKER_LABELS[c.speaker] || 'loudspeaker not used';
+    return `AskEVA microphone · ${spk}${c.voiceAtRisk ? ' · customer voice may be missing' : ''}`;
+  }
+  return 'Not known (older app version)';
+}
+
+const ISSUE_KINDS = {
+  lost: { tone: 'danger', label: 'Not recorded' },
+  mic_only: { tone: 'warning', label: 'Mic only' },
+};
+
+// Calls whose recording is missing or may lack the customer's voice, reported by the phones.
+// Same date range and agent as the list below; hidden when there are none (or on an older server).
+function RecordingProblems({ range, queryKey }) {
+  const [issues, setIssues] = useState([]);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    const { from, to } = rangeBounds(range, 0);
+    recordingService.issues(`?limit=200${queryKey}&from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`)
+      .then(json => { if (live) setIssues(Array.isArray(json && json.issues) ? json.issues : []); })
+      .catch(() => { if (live) setIssues([]); });
+    return () => { live = false; };
+  }, [range, queryKey]);
+
+  if (issues.length === 0) return null;
+  const lost = issues.filter(i => i.kind === 'lost').length;
+  const micOnly = issues.length - lost;
+  const summary = [lost && `${lost} not recorded`, micOnly && `${micOnly} mic only`].filter(Boolean).join(' · ');
+
+  return (
+    <div className="card" style={{ marginBottom: 'var(--ds-space-4)' }} role="region" aria-label="Recording problems">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <span className="card-title" style={{ fontSize: 'var(--ds-fs-base)' }}>
+          <Icon name="flag" size="sm" /> Recording problems <span className="card-subtitle">· {summary}</span>
+        </span>
+        <Button size="small" aria-expanded={open} onClick={() => setOpen(v => !v)}>{open ? 'Hide' : 'Show'}</Button>
+      </div>
+      {open && (
+        <div className="stack" style={{ gap: 'var(--ds-space-2)', marginTop: 'var(--ds-space-3)' }}>
+          {issues.map(i => {
+            const kind = ISSUE_KINDS[i.kind] || ISSUE_KINDS.lost;
+            return (
+              <div key={i.id} style={{ borderTop: '1px solid var(--ds-border, rgba(0,0,0,.08))', paddingTop: 'var(--ds-space-2)' }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <Badge tone={kind.tone}>{kind.label}</Badge>
+                  <UserLink user={{ id: i.callerId, name: i.callerName }} label={i.callerName || '—'} />
+                  <span className="muted">{fmtTs(i.at)} · {fmtDur(i.talkSeconds)}{i.phone ? ` · ${i.phone}` : ''}{i.android ? ` · Android ${i.android}` : ''}</span>
+                </div>
+                <div style={{ fontSize: 'var(--ds-fs-sm)', marginTop: 4 }}>{i.reason}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
