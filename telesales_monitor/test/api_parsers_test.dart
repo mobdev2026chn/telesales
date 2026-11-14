@@ -363,6 +363,11 @@ void main() {
       expect(ApiService.candidateBaseUrls.first, ApiService.configuredBaseUrl);
     });
 
+    test('a build without API_URL uses the live server, also in debug', () {
+      // flutter test runs in debug mode without --dart-define: a plain `flutter run` behaves the same
+      expect(ApiService.configuredBaseUrl, ApiService.productionBaseUrl);
+    });
+
     test('USB URL help explains the run_on_phone script', () {
       final help = ApiService.simConnectionHelpFor(ApiService.debugUsbBaseUrl);
       expect(help, contains('run_on_phone.ps1'));

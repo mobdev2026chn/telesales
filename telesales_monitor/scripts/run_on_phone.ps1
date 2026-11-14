@@ -1,6 +1,7 @@
 # Runs the debug app on a USB-connected phone (or emulator) against the local backend.
-# Forwards the device's port 5000 to this PC (adb reverse), so the app's default debug URL
-# http://127.0.0.1:5000/api reaches the backend without Wi-Fi, LAN IPs or firewall rules.
+# Forwards the device's port 5000 to this PC (adb reverse) and builds the app with
+# API_URL=http://127.0.0.1:5000/api, so it reaches the backend without Wi-Fi, LAN IPs or firewall
+# rules. (A plain `flutter run` uses the live server.)
 # Extra arguments are passed to `flutter run`, e.g. .\scripts\run_on_phone.ps1 -d <device-id>
 $ErrorActionPreference = 'Stop'
 
@@ -55,7 +56,8 @@ foreach ($line in $devices) {
 
 Push-Location (Split-Path -Parent $PSScriptRoot)
 try {
-    & $flutter run @args
+    # Builds use the live server unless told otherwise: point this one at the PC's backend
+    & $flutter run "--dart-define=API_URL=http://127.0.0.1:5000/api" @args
 }
 finally {
     Pop-Location

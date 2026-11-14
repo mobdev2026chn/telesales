@@ -14,13 +14,13 @@ import 'api_parsers.dart';
 class ApiService {
   static const String productionBaseUrl = 'https://telesales.askeva.io/api';
 
-  /// Override per build, e.g. the local testing APK script supplies the PC's LAN URL.
-  /// Debug builds without an override use the local backend (USB first, then the emulator
-  /// host); release builds continue using [productionBaseUrl].
+  /// Every build talks to [productionBaseUrl] unless it is built with
+  /// `--dart-define=API_URL=...`. A local backend is opt-in on purpose: a plain `flutter run` used
+  /// to point the phone at 127.0.0.1, and every call recording made after it waited on the phone
+  /// for a backend that was not running. Local testing: `scripts/run_on_phone.ps1` (USB, passes
+  /// [debugUsbBaseUrl]) or `scripts/build_testing_apk.ps1 -BackendHost <PC-IP>` (Wi-Fi).
   static const String _apiUrlOverride = String.fromEnvironment('API_URL');
-  static const String configuredBaseUrl = _apiUrlOverride != ''
-      ? _apiUrlOverride
-      : (kDebugMode ? debugUsbBaseUrl : productionBaseUrl);
+  static const String configuredBaseUrl = _apiUrlOverride != '' ? _apiUrlOverride : productionBaseUrl;
 
   /// Local backend reached through `adb reverse tcp:5000 tcp:5000`: works on a USB-connected
   /// phone (set up by `scripts/run_on_phone.ps1`) and on the emulator.

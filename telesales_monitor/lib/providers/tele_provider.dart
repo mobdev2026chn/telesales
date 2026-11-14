@@ -569,23 +569,15 @@ class TeleProvider extends ChangeNotifier {
   }
 
   /// Why calls are probably not being recorded with sound, or null when recording looks fine.
+  /// The dashboard banner shows it; one tap turns recording on (CallRecordingSetupScreen autoStart).
   String? get recordingProblem {
     final s = _recordingSetupStatus;
     if (s == null || !_autoRecordEnabled) return null;
-    if (s.nativeRecorderDetected && s.mediaPermission) return null; // the phone's own recordings are uploaded
-    if (!s.micPermission) return 'Microphone permission is off, so calls are not recorded.';
-    if (!s.accessibilityEnabled && s.usesGoogleDialerOnOemPhone) {
-      return 'Turn on the Accessibility permission, or switch to your phone\'s own Phone app with automatic call recording.';
-    }
-    if (!s.accessibilityEnabled) {
-      return s.lastCaptureStatus == 'silent'
-          ? 'Your last call was not recorded: Android muted the microphone. Turn on the Accessibility permission.'
-          : 'Turn on the Accessibility permission, otherwise Android mutes the microphone and calls are recorded silent.';
-    }
-    // Silent even though Accessibility was on: a real problem. A silent call made while it was off
-    // is fixed now that it is back on (the next call shows whether recording works).
-    if (s.lastCaptureStatus == 'silent' && s.lastCaptureA11y) {
-      return 'Your last call was recorded without sound. Open call recording setup.';
+    if (!s.recordingReady) return 'Call recording is off. Tap once to turn it on.';
+    // Silent even though everything was on during the call: a real problem. A silent call made while
+    // Accessibility was off is fixed now that it is on (the next call shows whether recording works).
+    if (!s.builtInTrusted && s.lastCaptureStatus == 'silent' && s.lastCaptureA11y) {
+      return 'Your last call was recorded without sound. Tap to check call recording.';
     }
     return null;
   }

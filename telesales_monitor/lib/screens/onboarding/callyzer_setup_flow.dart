@@ -699,7 +699,7 @@ class _CallyzerSetupFlowState extends State<CallyzerSetupFlow> {
                 onPressed: _prevStep,
               ),
               const SizedBox(width: 4),
-              Expanded(child: Text('Call recording setup', style: AppTheme.headline(size: 22))),
+              Expanded(child: Text('Call recording', style: AppTheme.headline(size: 22))),
             ],
           ),
           const SizedBox(height: 8),

@@ -160,6 +160,8 @@ class MainActivity : FlutterActivity() {
                         val status = HashMap<String, Any?>(DeviceSetupHelper.deviceInfo())
                         status["serviceRunning"] = CallMonitorService.isRunning
                         status["micPermission"] = CallMonitorStore.hasPermission(this, Manifest.permission.RECORD_AUDIO)
+                        status["phonePermissions"] = CallMonitorStore.hasPermission(this, Manifest.permission.READ_PHONE_STATE) &&
+                            CallMonitorStore.hasPermission(this, Manifest.permission.READ_CALL_LOG)
                         status["mediaPermission"] = CallMonitorStore.hasMediaPermission(this)
                         status["batteryOptimizationIgnored"] = DeviceSetupHelper.isIgnoringBatteryOptimizations(this)
                         status["nativeRecorderDetected"] = CallMonitorStore.nativeRecorderDetected(this)
@@ -169,6 +171,7 @@ class MainActivity : FlutterActivity() {
                         status["lastCaptureAt"] = CallMonitorStore.lastCaptureAt(this)
                         status["lastCaptureA11y"] = CallMonitorStore.lastCaptureA11y(this)
                         status["a11ySelfRepair"] = A11yGuard.canSelfRepair(this)
+                        status["speakerFallbackActive"] = CallMonitorStore.speakerNeeded(this)
                         status["pendingUploads"] = try { RecordingQueue.countFor(this, userId) } catch (_: Exception) { 0 }
                         mainHandler.post { result.success(status) }
                     }
@@ -184,7 +187,10 @@ class MainActivity : FlutterActivity() {
                     result.success(DeviceSetupHelper.openAutostartSettings(this))
                 }
                 "openAccessibilitySettings" -> {
-                    result.success(DeviceSetupHelper.openAccessibilitySettings(this))
+                    val opened = DeviceSetupHelper.openAccessibilitySettings(this)
+                    // Shown on top of Settings, where the in-app hint cannot be seen
+                    if (opened) showToast("Tap \"AskEVA Call Recording\" (under Installed apps) and turn it on")
+                    result.success(opened)
                 }
                 "openAppInfo" -> {
                     result.success(DeviceSetupHelper.openAppInfo(this))
@@ -503,8 +509,8 @@ class MainActivity : FlutterActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Turn the recording accessibility service back on if the phone switched it off (when allowed)
-        A11yGuard.ensureEnabled(this)
+        // The recording accessibility service is NOT switched on here: it stays off outside calls so payment
+        // apps (GPay, PhonePe) work. A11yGuard switches it on when a call starts.
     }
 
     override fun onDestroy() {
@@ -556,6 +562,8 @@ class MainActivity : FlutterActivity() {
         if (clean.isEmpty()) return
 
         CallMonitorService.noteDialed(clean, slotIndex + 1)
+        // A head start for the recording accessibility service (on only during calls)
+        A11yGuard.onCallStarting(this)
 
         try {
             val hasCallPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED
@@ -764,6 +772,8 @@ class MainActivity : FlutterActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)
         }
+        // Audio files: to find and upload the recording the phone's own dialer made (asked in the same batch)
+        permissions.add(CallMonitorStore.mediaReadPermission())
 
         val needed = permissions.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED

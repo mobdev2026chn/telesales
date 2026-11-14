@@ -27,6 +27,8 @@ object BuiltInRecordingFinder {
         val displayName: String,
         val durationSeconds: Int,
         val key: String,
+        /** Folder it was found in (for diagnostics: where this phone's dialer saves recordings). */
+        val folder: String,
     )
 
     /** Folders (relative to shared storage) that OEM dialers use for call recordings. */
@@ -89,6 +91,7 @@ object BuiltInRecordingFinder {
             displayName = best.displayName,
             durationSeconds = (best.durationMs / 1000).toInt(),
             key = best.key,
+            folder = best.folderPath,
         )
     }
 

@@ -33,11 +33,14 @@ import kotlin.random.Random
  * whether or not the app's UI / Flutter engine is alive.
  *
  * Per connected call:
- *  - OFFHOOK: record the mic ourselves, unless the phone's built-in recorder was detected earlier.
+ *  - OFFHOOK: record the mic ourselves. Once the phone's built-in recorder is trusted this is only a
+ *    backup (Android 10+, where two apps may use the mic at once), so a call the dialer did not record
+ *    is still uploaded. When the built-in recorder cannot be used, [SpeakerAssist] also puts the call
+ *    on the loudspeaker so the mic hears the other side (Android gives apps no call audio).
  *  - IDLE: match the call-log row (number, SIM, type, talk time), drop personal-SIM calls, then
  *    look for the dialer's own recording for ~16 s. Built-in file found -> queue it (ours is
  *    discarded) and trust the OEM recorder from now on; none -> queue ours. Three connected calls
- *    in a row without a built-in file switch our own recording back on.
+ *    in a row without a built-in file stop trusting the built-in recorder.
  *  - Queued recordings are uploaded by [RecordingUploader] (WorkManager).
  *
  * Call state comes from the PHONE_STATE broadcast registered here. Unlike TelephonyCallback
@@ -78,7 +81,8 @@ class CallMonitorService : Service() {
             try { ctx.stopService(Intent(ctx, CallMonitorService::class.java)) } catch (_: Exception) {}
         }
 
-        private val BUILTIN_POLL_OFFSETS_MS = longArrayOf(4000L, 7000L, 11000L, 16000L)
+        /** After the call ends. OEM recorders finalise the file late and the media index lags behind on Android 11+. */
+        private val BUILTIN_POLL_OFFSETS_MS = longArrayOf(4000L, 7000L, 11000L, 16000L, 25000L, 40000L)
         private const val MIN_TALK_SECONDS_FOR_MISS = 5
         /** Server marks a user offline after 5 minutes without any request. */
         private const val HEARTBEAT_EVERY_SEC = 120L
@@ -96,12 +100,21 @@ class CallMonitorService : Service() {
         val incoming: Boolean,
         val simSlot: Int,
         val recorder: CallRecorder?,
-    )
+        /** Our recording ran only as a backup to the trusted built-in recorder. */
+        val backup: Boolean,
+        /** Loudspeaker fallback used for this call (its result arrives from the accessibility service). */
+        val speaker: SpeakerAssist.Session?,
+        /** Why the loudspeaker was not used, when it was not ("" = not needed). */
+        val speakerSkipped: String,
+    ) {
+        fun speakerDiagnostic(): String = speaker?.result ?: speakerSkipped
+    }
 
     private data class CallLogRow(val number: String, val name: String, val type: String, val durationSec: Int, val simSlot: Int)
 
     /** Post-call work runs one call at a time, off the main thread. */
     private val worker: ExecutorService = Executors.newSingleThreadExecutor()
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
     /** Live call sync (separate from [worker], which waits up to ~16 s per call for recordings). */
     private val pusher: ExecutorService = Executors.newSingleThreadExecutor()
     /** "Still here" pings, so the admin dashboard shows this caller as online while logged in. */
@@ -119,6 +132,12 @@ class CallMonitorService : Service() {
     private var offhookMs = 0L
     private var callSlot = 0
     private var recorder: CallRecorder? = null
+    private var recorderIsBackup = false
+    private var speaker: SpeakerAssist.Session? = null
+    /** Latest loudspeaker session, kept after the call ends: its result can arrive a moment later. */
+    @Volatile private var speakerForResults: SpeakerAssist.Session? = null
+    private var speakerSkipped = ""
+    private var speakerReceiver: BroadcastReceiver? = null
     /** Start of the most recent call; read by the worker to bound the previous call's search. */
     @Volatile private var latestCallStartMs = 0L
 
@@ -338,6 +357,24 @@ class CallMonitorService : Service() {
             e.printStackTrace()
             receiver = null
         }
+        if (speakerReceiver == null) {
+            // Answers from the accessibility service (":a11y" process) about the loudspeaker
+            val r = object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    val result = intent?.getStringExtra(SpeakerAssist.EXTRA_RESULT) ?: return
+                    val s = speakerForResults ?: return
+                    s.result = if (s.usedSpeakerphoneApi && result == "already_on") "on_api" else result
+                }
+            }
+            try {
+                ContextCompat.registerReceiver(
+                    this, r, IntentFilter(SpeakerAssist.ACTION_RESULT), ContextCompat.RECEIVER_NOT_EXPORTED
+                )
+                speakerReceiver = r
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
     }
 
     private fun onPhoneState(intent: Intent) {
@@ -348,7 +385,7 @@ class CallMonitorService : Service() {
 
         when (state) {
             TelephonyManager.EXTRA_STATE_RINGING -> {
-                if (!inCall && lastState == TelephonyManager.EXTRA_STATE_IDLE) A11yGuard.ensureEnabled(this)
+                if (!inCall && lastState == TelephonyManager.EXTRA_STATE_IDLE) A11yGuard.onCallStarting(this)
                 if (!inCall) {
                     if (lastState == TelephonyManager.EXTRA_STATE_IDLE) {
                         incoming = true
@@ -384,7 +421,11 @@ class CallMonitorService : Service() {
                     schedulePush(PUSH_DELAY_MS)
                     schedulePush(PUSH_DELAY_MS * 3) // slow dialers write the row late
                 }
-                if (inCall) endCall(now)
+                if (inCall) {
+                    endCall(now)
+                } else if (lastState == TelephonyManager.EXTRA_STATE_RINGING) {
+                    A11yGuard.onCallFinished(this) // missed / rejected: switched on at ringing, nothing to process
+                }
                 inCall = false
                 incoming = false
                 ringingAtMs = 0L
@@ -400,11 +441,14 @@ class CallMonitorService : Service() {
         // The SIM of an outgoing call is often unknown at this point: record unless it is positively the
         // personal SIM. The call-log row decides after the call, and a non-work recording is deleted then.
         if (!CallMonitorStore.isWorkSim(callSlot, session.simMode, 1)) return
-        // The phone's own recorder handles it: do not compete with it for the microphone
-        if (CallMonitorStore.nativeRecorderDetected(this) && CallMonitorStore.hasMediaPermission(this)) return
+        val builtInTrusted = CallMonitorStore.nativeRecorderDetected(this) && CallMonitorStore.hasMediaPermission(this)
+        // Android 9 and older give the mic to one app at a time: leave it to the phone's own recorder
+        if (builtInTrusted && Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
         if (!CallMonitorStore.hasPermission(this, Manifest.permission.RECORD_AUDIO)) return
-        // Switched off by the phone since the last check: turn it back on before recording (if allowed)
-        A11yGuard.ensureEnabled(this)
+        // On only during calls (payment apps block it): switch it on for this one, if allowed
+        A11yGuard.onCallStarting(this)
+        // Without it Android hands us silence: a backup recording would be thrown away anyway
+        if (builtInTrusted && !CallAccessibilityService.isEnabled(this)) return
 
         val stamp =SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date())
         val suffix = Random.nextInt(0x10000).toString(16).padStart(4, '0')
@@ -413,24 +457,58 @@ class CallMonitorService : Service() {
         val rec = CallRecorder(this)
         if (rec.start(file)) {
             recorder = rec
-            updateNotification("Recording this call")
+            // Trusted built-in recorder: ours is only a backup, and the call stays on the earpiece
+            recorderIsBackup = builtInTrusted
+            if (!builtInTrusted) startSpeakerIfNeeded()
+            updateNotification(if (speaker != null) "Recording this call (loudspeaker)" else "Recording this call")
             CallMonitorEvents.emit("onCallRecordingStatus", mapOf("isRecording" to true, "isIncoming" to incoming))
         }
+    }
+
+    /**
+     * Our recording hears only this phone's microphone: put the call on the loudspeaker so the other
+     * side is captured too, unless the caller is on a headset.
+     */
+    private fun startSpeakerIfNeeded() {
+        speaker = null
+        speakerSkipped = ""
+        if (!CallMonitorStore.speakerNeeded(this)) return
+        if (SpeakerAssist.headsetConnected(this)) {
+            speakerSkipped = "headset"
+            return
+        }
+        val s = SpeakerAssist.begin(this)
+        // Android 12+ can only be switched by tapping the call screen, which needs the accessibility service
+        if (!CallAccessibilityService.isEnabled(this)) s.result = if (s.usedSpeakerphoneApi) "on_api" else "no_accessibility"
+        speaker = s
+        speakerForResults = s
     }
 
     private fun endCall(now: Long) {
         val rec = recorder
         recorder = null
         rec?.requestStop() // stop capturing right away; the file is finished on the worker
+        val spk = speaker
+        speaker = null
+        spk?.let { SpeakerAssist.end(this, it) }
         if (rec != null) {
             updateNotification(idleText())
             CallMonitorEvents.emit("onCallRecordingStatus", mapOf("isRecording" to false))
         }
-        val ended = EndedCall(callStartMs, offhookMs, now, callNumber, incoming, callSlot, rec)
+        val ended = EndedCall(callStartMs, offhookMs, now, callNumber, incoming, callSlot, rec, recorderIsBackup, spk, speakerSkipped)
+        recorderIsBackup = false
+        speakerSkipped = ""
         callNumber = ""
         callSlot = 0
         try {
-            worker.execute { processEndedCall(ended) }
+            worker.execute {
+                try {
+                    processEndedCall(ended)
+                } finally {
+                    // Call handled: the accessibility service goes off again (payment apps), unless another call started
+                    mainHandler.post { if (!inCall) A11yGuard.onCallFinished(this) }
+                }
+            }
         } catch (_: Exception) {
             rec?.awaitResult()?.file?.delete()
         }
@@ -486,9 +564,13 @@ class CallMonitorService : Service() {
 
         // Built-in recorder: poll a few times, OEM recorders finalise the file late
         var found: BuiltInRecordingFinder.Found? = null
-        if (CallMonitorStore.hasMediaPermission(this)) {
+        var foundAfterMs = 0L
+        // Without the audio-files permission we cannot look, which says nothing about the phone's recorder
+        val searched = CallMonitorStore.hasMediaPermission(this)
+        if (searched) {
             val exclude = CallMonitorStore.usedBuiltInFiles(this).toSet()
             for (offset in BUILTIN_POLL_OFFSETS_MS) {
+                foundAfterMs = offset
                 sleepUntil(call.endMs + offset)
                 // A call started since then: its recording must not be taken for this one
                 val next = latestCallStartMs
@@ -502,8 +584,13 @@ class CallMonitorService : Service() {
 
         if (found != null) {
             own?.file?.delete()
+            // The uploaded recording is the phone's own, with both voices: the last call was recorded with sound
+            CallMonitorStore.setLastCapture(this, "ok", -1)
             CallMonitorStore.cancelNotification(this, CallMonitorStore.NOTIF_ID_RECORDING)
-            RecordingDiagnostics.add(this, JSONObject().put("result", "builtin").put("builtInFound", true).put("talkSeconds", talkSec))
+            RecordingDiagnostics.add(this, JSONObject().put("result", "builtin").put("builtInFound", true).put("talkSeconds", talkSec)
+                .put("backup", call.backup).put("speaker", call.speakerDiagnostic())
+                // Where and how late this phone's dialer saves its recordings (folder only, never the file name)
+                .put("foundIn", found.folder).put("foundAfterSec", foundAfterMs / 1000))
             CallMonitorStore.onBuiltInFound(this, found.key, BuiltInRecordingFinder.usedKeyFor(found.displayName))
             RecordingQueue.add(
                 this, QueuedRecording(
@@ -514,8 +601,11 @@ class CallMonitorService : Service() {
                 )
             )
         } else {
-            if (talkSec >= MIN_TALK_SECONDS_FOR_MISS && CallMonitorStore.hasMediaPermission(this)) {
+            if (talkSec >= MIN_TALK_SECONDS_FOR_MISS && searched) {
                 CallMonitorStore.onBuiltInMissing(this)
+                // We looked and the phone saved nothing readable: from the next call on, our recording
+                // uses the loudspeaker (see CallMonitorStore.speakerNeeded)
+                CallMonitorStore.onCallWithoutBuiltIn(this)
             }
             val recorderUsed = call.recorder
             if (own != null) {
@@ -540,6 +630,8 @@ class CallMonitorService : Service() {
                 put("talkSeconds", talkSec)
                 put("builtInFound", false)
                 put("uploadedOwn", own != null)
+                put("backup", call.backup)
+                put("speaker", call.speakerDiagnostic())
                 if (recorderUsed == null) {
                     put("result", "not_recorded")
                     put("note", when {
@@ -564,6 +656,7 @@ class CallMonitorService : Service() {
                         path = own.file.absolutePath, uri = "", fileName = own.file.name,
                         callStartedAtMs = call.startMs, phoneNumber = number, contactName = contact, type = type,
                         simSlot = slot, durationSeconds = if (talkSec > 0) talkSec else own.durationSeconds,
+                        speaker = call.speakerDiagnostic(),
                     )
                 )
             }
@@ -655,6 +748,8 @@ class CallMonitorService : Service() {
         // Finish (and queue) a call that is still being recorded
         if (inCall) endCall(System.currentTimeMillis())
         inCall = false
+        try { speakerReceiver?.let { unregisterReceiver(it) } } catch (_: Exception) {}
+        speakerReceiver = null
         worker.shutdown() // queued post-call work still completes
         pusher.shutdown()
         CallMonitorEvents.emit("onCallMonitorState", mapOf("running" to false))

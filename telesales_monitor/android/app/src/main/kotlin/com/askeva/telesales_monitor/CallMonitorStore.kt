@@ -32,6 +32,7 @@ object CallMonitorStore {
     private const val KEY_MISSES = "native_recorder_misses"
     private const val KEY_USED = "used_builtin_files"
     private const val KEY_AUTH_FAILED_TOKEN = "auth_failed_token"
+    private const val KEY_CALLS_WITHOUT_BUILTIN = "calls_without_builtin"
 
     /** Consecutive connected calls without a built-in file before we record ourselves again. */
     const val MISSES_BEFORE_RESET = 3
@@ -195,9 +196,33 @@ object CallMonitorStore {
         prefs(ctx).edit()
             .putBoolean(KEY_NATIVE_RECORDER, true)
             .putInt(KEY_MISSES, 0)
+            .putInt(KEY_CALLS_WITHOUT_BUILTIN, 0)
             .putString(KEY_USED, JSONArray(used).toString())
             .apply()
     }
+
+    // ---- Loudspeaker fallback (SpeakerAssist) ----------------------------------------------------
+    // Our own recording only hears the other side through the loudspeaker. It is used only where the
+    // phone's own recorder cannot be: no readable built-in recording turned up for a connected work
+    // call, the default Phone app is "Phone by Google" (its recordings are private to it), or AskEVA
+    // may not read audio files at all. Always on: there is no setting for it.
+
+    /** Connected work calls since the last built-in recording was found, that had none. */
+    fun callsWithoutBuiltIn(ctx: Context): Int = prefs(ctx).getInt(KEY_CALLS_WITHOUT_BUILTIN, 0)
+
+    fun onCallWithoutBuiltIn(ctx: Context) {
+        val p = prefs(ctx)
+        p.edit().putInt(KEY_CALLS_WITHOUT_BUILTIN, (p.getInt(KEY_CALLS_WITHOUT_BUILTIN, 0) + 1).coerceAtMost(10_000)).apply()
+    }
+
+    /** Whether the next work call our recorder captures should go through the loudspeaker. */
+    fun speakerNeeded(ctx: Context): Boolean {
+        val media = hasMediaPermission(ctx)
+        if (nativeRecorderDetected(ctx) && media) return false
+        return !media || callsWithoutBuiltIn(ctx) >= 1 || DeviceSetupHelper.defaultDialerPackage(ctx) == GOOGLE_DIALER
+    }
+
+    private const val GOOGLE_DIALER = "com.google.android.dialer"
 
     /** A connected call ended without a built-in file. Returns true when the flag was just reset. */
     fun onBuiltInMissing(ctx: Context): Boolean {

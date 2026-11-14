@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.util.Base64
 import android.util.Base64OutputStream
+import android.util.Log
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.ExistingWorkPolicy
@@ -49,12 +50,15 @@ data class QueuedRecording(
     val durationSeconds: Int,
     val attempts: Int = 0,
     val createdAtMs: Long = System.currentTimeMillis(),
+    /** Own recordings: how the loudspeaker was handled ([SpeakerAssist.Session.result]), "" = not used. */
+    val speaker: String = "",
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("id", id).put("userId", userId).put("source", source).put("path", path).put("uri", uri)
         .put("fileName", fileName).put("callStartedAtMs", callStartedAtMs).put("phoneNumber", phoneNumber)
         .put("contactName", contactName).put("type", type).put("simSlot", simSlot)
         .put("durationSeconds", durationSeconds).put("attempts", attempts).put("createdAtMs", createdAtMs)
+        .put("speaker", speaker)
 
     companion object {
         fun newId(): String = UUID.randomUUID().toString()
@@ -74,6 +78,7 @@ data class QueuedRecording(
             durationSeconds = o.optInt("durationSeconds"),
             attempts = o.optInt("attempts"),
             createdAtMs = o.optLong("createdAtMs", System.currentTimeMillis()),
+            speaker = o.optString("speaker"),
         )
     }
 }
@@ -138,6 +143,8 @@ object RecordingUploader {
     private const val WORK_NAME = "askeva_recording_upload"
     /** Give up on one recording after this many failed attempts (about a week with WorkManager backoff). */
     private const val MAX_ATTEMPTS = 40
+    /** Logcat tag of every upload result: adb logcat -s AskEvaUpload */
+    private const val UPLOAD_TAG = "AskEvaUpload"
     /** Recordings of a user who has not signed in again for this long are discarded. */
     private const val FOREIGN_USER_MAX_AGE_MS = 14L * 24 * 3600 * 1000
 
@@ -299,6 +306,10 @@ object RecordingUploader {
             .put("type", item.type)
             .put("callStartedAt", isoUtc(item.callStartedAtMs))
             .put("callLogTimestampMs", item.callStartedAtMs)
+            // "builtin" = the phone's own recording (both voices); "mic" = AskEVA's microphone recording,
+            // where the customer is heard only if the loudspeaker was on ("speaker")
+            .put("captureSource", if (item.source == "builtin") "builtin" else "mic")
+            .put("speaker", item.speaker)
         if (item.simSlot > 0) meta.put("simSlot", item.simSlot)
         val metaJson = meta.toString()
         val prefix = metaJson.substring(0, metaJson.length - 1) + ",\"audioData\":\""
@@ -325,14 +336,23 @@ object RecordingUploader {
                 out.flush()
             }
             val code = conn.responseCode
-            try { (if (code < 400) conn.inputStream else conn.errorStream)?.use { it.readBytes() } } catch (_: Exception) {}
+            val reply = try {
+                (if (code < 400) conn.inputStream else conn.errorStream)?.use { String(it.readBytes(), Charsets.UTF_8) }
+            } catch (_: Exception) { null }
+            // Every result is logged: a rejected recording is otherwise removed from the queue without a trace
+            if (code in 200..299) {
+                Log.i(UPLOAD_TAG, "uploaded ${item.fileName} to $base: HTTP $code")
+            } else {
+                Log.w(UPLOAD_TAG, "upload of ${item.fileName} to $base failed: HTTP $code ${reply?.take(300).orEmpty()}")
+            }
             return when {
                 code in 200..299 -> Outcome.OK
                 code == 401 -> Outcome.AUTH
                 code == 408 || code == 429 || code >= 500 -> Outcome.RETRY
                 else -> Outcome.DROP // 400 / 403 / 413: the same request will never succeed
             }
-        } catch (_: IOException) {
+        } catch (e: IOException) {
+            Log.w(UPLOAD_TAG, "upload of ${item.fileName} to $base could not connect, will retry: $e")
             return Outcome.RETRY
         } catch (_: SecurityException) {
             return Outcome.RETRY

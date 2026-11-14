@@ -165,7 +165,7 @@ class _CallerDashboardState extends State<CallerDashboard> {
                 GestureDetector(
                   onTap: () async {
                     await Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const CallRecordingSetupScreen()),
+                      MaterialPageRoute(builder: (_) => const CallRecordingSetupScreen(autoStart: true)),
                     );
                     await tele.refreshRecordingSetupStatus();
                   },
