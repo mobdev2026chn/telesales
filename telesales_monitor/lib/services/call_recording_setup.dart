@@ -91,6 +91,24 @@ class RecordingSetupStatus {
   final bool a11ySelfRepair;
   /// Package of the default Phone app, e.g. "com.google.android.dialer".
   final String dialerPackage;
+  /// The loudspeaker will be used on the next work call (no usable built-in recorder on this phone).
+  final bool speakerFallbackActive;
+  /// Phone state + call log: needed to follow calls and match them to recordings.
+  final bool phonePermissions;
+
+  /// The phone's own recorder was found working, and AskEVA may read its files.
+  bool get builtInTrusted => nativeRecorderDetected && mediaPermission;
+
+  /// AskEVA records calls itself here, which needs the Accessibility service (in-call mic + loudspeaker).
+  /// Not when the app may switch it on per call by itself ([a11ySelfRepair]): then it stays off between
+  /// calls, so payment apps (GPay, PhonePe) keep working.
+  bool get needsAccessibility => !builtInTrusted && !a11ySelfRepair;
+
+  /// Every Android permission the recording needs.
+  bool get permissionsGranted => micPermission && phonePermissions && mediaPermission;
+
+  /// Work calls are recorded with both voices: the one status the setup screen shows.
+  bool get recordingReady => permissionsGranted && (!needsAccessibility || accessibilityEnabled);
 
   /// "Phone by Google" keeps its recordings inside its own private storage, where AskEVA cannot
   /// read them. On phones whose maker ships its own dialer, that dialer saves readable recordings.
@@ -117,6 +135,8 @@ class RecordingSetupStatus {
     this.lastCaptureA11y = true,
     this.a11ySelfRepair = false,
     this.dialerPackage = '',
+    this.speakerFallbackActive = false,
+    this.phonePermissions = false,
   });
 
   factory RecordingSetupStatus.fromMap(Map<String, dynamic> m) => RecordingSetupStatus(
@@ -138,6 +158,8 @@ class RecordingSetupStatus {
         lastCaptureA11y: m['lastCaptureA11y'] == true,
         a11ySelfRepair: m['a11ySelfRepair'] == true,
         dialerPackage: asString(m['dialerPackage']),
+        speakerFallbackActive: m['speakerFallbackActive'] == true,
+        phonePermissions: m['phonePermissions'] == true,
       );
 }
 

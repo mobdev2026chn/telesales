@@ -2,5 +2,5 @@
 <resources>
     <string name="call_recording_accessibility_label">AskEVA Call Recording</string>
     <string name="call_recording_accessibility_summary">Lets AskEVA record your work calls</string>
-    <string name="call_recording_accessibility_description">Android mutes the microphone for apps during phone calls. Turning this on lets AskEVA record your work calls for quality review. AskEVA does not read your screen, and does not type or tap anything for you.</string>
+    <string name="call_recording_accessibility_description">Android mutes the microphone for apps during phone calls. Turning this on lets AskEVA record your work calls for quality review. If your Phone app does not record calls itself, AskEVA also taps the Speaker button on the call screen when a work call connects, so both sides are recorded. AskEVA looks only at the call screen, only for that button, and never types anything for you.</string>
 </resources>

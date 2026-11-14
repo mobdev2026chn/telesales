@@ -46,6 +46,13 @@ const RecordingSchema = new mongoose.Schema({
   audioData: { type: String, default: '' }, // Legacy base64 fallback; new uploads are stored in Cloudinary
   transcript: { type: String, default: '' },
   storageSizeBytes: { type: Number, default: 0 },
+  // How the audio was captured: 'builtin' = the phone's own dialer recording (both voices),
+  // 'mic' = AskEVA's microphone recording (the customer is heard only through the loudspeaker),
+  // '' = uploaded by an older app build (unknown)
+  captureSource: { type: String, enum: ['builtin', 'mic', ''], default: '' },
+  // Mic recordings: what happened with the loudspeaker (on, on_api, already_on, tapped, tap_no_effect,
+  // not_found, headset, no_accessibility, requested, '' = not used)
+  speaker: { type: String, default: '' },
   // Review
   status: { type: String, enum: ['PENDING', 'APPROVED', 'FLAGGED'], default: 'PENDING' },
   criteria: { type: CriteriaSchema, default: () => ({}) },

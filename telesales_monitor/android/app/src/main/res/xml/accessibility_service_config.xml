@@ -1,10 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Minimal service: no window content, no gestures. It only exempts the app from Android's
-     in-call microphone mute so call recording captures audio. -->
+<!-- 1. Exempts the app from Android's in-call microphone mute so call recording captures audio.
+     2. Loudspeaker fallback: on phones whose Phone app saves no readable recording, taps the call
+        screen's Speaker button once per work call so the other side is recorded too.
+     Window events are subscribed to at runtime only while such a request is open
+     (CallAccessibilityService.setWatching); this static set is the idle one. -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:accessibilityEventTypes="typeAnnouncement"
     android:accessibilityFeedbackType="feedbackGeneric"
-    android:canRetrieveWindowContent="false"
+    android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows"
+    android:canRetrieveWindowContent="true"
+    android:canPerformGestures="true"
     android:notificationTimeout="1000"
     android:description="@string/call_recording_accessibility_description"
     android:summary="@string/call_recording_accessibility_summary" />

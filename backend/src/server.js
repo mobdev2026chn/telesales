@@ -84,6 +84,7 @@ const ROUTE_RULES = [
   { test: (m, p) => m === 'GET' && p === '/admin/users', rule: requireAuth({ roles: MANAGERS }) },
   { test: (m, p) => /^\/admin\/users/.test(p), rule: requireAuth({ roles: MANAGERS }) },
   { test: (m, p) => m === 'GET' && p === '/admin/calls', rule: requireAuth({ roles: MANAGERS }) },
+  { test: (m, p) => p === '/admin/recording-issues', rule: requireAuth({ roles: MANAGERS }) },
   { test: (m, p) => /\/recordings\/[^/]+\/comment$/.test(p), rule: requireAuth({ roles: MANAGERS, legacy: true }) },
   { test: (m, p) => /\/recordings\/[^/]+\/review$/.test(p), rule: requireAuth({ roles: MANAGERS }) },
   { test: (m, p) => /\/recordings\/[^/]+\/pin$/.test(p), rule: requireAuth({ roles: MANAGERS }) },

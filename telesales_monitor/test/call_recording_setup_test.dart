@@ -133,4 +133,38 @@ void main() {
     expect(status('motorola', 'com.google.android.dialer').usesGoogleDialerOnOemPhone, isFalse);
     expect(status('Xiaomi', '').usesGoogleDialerOnOemPhone, isFalse);
   });
+
+  group('recordingReady (the one status the setup screen shows)', () {
+    const allowed = {'micPermission': true, 'phonePermissions': true, 'mediaPermission': true};
+
+    test('needs every Android permission', () {
+      expect(RecordingSetupStatus.fromMap({}).recordingReady, isFalse);
+      expect(RecordingSetupStatus.fromMap({...allowed, 'phonePermissions': false, 'accessibilityEnabled': true}).recordingReady, isFalse);
+      expect(RecordingSetupStatus.fromMap({...allowed, 'mediaPermission': false, 'accessibilityEnabled': true}).recordingReady, isFalse);
+    });
+
+    test('is on with the phone\'s own recorder, without Accessibility', () {
+      final s = RecordingSetupStatus.fromMap({...allowed, 'nativeRecorderDetected': true});
+      expect(s.builtInTrusted, isTrue);
+      expect(s.needsAccessibility, isFalse);
+      expect(s.recordingReady, isTrue);
+    });
+
+    test('needs Accessibility when AskEVA records calls itself', () {
+      expect(RecordingSetupStatus.fromMap(allowed).needsAccessibility, isTrue);
+      expect(RecordingSetupStatus.fromMap(allowed).recordingReady, isFalse);
+      expect(RecordingSetupStatus.fromMap({...allowed, 'accessibilityEnabled': true}).recordingReady, isTrue);
+    });
+
+    test('is on without Accessibility kept on when the app switches it on per call', () {
+      final s = RecordingSetupStatus.fromMap({...allowed, 'a11ySelfRepair': true});
+      expect(s.needsAccessibility, isFalse);
+      expect(s.recordingReady, isTrue);
+    });
+
+    test('reads the loudspeaker flag', () {
+      expect(RecordingSetupStatus.fromMap({}).speakerFallbackActive, isFalse);
+      expect(RecordingSetupStatus.fromMap({'speakerFallbackActive': true}).speakerFallbackActive, isTrue);
+    });
+  });
 }

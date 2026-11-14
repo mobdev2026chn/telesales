@@ -474,7 +474,7 @@ class _MoreScreenState extends State<MoreScreen> {
               ),
               const SizedBox(height: 12),
 
-              // Call recording setup (Android): brand guide, permissions, service status
+              // Call recording (Android): ON / OFF and the one-tap "Turn on recording"
               if (Platform.isAndroid) ...[
                 NeoCard(
                   backgroundColor: AppTheme.white,
@@ -491,10 +491,14 @@ class _MoreScreenState extends State<MoreScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Call recording setup', style: AppTheme.bodyBold(size: 15, color: AppTheme.ink900)),
+                            Text('Call recording', style: AppTheme.bodyBold(size: 15, color: AppTheme.ink900)),
                             const SizedBox(height: 2),
                             Text(
-                              tele.callMonitorRunning ? 'Call tracking active' : 'Turn on your phone\'s call recorder',
+                              switch (tele.recordingSetupStatus?.recordingReady) {
+                                true => 'On',
+                                false => 'Off: tap to turn on',
+                                null => 'Tap to check',
+                              },
                               style: AppTheme.body(size: 12, color: AppTheme.muted),
                             ),
                           ],

@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../providers/tele_provider.dart';
 import '../../services/call_recording_setup.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/neo_card.dart';
 
-/// "Call recording setup" (More screen entry).
+/// "Call recording" (More screen entry, dashboard banner).
 class CallRecordingSetupScreen extends StatelessWidget {
-  const CallRecordingSetupScreen({super.key});
+  const CallRecordingSetupScreen({super.key, this.autoStart = false});
+
+  /// Start turning recording on right away (the dashboard banner's one tap).
+  final bool autoStart;
 
   @override
   Widget build(BuildContext context) {
@@ -18,37 +22,62 @@ class CallRecordingSetupScreen extends StatelessWidget {
         backgroundColor: AppTheme.paper,
         foregroundColor: AppTheme.ink900,
         elevation: 0,
-        title: Text('Call recording setup', style: AppTheme.headline(size: 20)),
+        title: Text('Call recording', style: AppTheme.headline(size: 20)),
       ),
-      body: const SafeArea(
+      body: SafeArea(
         child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(16, 8, 16, 24),
-          child: CallRecordingSetupPanel(),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          child: CallRecordingSetupPanel(autoStart: autoStart),
         ),
       ),
     );
   }
 }
 
-/// Status + brand-specific guidance. Also embedded as a step of the onboarding flow.
+/// One status ("Call recording is ON / OFF") and one button that does every step in a row:
+/// Android's permission prompts, the battery exemption, autostart (brands that need it, once) and,
+/// only where AskEVA records calls itself, the Accessibility switch. Each settings screen it opens
+/// continues the flow when the caller comes back. Also embedded as a step of the onboarding flow.
 class CallRecordingSetupPanel extends StatefulWidget {
-  const CallRecordingSetupPanel({super.key});
+  const CallRecordingSetupPanel({super.key, this.autoStart = false});
+
+  final bool autoStart;
 
   @override
-  State<CallRecordingSetupPanel> createState() =>
-      _CallRecordingSetupPanelState();
+  State<CallRecordingSetupPanel> createState() => _CallRecordingSetupPanelState();
 }
 
-class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel>
-    with WidgetsBindingObserver {
+class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel> with WidgetsBindingObserver {
+  static const _autostartPromptedKey = 'recording_autostart_prompted';
+
   RecordingSetupStatus? _status;
   bool _loading = true;
+
+  /// The one-tap flow is running.
+  bool _flowActive = false;
+  /// A step is awaiting (permission prompt): lifecycle events must not start another.
+  bool _stepRunning = false;
+  /// A settings screen of the flow is open: continue when the app is back in front.
+  bool _waitingForReturn = false;
+  /// The app actually went to the background after that screen was opened (a late "resumed" from an
+  /// earlier permission prompt must not count as coming back).
+  bool _leftApp = false;
+  bool _askedBattery = false;
+  bool _askedAccessibility = false;
+
+  /// Shown under the button when the flow stopped before recording was on.
+  String? _hint;
+  bool _hintOffersAppInfo = false;
+
+  bool get _isAndroid => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _refresh();
+    _refresh().then((_) {
+      if (widget.autoStart && mounted && _status?.recordingReady != true) _startFlow();
+    });
   }
 
   @override
@@ -59,527 +88,258 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Back from a settings screen: re-read what the user changed
-    if (state == AppLifecycleState.resumed) _refresh();
+    if (state != AppLifecycleState.resumed) {
+      _leftApp = true;
+      return;
+    }
+    if (_waitingForReturn) {
+      if (!_leftApp) return;
+      _waitingForReturn = false;
+      _continueFlow();
+    } else if (!_stepRunning) {
+      _refresh();
+    }
   }
 
-  Future<void> _refresh() async {
-    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
+  /// Marks a settings screen as opened by the flow, just before opening it.
+  void _expectReturn() {
+    _leftApp = false;
+    _waitingForReturn = true;
+  }
+
+  Future<RecordingSetupStatus?> _refresh() async {
+    if (!_isAndroid) {
       setState(() => _loading = false);
-      return;
+      return null;
     }
     final tele = context.read<TeleProvider>();
     final s = await CallRecordingChannel.status(tele.currentUserId);
-    if (!mounted) return;
+    if (!mounted) return s;
     setState(() {
       _status = s;
       _loading = false;
+      if (s?.recordingReady == true) _hint = null;
     });
-    await tele.refreshRecordings();
+    await tele.refreshRecordingSetupStatus();
+    return s;
   }
 
-  Future<void> _run(Future<void> Function() action) async {
-    await action();
-    await _refresh();
+  void _startFlow() {
+    setState(() {
+      _flowActive = true;
+      _askedBattery = false;
+      _askedAccessibility = false;
+      _hint = null;
+      _hintOffersAppInfo = false;
+    });
+    _continueFlow();
   }
 
-  void _snack(String msg) {
+  /// Runs the next missing step. Returns early while a settings screen is open; resumed on return.
+  Future<void> _continueFlow() async {
+    if (!_flowActive || _stepRunning || !mounted) return;
+    _stepRunning = true;
+    try {
+      final tele = context.read<TeleProvider>();
+      var s = await _refresh();
+      if (s == null) return _finish();
+
+      // 1. Android's permission prompts, all in one batch
+      if (!s.permissionsGranted) {
+        await tele.requestNativePermissions();
+        s = await _refresh();
+        if (s == null) return _finish();
+        if (!s.permissionsGranted) {
+          return _finish(
+            hint: 'Allow every permission Android asks for, otherwise calls cannot be recorded. '
+                'If nothing pops up, open App info → Permissions and allow Phone, Call logs, '
+                'Microphone and Music and audio.',
+            appInfo: true,
+          );
+        }
+      }
+      await tele.syncCallMonitor();
+
+      // 2. Keep call tracking alive all day
+      if (!s.batteryOptimizationIgnored && !_askedBattery) {
+        _askedBattery = true;
+        _expectReturn();
+        if (await CallRecordingChannel.requestIgnoreBatteryOptimizations()) return;
+        _waitingForReturn = false;
+      }
+
+      // 3. Brands that close background apps: their autostart page, once per install
+      final guide = dialerGuideFor(s.manufacturer, s.brand);
+      if (guide.needsAutostart) {
+        final prefs = await SharedPreferences.getInstance();
+        if (prefs.getBool(_autostartPromptedKey) != true) {
+          await prefs.setBool(_autostartPromptedKey, true);
+          _expectReturn();
+          if (await CallRecordingChannel.openAutostartSettings()) return;
+          _waitingForReturn = false;
+        }
+      }
+
+      // 4. Only where AskEVA records calls itself: the Accessibility switch
+      if (s.needsAccessibility && !s.accessibilityEnabled) {
+        if (_askedAccessibility) {
+          return _finish(
+            hint: 'Turn on "AskEVA Call Recording" in Accessibility (under Installed apps). If its switch is '
+                'greyed out, open App info → ⋮ → Allow restricted settings, then tap Turn on again.',
+            appInfo: true,
+          );
+        }
+        _askedAccessibility = true;
+        _expectReturn();
+        if (await CallRecordingChannel.openAccessibilitySettings()) return;
+        _waitingForReturn = false;
+        return _finish(hint: 'Open Settings → Accessibility → AskEVA Call Recording and turn it on.');
+      }
+
+      _finish();
+    } finally {
+      _stepRunning = false;
+    }
+  }
+
+  void _finish({String? hint, bool appInfo = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    setState(() {
+      _flowActive = false;
+      _waitingForReturn = false;
+      _hint = hint;
+      _hintOffersAppInfo = appInfo;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
-      return _infoCard(
-        Icons.info_outline,
-        'Call recording is available on Android phones only. iPhones do not allow apps to record or read call recordings.',
+    if (!_isAndroid) {
+      return _card(
+        icon: Icons.info_outline,
+        iconColor: AppTheme.ink900,
+        title: 'NOT AVAILABLE',
+        text: 'Call recording is available on Android phones only. iPhones do not allow apps to record '
+            'or read call recordings.',
       );
     }
     if (_loading) {
       return const Padding(
         padding: EdgeInsets.all(32),
-        child: Center(
-          child: CircularProgressIndicator(color: AppTheme.greenDark),
-        ),
+        child: Center(child: CircularProgressIndicator(color: AppTheme.greenDark)),
       );
     }
+
     final s = _status;
-    final tele = context.watch<TeleProvider>();
-    final guide = dialerGuideFor(s?.manufacturer ?? '', s?.brand ?? '');
+    final ready = s?.recordingReady == true;
+    final String text;
+    if (ready) {
+      text = s!.builtInTrusted
+          ? 'Your phone records every work call (both voices) and AskEVA uploads it automatically.'
+          : s.speakerFallbackActive
+              ? 'AskEVA records every work call. Calls switch to the loudspeaker so the customer is recorded too.'
+              : 'AskEVA records every work call and uploads it automatically.';
+    } else {
+      text = 'Tap the button and allow what Android asks for. Recording then runs by itself on every work call.';
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          'AskEVA uploads your phone\'s own call recordings (both sides of the call). '
-          'If your phone has no built-in recorder, AskEVA records the call through the microphone instead.',
-          style: AppTheme.body(size: 12.5, color: AppTheme.ink700),
-        ),
-        const SizedBox(height: 14),
-
-        // ---- Status
-        NeoCard(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'STATUS',
-                style: AppTheme.label(size: 9, color: AppTheme.ink900),
-              ),
-              const SizedBox(height: 8),
-              _statusRow(
-                'Call tracking running',
-                s?.serviceRunning == true,
-                subtitle: tele.isLoggedIn
-                    ? null
-                    : 'Starts after you sign in as a caller',
-                action: tele.isLoggedIn && s?.serviceRunning != true
-                    ? _ActionLink(
-                        'Start',
-                        () => _run(() => tele.syncCallMonitor()),
-                      )
-                    : null,
-              ),
-              _statusRow(
-                'Microphone allowed',
-                s?.micPermission == true,
-                action: s?.micPermission == true
-                    ? null
-                    : _ActionLink(
-                        'Allow',
-                        () => _run(() async {
-                          await tele.requestNativePermissions();
-                          await tele.syncCallMonitor();
-                        }),
-                      ),
-              ),
-              _statusRow(
-                'Access to call recordings (audio files)',
-                s?.mediaPermission == true,
-                subtitle:
-                    'Lets AskEVA find the recording your phone made of each work call',
-                action: s?.mediaPermission == true
-                    ? null
-                    : _ActionLink(
-                        'Allow',
-                        () => _run(() async {
-                          final ok =
-                              await CallRecordingChannel.requestMediaPermission();
-                          if (!ok) {
-                            _snack(
-                              'Allow "Music and audio" / "Files" access in the app\'s permission settings.',
-                            );
-                          }
-                        }),
-                      ),
-              ),
-              _statusRow(
-                'Battery optimisation off',
-                s?.batteryOptimizationIgnored == true,
-                subtitle: 'Keeps tracking alive all day',
-                action: s?.batteryOptimizationIgnored == true
-                    ? null
-                    : _ActionLink(
-                        'Fix',
-                        () => _run(
-                          () =>
-                              CallRecordingChannel.requestIgnoreBatteryOptimizations(),
-                        ),
-                      ),
-              ),
-              _statusRow(
-                'Call recording permission (Accessibility)',
-                s?.accessibilityEnabled == true,
-                subtitle: s?.accessibilityEnabled == true
-                    ? 'Android lets AskEVA hear the call'
-                    : 'Without it Android mutes the microphone during calls, and recordings are silent',
-                action: s?.accessibilityEnabled == true
-                    ? _ActionLink(
-                        'Turn off',
-                        () => _run(() async {
-                          final ok =
-                              await CallRecordingChannel.openAccessibilitySettings();
-                          if (!ok) {
-                            _snack(
-                              'Open Settings → Accessibility → AskEVA Call Recording and turn it off.',
-                            );
-                          }
-                          await _refresh();
-                        }),
-                        color: AppTheme.redMissed,
-                      )
-                    : _ActionLink(
-                        'Turn on',
-                        () => _run(() async {
-                          final ok =
-                              await CallRecordingChannel.openAccessibilitySettings();
-                          if (!ok) {
-                            _snack(
-                              'Open Settings → Accessibility → AskEVA Call Recording and turn it on.',
-                            );
-                          }
-                          await _refresh();
-                        }),
-                      ),
-              ),
-              if ((s?.lastCaptureStatus ?? '').isNotEmpty)
-                _statusRow(
-                  'Last call recorded with sound',
-                  s?.lastCaptureStatus == 'ok',
-                  pendingLabel: 'SILENT',
-                  subtitle: s?.lastCaptureStatus == 'ok'
-                      ? 'Audio was captured on the last work call'
-                      : s?.accessibilityEnabled != true
-                      ? 'Android muted the microphone on the last work call. Turn on the Accessibility permission, '
-                            'then make another test call.'
-                      : s?.lastCaptureA11y != true
-                      ? 'Accessibility is enabled now, but it was off during the last call. Make another test call '
-                            'to check recording.'
-                      : 'Android muted the microphone during the call. Turn on your phone\'s '
-                            'built-in automatic call recorder in your Phone app settings below to record both sides.',
-                  action: s?.lastCaptureStatus != 'silent'
-                      ? null
-                      : s?.accessibilityEnabled != true
-                      ? _ActionLink('Turn on', () async {
-                          final ok =
-                              await CallRecordingChannel.openAccessibilitySettings();
-                          if (!ok) {
-                            _snack(
-                              'Open Settings → Accessibility → AskEVA Call Recording and turn it on.',
-                            );
-                          }
-                          await _refresh();
-                        })
-                      : s?.lastCaptureA11y == true
-                      ? _ActionLink('Phone settings', () async {
-                          final ok =
-                              await CallRecordingChannel.openDialerRecordingSettings();
-                          if (!ok) {
-                            _snack(
-                              'Could not open phone recording settings. Open your Phone app settings manually.',
-                            );
-                          }
-                        })
-                      : null,
-                ),
-              _statusRow(
-                'Built-in recorder detected on this phone',
-                s?.nativeRecorderDetected == true,
-                pendingLabel: 'NOT YET',
-                subtitle: s?.nativeRecorderDetected == true
-                    ? 'Your phone\'s recordings are uploaded'
-                    : 'Turns green after a work call once AskEVA finds your phone\'s recording',
-              ),
-              if ((s?.pendingUploads ?? 0) > 0) ...[
-                const SizedBox(height: 6),
-                Text(
-                  '${s!.pendingUploads} recording(s) waiting to upload — retried automatically when online.',
-                  style: AppTheme.mono(size: 10, color: AppTheme.muted),
-                ),
-              ],
+        _card(
+          icon: ready ? Icons.check_circle : Icons.mic_off_rounded,
+          iconColor: ready ? AppTheme.greenDark : AppTheme.orangePill,
+          title: ready ? 'CALL RECORDING IS ON' : 'CALL RECORDING IS OFF',
+          text: text,
+          footer: [
+            if (!ready) ...[
+              const SizedBox(height: 14),
+              _turnOnButton(),
             ],
-          ),
-        ),
-        const SizedBox(height: 14),
-
-        // ---- Google Phone app on a phone that has its own dialer: its recordings cannot be read
-        if (s != null &&
-            s.usesGoogleDialerOnOemPhone &&
-            !s.nativeRecorderDetected) ...[
-          NeoCard(
-            backgroundColor: AppTheme.limeYellow,
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'USE YOUR PHONE\'S OWN PHONE APP',
-                  style: AppTheme.label(size: 9, color: AppTheme.ink900),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Your default Phone app is "Phone by Google". It keeps call recordings inside its own app, '
-                  'where AskEVA cannot read them. Make ${guide.brandLabel}\'s own Phone app the default, then turn on '
-                  'automatic call recording in it (steps below). Its recordings contain both sides of the call.',
-                  style: AppTheme.body(size: 12.5),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Settings → Apps → Default apps → Phone app → choose "Phone" (not "Phone by Google").',
-                  style: AppTheme.bodyBold(size: 12),
-                ),
-                const SizedBox(height: 10),
-                _button(
-                  'OPEN DEFAULT APPS',
-                  Icons.phone_forwarded_outlined,
-                  () async {
-                    final ok =
-                        await CallRecordingChannel.openDefaultAppsSettings();
-                    if (!ok) {
-                      _snack(
-                        'Open Settings → Apps → Default apps → Phone app.',
-                      );
-                    }
-                  },
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-        ],
-
-        // ---- Brand guide
-        NeoCard(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'TURN ON AUTOMATIC CALL RECORDING',
-                style: AppTheme.label(size: 9, color: AppTheme.ink900),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${guide.brandLabel}${(s?.model ?? '').isNotEmpty ? ' · ${s!.model}' : ''}',
-                style: AppTheme.bodyBold(size: 14),
-              ),
-              const SizedBox(height: 8),
-              for (var i = 0; i < guide.steps.length; i++)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        width: 20,
-                        child: Text(
-                          '${i + 1}.',
-                          style: AppTheme.bodyBold(size: 12.5),
-                        ),
-                      ),
-                      Expanded(
-                        child: Text(
-                          guide.steps[i],
-                          style: AppTheme.body(size: 12.5),
-                        ),
-                      ),
-                    ],
+            if (_hint != null && !ready) ...[
+              const SizedBox(height: 10),
+              Text(_hint!, style: AppTheme.body(size: 12, color: AppTheme.ink700)),
+              if (_hintOffersAppInfo)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    onPressed: () async {
+                      await CallRecordingChannel.openAppInfo();
+                    },
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppTheme.greenDark,
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 32),
+                    ),
+                    child: Text('OPEN APP INFO', style: AppTheme.label(size: 10, color: AppTheme.greenDark)),
                   ),
                 ),
-              if (guide.note != null) ...[
-                const SizedBox(height: 4),
-                Text(
-                  guide.note!,
-                  style: AppTheme.body(size: 11.5, color: AppTheme.muted),
-                ),
-              ],
-              const SizedBox(height: 12),
-              _button('OPEN PHONE APP SETTINGS', Icons.settings_phone, () async {
-                final ok =
-                    await CallRecordingChannel.openDialerRecordingSettings();
-                if (!ok) {
-                  _snack(
-                    'Could not open the dialer settings. Open your Phone app manually.',
-                  );
-                }
-              }),
             ],
-          ),
-        ),
-
-        if (guide.needsAutostart) ...[
-          const SizedBox(height: 14),
-          NeoCard(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'ALLOW AUTOSTART',
-                  style: AppTheme.label(size: 9, color: AppTheme.ink900),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  '${guide.brandLabel} phones close background apps. Allow AskEVA to "Autostart" / run in the '
-                  'background so calls are tracked even when you swipe the app away.',
-                  style: AppTheme.body(size: 12.5),
-                ),
-                const SizedBox(height: 10),
-                _button(
-                  'OPEN AUTOSTART SETTINGS',
-                  Icons.rocket_launch_outlined,
-                  () async {
-                    await CallRecordingChannel.openAutostartSettings();
-                  },
-                ),
-              ],
-            ),
-          ),
-        ],
-
-        if (s != null && !s.accessibilityEnabled) ...[
-          const SizedBox(height: 14),
-          NeoCard(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'TURN ON CALL RECORDING PERMISSION',
-                  style: AppTheme.label(size: 9, color: AppTheme.ink900),
-                ),
-                const SizedBox(height: 8),
-                for (final step in const [
-                  'Tap the button below (or open Settings → Accessibility).',
-                  'Tap "Downloaded apps" / "Installed services" → "AskEVA Call Recording".',
-                  'Turn it on and confirm.',
-                  'If the switch is greyed out ("Restricted setting"): open App info → ⋮ → '
-                      '"Allow restricted settings", then try again.',
-                ])
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Text('• $step', style: AppTheme.body(size: 12.5)),
-                  ),
-                const SizedBox(height: 6),
-                _button(
-                  'OPEN ACCESSIBILITY SETTINGS',
-                  Icons.accessibility_new,
-                  () async {
-                    final ok =
-                        await CallRecordingChannel.openAccessibilitySettings();
-                    if (!ok) _snack('Open Settings → Accessibility manually.');
-                  },
-                ),
-                const SizedBox(height: 8),
-                _button(
-                  'OPEN APP INFO (RESTRICTED SETTINGS)',
-                  Icons.info_outline,
-                  () async {
-                    await CallRecordingChannel.openAppInfo();
-                  },
-                ),
-              ],
-            ),
-          ),
-        ],
-
-        const SizedBox(height: 14),
-        _infoCard(
-          Icons.record_voice_over_outlined,
-          'Android mutes other apps\' microphone during calls unless the Accessibility permission above is on. '
-          'Even with it, some phones capture the customer only faintly: use speakerphone for the clearest recording.',
+            if ((s?.pendingUploads ?? 0) > 0) ...[
+              const SizedBox(height: 10),
+              Text(
+                '${s!.pendingUploads} recording(s) waiting to upload — sent automatically when online.',
+                style: AppTheme.mono(size: 10, color: AppTheme.muted),
+              ),
+            ],
+          ],
         ),
       ],
     );
   }
 
-  Widget _statusRow(
-    String title,
-    bool ok, {
-    String? subtitle,
-    _ActionLink? action,
-    String pendingLabel = 'OFF',
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            ok ? Icons.check_circle : Icons.radio_button_unchecked,
-            size: 20,
-            color: ok ? AppTheme.greenDark : AppTheme.orangePill,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: AppTheme.bodyBold(size: 13)),
-                if (subtitle != null)
-                  Text(
-                    subtitle,
-                    style: AppTheme.body(size: 11, color: AppTheme.muted),
-                  ),
-              ],
-            ),
-          ),
-          if (action != null)
-            TextButton(
-              onPressed: action.onTap,
-              style: TextButton.styleFrom(
-                foregroundColor: action.color ?? AppTheme.greenDark,
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                minimumSize: const Size(0, 32),
-              ),
-              child: Text(
-                action.label.toUpperCase(),
-                style: AppTheme.label(size: 10, color: action.color ?? AppTheme.greenDark),
-              ),
-            )
-          else if (!ok)
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Text(
-                pendingLabel,
-                style: AppTheme.label(size: 9, color: AppTheme.orangePill),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _button(String label, IconData icon, Future<void> Function() onTap) {
+  Widget _turnOnButton() {
     return SizedBox(
       width: double.infinity,
       child: OutlinedButton.icon(
-        onPressed: () => _run(onTap),
-        icon: Icon(icon, size: 16, color: AppTheme.ink900),
+        onPressed: _flowActive ? null : _startFlow,
+        icon: _flowActive
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.ink900),
+              )
+            : const Icon(Icons.fiber_manual_record, size: 16, color: AppTheme.redOverdue),
         label: Text(
-          label,
-          style: AppTheme.label(
-            size: 10.5,
-            color: AppTheme.ink900,
-            letterSpacing: 0.1,
-          ),
+          _flowActive ? 'TURNING ON…' : 'TURN ON RECORDING',
+          style: AppTheme.label(size: 11, color: AppTheme.ink900, letterSpacing: 0.1),
         ),
         style: OutlinedButton.styleFrom(
           backgroundColor: AppTheme.limeYellow,
+          disabledBackgroundColor: AppTheme.limeYellow,
           side: const BorderSide(color: AppTheme.ink900, width: 1.2),
           shape: const StadiumBorder(),
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: const EdgeInsets.symmetric(vertical: 14),
         ),
       ),
     );
   }
 
-  Widget _infoCard(IconData icon, String text) {
+  Widget _card({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String text,
+    List<Widget> footer = const [],
+  }) {
     return NeoCard(
       backgroundColor: AppTheme.white,
-      padding: const EdgeInsets.all(14),
-      child: Row(
+      padding: const EdgeInsets.all(16),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 20, color: AppTheme.ink900),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              text,
-              style: AppTheme.body(size: 12.5, color: AppTheme.ink700),
-            ),
+          Row(
+            children: [
+              Icon(icon, size: 26, color: iconColor),
+              const SizedBox(width: 10),
+              Expanded(child: Text(title, style: AppTheme.headline(size: 17))),
+            ],
           ),
+          const SizedBox(height: 8),
+          Text(text, style: AppTheme.body(size: 12.5, color: AppTheme.ink700)),
+          ...footer,
         ],
       ),
     );
   }
-}
-
-class _ActionLink {
-  final String label;
-  final VoidCallback onTap;
-  final Color? color;
-  _ActionLink(this.label, this.onTap, {this.color});
 }

@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "migrate:cloudinary": "node src/scripts/migrateUploadsToCloudinary.js"
+    "migrate:cloudinary": "node src/scripts/migrateUploadsToCloudinary.js",
+    "test": "node --test"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

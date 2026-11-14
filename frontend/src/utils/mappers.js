@@ -106,6 +106,11 @@ export function mapRecording(r) {
     createdAt: r.createdAt || null,
     fileName: r.fileName || '',
     sim: r.simSlot || null,
+    // 'builtin' = the phone's own recording (both voices), 'mic' = AskEVA's microphone, '' = older upload
+    capture: r.captureSource || '',
+    speaker: r.speaker || '',
+    // Mic recording without a confirmed loudspeaker: the customer's voice may be missing
+    voiceAtRisk: !!r.customerVoiceAtRisk,
     review: {
       criteria: Object.assign(EMPTY_CRIT(), r.criteria || {}),
       status: String(r.status || 'PENDING').toUpperCase(),
