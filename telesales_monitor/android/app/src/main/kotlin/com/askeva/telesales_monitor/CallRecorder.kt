@@ -199,10 +199,26 @@ class CallRecorder(private val ctx: Context) {
         fun ptsUs(samples: Long) = samples * 1_000_000L / SAMPLE_RATE
 
         var gain = 3.0
+        var consecutiveErrors = 0
         try {
             while (running) {
                 val n = rec.read(pcm, 0, pcm.size)
-                if (n < 0) break // mic lost
+                if (n < 0) {
+                    consecutiveErrors++
+                    if (consecutiveErrors > 25) {
+                        Log.w(TAG, "mic lost after repeated read errors ($consecutiveErrors): $n")
+                        break // mic truly lost
+                    }
+                    // Audio routing change (e.g. speakerphone toggled): give HAL time to settle
+                    try {
+                        Thread.sleep(40)
+                        if (rec.recordingState != AudioRecord.RECORDSTATE_RECORDING) {
+                            rec.startRecording()
+                        }
+                    } catch (_: Exception) {}
+                    continue
+                }
+                consecutiveErrors = 0
                 if (n == 0) continue
                 var chunkPeak = 0
                 var sumSq = 0.0
@@ -340,7 +356,8 @@ class CallRecorder(private val ctx: Context) {
             val voicedSec = voicedSamples.toDouble() / SAMPLE_RATE
             Log.i(TAG, "recording finished: source=$usedSource seconds=${totalSamples / SAMPLE_RATE} " +
                 "voicedSeconds=${"%.1f".format(voicedSec)} peak=$peak")
-            if (!wroteSamples || peak == 0 || voicedSec < MIN_VOICED_SECONDS) {
+            val hasAudibleSound = peak > 600 && voicedSec >= 0.4
+            if (!wroteSamples || peak == 0 || (!hasAudibleSound && voicedSec < MIN_VOICED_SECONDS)) {
                 // Android muted the microphone for this call (or nothing was said): never upload silence
                 discardedAsSilent = wroteSamples && totalSamples > SAMPLE_RATE * 3
                 file.delete()

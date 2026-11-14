@@ -302,6 +302,25 @@ class ApiService {
     return acknowledged;
   }
 
+  /// POST /user/record-toggle: notifies admin/manager portal that auto-record was switched on/off.
+  static Future<bool> sendAutoRecordToggle({
+    required bool enabled,
+    String callerName = '',
+    String callerPhone = '',
+  }) async {
+    final res = await _request(
+      'POST',
+      '/user/record-toggle',
+      body: {
+        'autoRecordEnabled': enabled,
+        'callerName': callerName,
+        'callerPhone': callerPhone,
+      },
+      timeout: const Duration(seconds: 5),
+    );
+    return res != null && _ok(res);
+  }
+
   /// POST /user/break: tells the admin / manager portal this user started ([onBreak] true, with
   /// [type] e.g. "Tea break" / "Lunch") or ended a break. Returns false when it did not reach the server.
   static Future<bool> setBreak({

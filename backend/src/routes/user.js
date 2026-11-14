@@ -4,6 +4,7 @@ const CallLog = require('../models/CallLog');
 const Recording = require('../models/Recording');
 const Lead = require('../models/Lead');
 const Employee = require('../models/Employee');
+const Notification = require('../models/Notification');
 const { syncCallsForCaller, findLeadsByLast10 } = require('../services/callStats');
 const { createTargetAchievementNotification } = require('../services/targetAchievementNotifications');
 const { findEmployeeByRef } = require('../services/scope');
@@ -24,6 +25,77 @@ async function actingEmployee(req, body = req.body || {}) {
   }
   return null;
 }
+
+// POST /api/user/record-toggle, /api/calls/record-toggle — caller turned auto-record on/off
+router.post(['/api/user/record-toggle', '/api/calls/record-toggle'], async (req, res) => {
+  try {
+    const { autoRecordEnabled } = req.body || {};
+    const callerEmp = await actingEmployee(req);
+    const callerName = callerEmp ? callerEmp.name : (req.body.callerName || 'Unknown Caller');
+    const callerPhone = callerEmp ? callerEmp.phone : (req.body.callerPhone || '');
+    const callerId = callerEmp ? callerEmp.id : (req.body.callerId || '');
+
+    const enabled = autoRecordEnabled === true;
+
+    // Update the employee's auto-record state in the database
+    if (callerEmp) {
+      try {
+        await Employee.updateOne(
+          { id: callerEmp.id },
+          { $set: { autoRecordEnabled: enabled, autoRecordDisabledAt: enabled ? null : new Date() } }
+        );
+      } catch (err) {
+        console.error(`[record-toggle] employee update failed: ${err.message}`);
+      }
+    }
+
+    // 1. When turned OFF, save Notification in MongoDB for admin audit history
+    if (!enabled) {
+      try {
+        const notifId = `notif_rec_off_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        await Notification.create({
+          id: notifId,
+          recipientId: 'ADMIN',
+          senderName: callerName,
+          senderRole: 'caller',
+          title: 'Auto-Record Turned OFF',
+          message: `${callerName} (${callerPhone || 'No Phone'}) has turned OFF auto call recording on their device.`,
+          comment: `Disabled at ${new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata' })} IST`,
+          isRead: false,
+        });
+      } catch (err) {
+        console.error(`[record-toggle] notification create failed: ${err.message}`);
+      }
+    }
+
+    // 2. Real-time alert to Admin & Managers via Socket.IO
+    try {
+      const io = req.app.get('io');
+      if (io) {
+        const payload = {
+          callerId,
+          callerName,
+          callerPhone,
+          autoRecordEnabled: enabled,
+          timestamp: new Date().toISOString(),
+          message: enabled
+            ? `${callerName} (${callerPhone}) re-enabled Auto Call Recording.`
+            : `⚠️ ${callerName} (${callerPhone}) turned OFF Auto Call Recording!`,
+        };
+        io.to('admin:global').emit('callerAutoRecordAlert', payload);
+        if (callerEmp) {
+          await publishForEmployee(req, callerEmp, 'callerAutoRecordAlert', payload);
+        }
+      }
+    } catch (err) {
+      console.error(`[record-toggle] socket alert failed: ${err.message}`);
+    }
+
+    res.json({ success: true, autoRecordEnabled: enabled, message: 'Status updated' });
+  } catch (err) {
+    serverError(res, err, 'user.recordToggle');
+  }
+});
 
 // POST /api/calls/sync, /api/user/calls/sync — store device call logs for the signed-in caller
 router.post(['/api/calls/sync', '/api/user/calls/sync'], async (req, res) => {

@@ -34,6 +34,9 @@ const EmployeeSchema = new mongoose.Schema({
   // Break started from the app (Tea break / Lunch); empty / null = working (services/presence.js)
   breakType: { type: String, default: '' },
   breakStartedAt: { type: Date, default: null },
+  // Auto-recording state reported by caller's phone
+  autoRecordEnabled: { type: Boolean, default: true },
+  autoRecordDisabledAt: { type: Date, default: null },
 }, { timestamps: true });
 
 

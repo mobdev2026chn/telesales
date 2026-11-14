@@ -106,12 +106,6 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel>
     }
     final s = _status;
     final tele = context.watch<TeleProvider>();
-    final recordingsWithUrl =
-        tele.recordings
-            .where((recording) => recording.audioUrl.isNotEmpty)
-            .toList()
-          ..sort((a, b) => b.date.compareTo(a.date));
-    final latestRecording = recordingsWithUrl.firstOrNull;
     final guide = dialerGuideFor(s?.manufacturer ?? '', s?.brand ?? '');
 
     return Column(
@@ -202,7 +196,20 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel>
                     ? 'Android lets AskEVA hear the call'
                     : 'Without it Android mutes the microphone during calls, and recordings are silent',
                 action: s?.accessibilityEnabled == true
-                    ? null
+                    ? _ActionLink(
+                        'Turn off',
+                        () => _run(() async {
+                          final ok =
+                              await CallRecordingChannel.openAccessibilitySettings();
+                          if (!ok) {
+                            _snack(
+                              'Open Settings → Accessibility → AskEVA Call Recording and turn it off.',
+                            );
+                          }
+                          await _refresh();
+                        }),
+                        color: AppTheme.redMissed,
+                      )
                     : _ActionLink(
                         'Turn on',
                         () => _run(() async {
@@ -213,6 +220,7 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel>
                               'Open Settings → Accessibility → AskEVA Call Recording and turn it on.',
                             );
                           }
+                          await _refresh();
                         }),
                       ),
               ),
@@ -229,8 +237,8 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel>
                       : s?.lastCaptureA11y != true
                       ? 'Accessibility is enabled now, but it was off during the last call. Make another test call '
                             'to check recording.'
-                      : 'Accessibility was enabled during the last call, but no audio was detected. Try your phone\'s '
-                            'built-in call recorder or test with speakerphone.',
+                      : 'Android muted the microphone during the call. Turn on your phone\'s '
+                            'built-in automatic call recorder in your Phone app settings below to record both sides.',
                   action: s?.lastCaptureStatus != 'silent'
                       ? null
                       : s?.accessibilityEnabled != true
@@ -256,18 +264,6 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel>
                         })
                       : null,
                 ),
-              if (latestRecording != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  'LATEST UPLOADED RECORDING URL',
-                  style: AppTheme.label(size: 9, color: AppTheme.ink900),
-                ),
-                const SizedBox(height: 4),
-                SelectableText(
-                  latestRecording.audioUrl,
-                  style: AppTheme.mono(size: 10, color: AppTheme.ink700),
-                ),
-              ],
               _statusRow(
                 'Built-in recorder detected on this phone',
                 s?.nativeRecorderDetected == true,
@@ -514,13 +510,13 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel>
             TextButton(
               onPressed: action.onTap,
               style: TextButton.styleFrom(
-                foregroundColor: AppTheme.greenDark,
+                foregroundColor: action.color ?? AppTheme.greenDark,
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 minimumSize: const Size(0, 32),
               ),
               child: Text(
                 action.label.toUpperCase(),
-                style: AppTheme.label(size: 10, color: AppTheme.greenDark),
+                style: AppTheme.label(size: 10, color: action.color ?? AppTheme.greenDark),
               ),
             )
           else if (!ok)
@@ -584,5 +580,6 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel>
 class _ActionLink {
   final String label;
   final VoidCallback onTap;
-  _ActionLink(this.label, this.onTap);
+  final Color? color;
+  _ActionLink(this.label, this.onTap, {this.color});
 }

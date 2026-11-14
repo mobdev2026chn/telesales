@@ -6,6 +6,7 @@ import '../../widgets/neo_card.dart';
 import '../../providers/tele_provider.dart';
 import '../setup/call_recording_setup_screen.dart';
 import 'call_session_screen.dart';
+import '../../widgets/profile_menu_sheet.dart';
 
 class CallerDashboard extends StatefulWidget {
   const CallerDashboard({super.key});
@@ -85,20 +86,23 @@ class _CallerDashboardState extends State<CallerDashboard> {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  // Green Avatar Circle
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: AppTheme.greenNeon,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: AppTheme.ink900, width: 1.5),
-                      boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
-                    ),
-                    child: Center(
-                      child: Text(
-                        initials.isNotEmpty && initials != '—' ? initials : '—',
-                        style: AppTheme.headline(size: 18, color: AppTheme.ink900),
+                  // Green Avatar Circle (Opens Profile Menu: View Profile, Settings, Sign Out)
+                  GestureDetector(
+                    onTap: () => ProfileMenuSheet.show(context),
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: AppTheme.greenNeon,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: AppTheme.ink900, width: 1.5),
+                        boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+                      ),
+                      child: Center(
+                        child: Text(
+                          initials.isNotEmpty && initials != '—' ? initials : '—',
+                          style: AppTheme.headline(size: 18, color: AppTheme.ink900),
+                        ),
                       ),
                     ),
                   ),

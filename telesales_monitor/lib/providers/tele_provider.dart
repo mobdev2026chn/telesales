@@ -171,6 +171,12 @@ class TeleProvider extends ChangeNotifier {
     _pushAutoRecordToNative();
     _savePreferences();
     notifyListeners();
+    // Notify the backend so admin web portal receives real-time alert
+    ApiService.sendAutoRecordToggle(
+      enabled: _autoRecordEnabled,
+      callerName: _callerName,
+      callerPhone: _verifiedTrackingNumber,
+    );
   }
 
   /// Recording is only armed for a signed-in caller (or a manager in caller mode) with

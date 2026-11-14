@@ -9,6 +9,7 @@ import store from '../redux/store';
 import { mapDemo, mapLead, mapRecording } from './mappers';
 import { syncWithBackend } from './actions/syncActions';
 import { fetchDashboard } from './actions/statsActions';
+import { notify } from './notify';
 
 let socket = null;
 let activeToken = '';
@@ -93,6 +94,17 @@ function registerEvents(client) {
     if (!payload || !payload.recording) return;
     const recording = mapRecording(payload.recording);
     if (recording.id) store.dispatch(recordingUpserted(recording));
+  });
+  client.on('callerAutoRecordAlert', (payload) => {
+    if (!payload) return;
+    const caller = payload.callerName ? String(payload.callerName).toUpperCase() : 'CALLER';
+    const phone = payload.callerPhone ? ` (${payload.callerPhone})` : '';
+    if (payload.autoRecordEnabled === false) {
+      notify(`⚠️ ALERT: ${caller}${phone} TURNED OFF AUTO-RECORD!`);
+    } else {
+      notify(`✓ ${caller}${phone} RE-ENABLED AUTO-RECORD`);
+    }
+    fetchDashboard();
   });
 }
 

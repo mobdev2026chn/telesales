@@ -90,6 +90,8 @@ router.get('/dashboard', async (req, res) => {
         managerName: emp.managerName || '',
         dailyTarget: target,
         online: isOnline(emp),
+        autoRecordEnabled: emp.autoRecordEnabled !== false,
+        autoRecordDisabledAt: emp.autoRecordDisabledAt || null,
         lastLoginAt: emp.lastLoginAt || null,
         lastSeenAt: emp.lastSeenAt || null,
         loggedOutAt: emp.loggedOutAt && (!emp.lastLoginAt || emp.loggedOutAt >= emp.lastLoginAt)
@@ -183,6 +185,9 @@ router.get('/dashboard', async (req, res) => {
         // Every hour 0-23 (India time); sums to totalCalls
         hourlyAll: Array.from({ length: 24 }, (_, h) => ({ hourOfDay: h, calls: stats.hourly[h] || 0 })),
         teamMembers: teamMemberStats,
+        disabledRecorders: registeredEmployees
+          .filter(e => e.autoRecordEnabled === false)
+          .map(e => ({ id: e.id, name: e.name, phone: e.phone, disabledAt: e.autoRecordDisabledAt })),
         managersList,
         teams,
         allUsers,
