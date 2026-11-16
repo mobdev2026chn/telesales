@@ -161,41 +161,96 @@ function streamAudioBuffer(buffer, req, res, mimeType) {
   });
 }
 
+/**
+ * Safely streams audio from Cloudinary as a reverse proxy fallback (Option 2).
+ * Robustly manages client disconnect lifecycles (req/res close) to prevent orphaned
+ * sockets, timeout leaks, and TLSSocket aborted exceptions.
+ */
 function streamCloudinaryAudio(secureUrl, req, res) {
-  const cloudName = getCloudName();
-  const remoteUrl = new URL(secureUrl);
-  if (remoteUrl.protocol !== 'https:' || remoteUrl.hostname !== 'res.cloudinary.com'
-    || !remoteUrl.pathname.startsWith(`/${cloudName}/video/upload/`)) {
-    throw new Error('Stored Cloudinary audio URL is invalid.');
-  }
+  let remoteRequest = null;
+  let clientClosed = false;
 
-  const headers = { 'Accept-Encoding': 'identity' };
-  if (req.headers.range) headers.Range = req.headers.range;
-  const remoteRequest = https.get(remoteUrl, { headers }, remoteResponse => {
-    const status = remoteResponse.statusCode || 502;
-    if (status >= 400 && status !== 416) {
-      remoteResponse.resume();
-      return res.status(status === 404 ? 404 : 502).json({
-        success: false,
-        message: status === 404 ? 'Original call audio recording not found' : 'Could not retrieve the call audio from Cloudinary.',
-      });
+  const cleanup = () => {
+    clientClosed = true;
+    if (remoteRequest && !remoteRequest.destroyed) {
+      try { remoteRequest.destroy(); } catch (_) {}
     }
-    res.statusCode = status;
-    ['accept-ranges', 'content-length', 'content-range', 'content-type'].forEach(name => {
-      const value = remoteResponse.headers[name];
-      if (value) res.setHeader(name, value);
+  };
+
+  req.on('close', cleanup);
+  res.on('close', cleanup);
+
+  try {
+    const cloudName = getCloudName();
+    const remoteUrl = new URL(secureUrl);
+    if (remoteUrl.protocol !== 'https:' || remoteUrl.hostname !== 'res.cloudinary.com'
+      || !remoteUrl.pathname.startsWith(`/${cloudName}/video/upload/`)) {
+      throw new Error('Stored Cloudinary audio URL is invalid.');
+    }
+
+    const headers = { 'Accept-Encoding': 'identity' };
+    if (req.headers.range) headers.Range = req.headers.range;
+
+    remoteRequest = https.get(remoteUrl, { headers }, remoteResponse => {
+      if (clientClosed || res.destroyed) {
+        try { remoteResponse.destroy(); } catch (_) {}
+        return;
+      }
+
+      const status = remoteResponse.statusCode || 502;
+      if (status >= 400 && status !== 416) {
+        remoteResponse.resume();
+        if (!res.headersSent && !res.destroyed) {
+          return res.status(status === 404 ? 404 : 502).json({
+            success: false,
+            message: status === 404 ? 'Original call audio recording not found' : 'Could not retrieve the call audio from Cloudinary.',
+          });
+        }
+        return;
+      }
+
+      res.statusCode = status;
+      ['accept-ranges', 'content-length', 'content-range', 'content-type'].forEach(name => {
+        const value = remoteResponse.headers[name];
+        if (value) res.setHeader(name, value);
+      });
+
+      remoteResponse.on('error', err => {
+        if (!clientClosed && !res.destroyed) {
+          if (!res.headersSent) serverError(res, err, 'recordings.audio.cloudinary');
+          else try { res.destroy(err); } catch (_) {}
+        }
+      });
+
+      remoteResponse.pipe(res);
     });
-    remoteResponse.on('error', err => {
-      if (!res.headersSent) serverError(res, err, 'recordings.audio.cloudinary');
-      else res.destroy(err);
+
+    remoteRequest.setTimeout(30000, () => {
+      if (!clientClosed && !res.destroyed) {
+        remoteRequest.destroy(new Error('Timed out retrieving call audio from Cloudinary.'));
+      } else {
+        try { remoteRequest.destroy(); } catch (_) {}
+      }
     });
-    remoteResponse.pipe(res);
-  });
-  remoteRequest.setTimeout(30000, () => remoteRequest.destroy(new Error('Timed out retrieving call audio from Cloudinary.')));
-  remoteRequest.on('error', err => {
-    if (!res.headersSent) serverError(res, err, 'recordings.audio.cloudinary');
-    else res.destroy(err);
-  });
+
+    remoteRequest.on('error', err => {
+      // Ignore normal client aborts / socket closures triggered when seeking, pausing or navigating away
+      const isClientAbort = clientClosed || req.destroyed || res.destroyed
+        || err.code === 'ECONNRESET' || err.message === 'aborted' || err.name === 'AbortError'
+        || (err.message && err.message.includes('aborted'));
+      if (isClientAbort) return;
+
+      if (!res.headersSent && !res.destroyed) {
+        serverError(res, err, 'recordings.audio.cloudinary');
+      } else {
+        try { res.destroy(err); } catch (_) {}
+      }
+    });
+  } catch (err) {
+    if (!res.headersSent && !res.destroyed) {
+      serverError(res, err, 'recordings.audio.cloudinary');
+    }
+  }
 }
 
 function getWavDurationSeconds(filePath) {
@@ -262,7 +317,43 @@ router.get(['/api/recordings/:id/audio', '/api/admin/recordings/:id/audio', '/ap
       return res.status(403).json({ success: false, message: 'You do not have permission for this recording.' });
     }
 
-    if (rec.cloudinarySecureUrl) return streamCloudinaryAudio(rec.cloudinarySecureUrl, req, res);
+    if (rec.cloudinarySecureUrl) {
+      // Validate Cloudinary security (must be HTTPS and belong to this app's configured cloud account)
+      let isCloudinaryValid = false;
+      try {
+        const cloudName = getCloudName();
+        const remoteUrl = new URL(rec.cloudinarySecureUrl);
+        isCloudinaryValid = remoteUrl.protocol === 'https:'
+          && remoteUrl.hostname === 'res.cloudinary.com'
+          && remoteUrl.pathname.startsWith(`/${cloudName}/video/upload/`);
+      } catch (_) {
+        isCloudinaryValid = false;
+      }
+
+      if (!isCloudinaryValid) {
+        return res.status(502).json({
+          success: false,
+          message: 'Invalid Cloudinary audio URL stored for this recording.',
+        });
+      }
+
+      // Check if client explicitly requested proxy streaming (?stream=true or ?proxy=true)
+      const forceProxy = req.query.stream === 'true' || req.query.proxy === 'true';
+      if (!forceProxy) {
+        // Option 1 (Primary): Direct HTTP 302 Redirect to Cloudinary CDN
+        // Protected by authentication & role-based authorization check (canAccessRecording) above.
+        // Enables zero Node server overhead, native browser Range seeking, and eliminates timeout leaks.
+        res.set({
+          'Cache-Control': 'private, no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        });
+        return res.redirect(302, rec.cloudinarySecureUrl);
+      }
+
+      // Option 2 (Fallback): Clean proxy streaming with client abort lifecycle management
+      return streamCloudinaryAudio(rec.cloudinarySecureUrl, req, res);
+    }
 
     const names = [rec.fileName, rec.audioUrl ? path.basename(rec.audioUrl) : null].filter(Boolean);
     for (const name of names) {

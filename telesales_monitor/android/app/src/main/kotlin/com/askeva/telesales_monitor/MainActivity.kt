@@ -23,6 +23,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.util.Locale
@@ -36,6 +37,9 @@ import java.util.concurrent.Executors
  */
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.askeva.telesales/telephony"
+    private val DIALER_CHANNEL = "com.askeva.telesales/dialer"
+    private val CALL_EVENTS_CHANNEL = "com.askeva.telesales/call_events"
+
     // Safety cap on rows read per call-log query (the query itself is already limited to the work session)
     private val MAX_CALL_LOGS = 5000
     private val PERMISSION_REQ_CODE = 2001
@@ -44,7 +48,10 @@ class MainActivity : FlutterActivity() {
 
     private var pendingPermissionResult: MethodChannel.Result? = null
     private var pendingMediaPermissionResult: MethodChannel.Result? = null
+    private var pendingRoleResult: MethodChannel.Result? = null
     private var methodChannel: MethodChannel? = null
+    private var dialerMethodChannel: MethodChannel? = null
+    private var callEventChannel: EventChannel? = null
     private var eventListener: ((String, Map<String, Any?>) -> Unit)? = null
 
     // Heavy work (call-log queries, contact lookups, queue file IO) runs here, never on the UI thread
@@ -230,6 +237,54 @@ class MainActivity : FlutterActivity() {
         CallMonitorEvents.listener = listener
 
         registerCallLogObserver()
+
+        // ---- AskEVA Custom Dialer & InCallService Channels (Phase 2) ----
+        dialerMethodChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DIALER_CHANNEL)
+        dialerMethodChannel?.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getDialerStatus" -> {
+                    result.success(DialerRoleManager.getStatus(this))
+                }
+                "requestDefaultDialerRole" -> {
+                    val intent = DialerRoleManager.createRequestRoleIntent(this)
+                    if (intent != null) {
+                        pendingRoleResult = result
+                        startActivityForResult(intent, DialerRoleManager.REQUEST_CODE_DIALER_ROLE)
+                    } else {
+                        result.success(DialerRoleManager.isDefaultDialer(this))
+                    }
+                }
+                "answerCall" -> {
+                    result.success(CallManager.answerCall())
+                }
+                "rejectCall" -> {
+                    result.success(CallManager.rejectCall())
+                }
+                "endCall" -> {
+                    result.success(CallManager.disconnectCall())
+                }
+                "setMuted" -> {
+                    val muted = call.argument<Boolean>("muted") ?: false
+                    result.success(CallManager.setMuted(muted))
+                }
+                "setSpeaker" -> {
+                    val speaker = call.argument<Boolean>("speaker") ?: false
+                    result.success(CallManager.setSpeaker(speaker))
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        callEventChannel = EventChannel(flutterEngine.dartExecutor.binaryMessenger, CALL_EVENTS_CHANNEL)
+        callEventChannel?.setStreamHandler(object : EventChannel.StreamHandler {
+            override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                CallManager.setEventSink(events)
+            }
+
+            override fun onCancel(arguments: Any?) {
+                CallManager.setEventSink(null)
+            }
+        })
     }
 
     private fun requestMediaPermission(result: MethodChannel.Result) {
@@ -513,10 +568,24 @@ class MainActivity : FlutterActivity() {
         // apps (GPay, PhonePe) work. A11yGuard switches it on when a call starts.
     }
 
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == DialerRoleManager.REQUEST_CODE_DIALER_ROLE) {
+            val isDefault = DialerRoleManager.isDefaultDialer(this)
+            pendingRoleResult?.success(isDefault)
+            pendingRoleResult = null
+        }
+    }
+
     override fun onDestroy() {
         // The call monitor service keeps running without this Activity; only UI plumbing stops here
         if (CallMonitorEvents.listener === eventListener) CallMonitorEvents.listener = null
         eventListener = null
+        CallManager.setEventSink(null)
+        dialerMethodChannel?.setMethodCallHandler(null)
+        dialerMethodChannel = null
+        callEventChannel?.setStreamHandler(null)
+        callEventChannel = null
         try {
             if (callLogObserver != null) {
                 contentResolver.unregisterContentObserver(callLogObserver!!)

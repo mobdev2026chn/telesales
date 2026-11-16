@@ -17,6 +17,7 @@ import '../services/api_service.dart';
 import '../services/call_recording_setup.dart';
 import '../services/realtime_service.dart';
 import '../services/work_sim.dart';
+import '../services/dialer_service.dart';
 
 enum UserRole { manager, caller }
 enum SimTrackingMode { sim1Only, sim2Only, bothSims }
@@ -76,6 +77,7 @@ class TeleProvider extends ChangeNotifier {
   SimTrackingMode _simTrackingMode = SimTrackingMode.bothSims;
   String _verifiedTrackingNumber = '';
   String _callerName = '';
+  DialerStatus _dialerStatus = const DialerStatus(isDefault: false, isRoleAvailable: false);
 
   UserRole get currentRole => _currentRole;
   bool get isLoggedIn => _isLoggedIn;
@@ -88,6 +90,15 @@ class TeleProvider extends ChangeNotifier {
   SimTrackingMode get simTrackingMode => _simTrackingMode;
   String get verifiedTrackingNumber => _verifiedTrackingNumber;
   String get callerName => _callerName;
+  DialerStatus get dialerStatus => _dialerStatus;
+  bool get isDefaultDialer => _dialerStatus.isDefault;
+
+  Future<void> refreshDialerStatus() async {
+    try {
+      _dialerStatus = await DialerService.instance.getDialerStatus();
+      notifyListeners();
+    } catch (_) {}
+  }
 
   String get currentUserName {
     if (_callerName.isNotEmpty && _callerName != 'Caller Agent') {
@@ -474,6 +485,7 @@ class TeleProvider extends ChangeNotifier {
     notifyListeners();
     _pushAutoRecordToNative();
     await fetchDeviceSims();
+    unawaited(refreshDialerStatus());
     if (_isLoggedIn) {
       await refreshProfile();
       if (_isLoggedIn) _connectRealtime();
