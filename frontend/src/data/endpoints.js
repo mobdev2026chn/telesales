@@ -41,6 +41,11 @@ export const ENDPOINTS = {
   demoCancel: (id) => `/demos/${enc(id)}/cancel`,
   demoReschedule: (id) => `/demos/${enc(id)}/reschedule`,
   demoDone: (id) => `/demos/${enc(id)}/done`,
+
+  // Notifications
+  notifications: (qs = '') => `/notifications${qs}`,
+  notificationsReadAll: '/notifications/read-all',
+  notificationRead: (id) => `/notifications/${enc(id)}/read`,
 };
 
 export default ENDPOINTS;

@@ -60,3 +60,9 @@ export const demoService = {
   reschedule: (id) => apiFetch(ENDPOINTS.demoReschedule(id), { method: 'POST', body: {} }),
   done: (id) => apiFetch(ENDPOINTS.demoDone(id), { method: 'POST', body: {} }),
 };
+
+export const notificationService = {
+  list: (qs = '') => apiFetch(ENDPOINTS.notifications(qs)),
+  readAll: () => apiFetch(ENDPOINTS.notificationsReadAll, { method: 'POST', body: {} }),
+  markRead: (id) => apiFetch(ENDPOINTS.notificationRead(id), { method: 'POST', body: {} }),
+};

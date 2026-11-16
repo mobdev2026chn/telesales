@@ -3,6 +3,7 @@ import { useSelector } from 'react-redux';
 import { TAB_TITLES } from '../../data/navigation';
 import { fmtLongDay, fmtTime12 } from '../../utils/format';
 import Icon from '../common/Icon';
+import NotificationCenter from '../common/NotificationCenter';
 
 export default function AppHeader() {
   const tab = useSelector(s => s.ui.tab);
@@ -18,6 +19,7 @@ export default function AppHeader() {
       <div className="app-header-meta">
         <span><span className="sync-dot" aria-hidden="true" />{time ? `Synced ${time}` : 'Syncing…'}</span>
         <span><Icon name="calendar" size="sm" /> {todayFormatted}</span>
+        <NotificationCenter />
       </div>
     </header>
   );

@@ -16,6 +16,9 @@ function recipientFilter(req, src) {
   const or = [];
   if (req.user) {
     or.push({ recipientId: req.user.id });
+    if (req.user.role === 'admin' || req.user.role === 'manager') {
+      or.push({ recipientId: 'ADMIN' }, { recipientId: 'admin' }, { recipientId: '' }, { recipientId: null });
+    }
     phone = req.user.phone || '';
     name = req.user.name || '';
   } else {

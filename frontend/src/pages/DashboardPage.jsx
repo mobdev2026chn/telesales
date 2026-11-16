@@ -122,52 +122,6 @@ export default function DashboardPage() {
         </FilterChips>
       </PageHeader>
 
-      {server?.disabledRecorders && server.disabledRecorders.length > 0 && (
-        <div
-          role="alert"
-          style={{
-            background: 'var(--ds-red-50, #FFF1F0)',
-            border: '2px solid var(--ds-red-500, #FF4D4F)',
-            borderRadius: 8,
-            padding: '12px 18px',
-            marginBottom: 20,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 16,
-            boxShadow: '0 3px 0 var(--ds-red-500, #FF4D4F)'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <span style={{ fontSize: 26, lineHeight: 1 }}>⚠️</span>
-            <div>
-              <div style={{ fontWeight: 800, color: 'var(--ds-red-700, #CF1322)', fontSize: 13, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-                CALL RECORDING TURNED OFF BY CALLER ({server.disabledRecorders.length})
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--ds-ink-900, #262626)', marginTop: 3 }}>
-                The following caller(s) disabled auto-record on their phone:{' '}
-                <strong style={{ color: 'var(--ds-ink-950, #000)' }}>
-                  {server.disabledRecorders.map(r => `${r.name || 'Caller'} (${formatPhone(r.phone)})`).join(', ')}
-                </strong>
-              </div>
-            </div>
-          </div>
-          <span style={{
-            fontSize: 11,
-            fontWeight: 800,
-            color: '#fff',
-            background: 'var(--ds-red-600, #E02424)',
-            padding: '4px 10px',
-            borderRadius: 4,
-            letterSpacing: '0.05em',
-            textTransform: 'uppercase',
-            whiteSpace: 'nowrap'
-          }}>
-            WARNING
-          </span>
-        </div>
-      )}
-
       <KpiGrid items={[
         { label: 'Total calls', value: dashTxt(m && m.total), meta: m ? `${fmtTalk(m.talkSeconds)} total talk time` : (failed ? 'Could not load' : 'Loading…'), tone: 'dark' },
         { label: 'Incoming', value: dashTxt(m && m.incoming), meta: m ? `${m.incoming} inbound received` : 'Inbound calls received', tone: 'success' },

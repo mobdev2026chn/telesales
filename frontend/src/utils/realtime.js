@@ -2,6 +2,7 @@ import { io } from 'socket.io-client';
 import { demoUpserted } from '../redux/slices/demosSlice';
 import { employeePresenceChanged as dashboardPresenceChanged } from '../redux/slices/dashboardSlice';
 import { leadRemoved, leadUpserted } from '../redux/slices/leadsSlice';
+import { notificationAdded } from '../redux/slices/notificationsSlice';
 import { recordingUpserted } from '../redux/slices/recordingsSlice';
 import { employeePresenceChanged } from '../redux/slices/usersSlice';
 import { employeePresenceChanged as userDetailPresenceChanged } from '../redux/slices/userDetailSlice';
@@ -9,6 +10,7 @@ import store from '../redux/store';
 import { mapDemo, mapLead, mapRecording } from './mappers';
 import { syncWithBackend } from './actions/syncActions';
 import { fetchDashboard } from './actions/statsActions';
+import { fetchNotifications } from './actions/notificationActions';
 import { notify } from './notify';
 
 let socket = null;
@@ -101,10 +103,42 @@ function registerEvents(client) {
     const phone = payload.callerPhone ? ` (${payload.callerPhone})` : '';
     if (payload.autoRecordEnabled === false) {
       notify(`⚠️ ALERT: ${caller}${phone} TURNED OFF AUTO-RECORD!`);
+
+      // Immediately insert into the Notifications store
+      store.dispatch(notificationAdded({
+        id: `alert_off_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        recipientId: 'ADMIN',
+        senderName: payload.callerName || 'Caller',
+        senderRole: 'caller',
+        title: 'Auto-Record Turned OFF',
+        message: `${payload.callerName || 'Caller'}${phone} has turned OFF auto call recording on their device.`,
+        comment: `Disabled at ${new Date(payload.timestamp || Date.now()).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata' })} IST`,
+        createdAt: payload.timestamp || new Date().toISOString(),
+        isRead: false,
+      }));
     } else {
       notify(`✓ ${caller}${phone} RE-ENABLED AUTO-RECORD`);
+
+      // Immediately insert into the Notifications store
+      store.dispatch(notificationAdded({
+        id: `alert_on_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        recipientId: 'ADMIN',
+        senderName: payload.callerName || 'Caller',
+        senderRole: 'caller',
+        title: 'Auto-Record Turned ON',
+        message: `${payload.callerName || 'Caller'}${phone} has turned ON auto call recording on their device.`,
+        comment: `Enabled at ${new Date(payload.timestamp || Date.now()).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata' })} IST`,
+        createdAt: payload.timestamp || new Date().toISOString(),
+        isRead: false,
+      }));
     }
     fetchDashboard();
+    fetchNotifications();
+  });
+  client.on('notification', (payload) => {
+    if (!payload) return;
+    store.dispatch(notificationAdded(payload));
+    fetchNotifications();
   });
 }
 

@@ -1,7 +1,7 @@
 // Every Ant Design piece the portal uses, imported once here so pages and components import from one place
 // (same idea as assets/image.js). Also holds the theme and the icon-name → antd icon map behind <Icon name="…" />.
 import {
-  ApartmentOutlined, AimOutlined, ArrowDownOutlined, ArrowLeftOutlined, ArrowUpOutlined, BarChartOutlined, CalendarOutlined,
+  ApartmentOutlined, AimOutlined, ArrowDownOutlined, ArrowLeftOutlined, ArrowUpOutlined, BarChartOutlined, BellOutlined, CalendarOutlined,
   CaretRightOutlined, CheckCircleOutlined, CheckOutlined, ClockCircleOutlined, CloseCircleOutlined, CloseOutlined,
   CloudUploadOutlined, CrownFilled, CustomerServiceOutlined, DashboardOutlined, DeleteOutlined, DownloadOutlined, DownOutlined,
   EditOutlined, EllipsisOutlined, ExclamationCircleOutlined, EyeOutlined, FileExcelOutlined, FileOutlined, FlagOutlined,
@@ -13,7 +13,7 @@ import {
 } from '@ant-design/icons';
 
 export {
-  Alert, App as AntApp, Button, Col, ConfigProvider, DatePicker, Flex, Input, Rate, Row, Segmented, Select, Space, Tooltip,
+  Alert, App as AntApp, Badge, Button, Col, ConfigProvider, DatePicker, Drawer, Empty, Flex, Input, List, Rate, Row, Segmented, Select, Space, Spin, Tabs, Tag, Tooltip,
 } from 'antd';
 
 // <Icon name="…" /> names (the old sprite names first, then the extra action icons)
@@ -21,6 +21,7 @@ export const ICONS = {
   activity: LineChartOutlined,
   alert: ExclamationCircleOutlined,
   award: TrophyOutlined,
+  bell: BellOutlined,
   calendar: CalendarOutlined,
   chart: BarChartOutlined,
   check: CheckCircleOutlined,
@@ -84,7 +85,7 @@ export const ICON_ROTATE = { in: 45, out: 45, phone: 90 };
 
 // Sidebar icon for each page (navigation.js `tab` keys)
 export const NAV_ICONS = {
-  dash: 'dashboard', calls: 'history', dial: 'phone', users: 'users', lb: 'award', recs: 'headphones', leads: 'funnel', demos: 'calendar',
+  dash: 'dashboard', calls: 'history', dial: 'phone', users: 'users', lb: 'award', recs: 'headphones', leads: 'funnel', demos: 'calendar', notifications: 'bell',
 };
 
 // Theme: the same colours, type and radii as the :root tokens in styles/global.css

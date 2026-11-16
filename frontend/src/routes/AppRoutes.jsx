@@ -7,6 +7,7 @@ import DemoBookingsPage from '../pages/DemoBookingsPage';
 import LeadCallingPage from '../pages/LeadCallingPage';
 import LeaderboardPage from '../pages/LeaderboardPage';
 import LeadsPipelinePage from '../pages/LeadsPipelinePage';
+import NotificationsPage from '../pages/NotificationsPage';
 import ProfilePage from '../pages/ProfilePage';
 import RecordingsPage from '../pages/RecordingsPage';
 import UserDetailPage from '../pages/UserDetailPage';
@@ -26,6 +27,7 @@ export default function AppRoutes() {
         <Route path="recordings" element={<RecordingsPage />} />
         <Route path="leads" element={<LeadsPipelinePage />} />
         <Route path="demos" element={<RoleRoute guard="demos"><DemoBookingsPage /></RoleRoute>} />
+        <Route path="notifications" element={<NotificationsPage />} />
         <Route path="profile" element={<ProfilePage />} />
         <Route path="user/:id" element={<UserDetailPage />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

@@ -2,12 +2,14 @@
 // The toast and docked audio player live outside both.
 import { useEffect } from 'react';
 import { useSelector } from 'react-redux';
+
 import Toast from './components/common/Toast';
 import AudioPlayerBar from './components/layout/AudioPlayerBar';
 import LoginPage from './pages/LoginPage';
 import AppRoutes from './routes/AppRoutes';
 import { getToken } from './utils/api';
 import { checkSession } from './utils/actions/authActions';
+import { fetchNotifications } from './utils/actions/notificationActions';
 import { connectRealtime, disconnectRealtime } from './utils/realtime';
 
 export default function App() {
@@ -17,6 +19,7 @@ export default function App() {
 
   useEffect(() => {
     if (status !== 'signedIn') return undefined;
+    fetchNotifications();
     connectRealtime(getToken());
     return disconnectRealtime;
   }, [status]);

@@ -8,6 +8,7 @@ import demosReducer from './slices/demosSlice';
 import leaderboardReducer from './slices/leaderboardSlice';
 import leadsReducer from './slices/leadsSlice';
 import recordingsReducer from './slices/recordingsSlice';
+import notificationsReducer from './slices/notificationsSlice';
 import uiReducer from './slices/uiSlice';
 import userDetailReducer from './slices/userDetailSlice';
 import usersReducer from './slices/usersSlice';
@@ -19,6 +20,7 @@ export const store = configureStore({
     calls: callsReducer,
     leads: leadsReducer,
     recordings: recordingsReducer,
+    notifications: notificationsReducer,
     dashboard: dashboardReducer,
     leaderboard: leaderboardReducer,
     demos: demosReducer,

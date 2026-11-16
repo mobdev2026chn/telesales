@@ -49,23 +49,26 @@ router.post(['/api/user/record-toggle', '/api/calls/record-toggle'], async (req,
       }
     }
 
-    // 1. When turned OFF, save Notification in MongoDB for admin audit history
-    if (!enabled) {
-      try {
-        const notifId = `notif_rec_off_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-        await Notification.create({
-          id: notifId,
-          recipientId: 'ADMIN',
-          senderName: callerName,
-          senderRole: 'caller',
-          title: 'Auto-Record Turned OFF',
-          message: `${callerName} (${callerPhone || 'No Phone'}) has turned OFF auto call recording on their device.`,
-          comment: `Disabled at ${new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata' })} IST`,
-          isRead: false,
-        });
-      } catch (err) {
-        console.error(`[record-toggle] notification create failed: ${err.message}`);
-      }
+    // 1. Save Notification in MongoDB for admin audit history (records both ON and OFF timestamps)
+    try {
+      const notifId = enabled
+        ? `notif_rec_on_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
+        : `notif_rec_off_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const timeStr = new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata' });
+      await Notification.create({
+        id: notifId,
+        recipientId: 'ADMIN',
+        senderName: callerName,
+        senderRole: 'caller',
+        title: enabled ? 'Auto-Record Turned ON' : 'Auto-Record Turned OFF',
+        message: enabled
+          ? `${callerName} (${callerPhone || 'No Phone'}) has turned ON auto call recording on their device.`
+          : `${callerName} (${callerPhone || 'No Phone'}) has turned OFF auto call recording on their device.`,
+        comment: enabled ? `Enabled at ${timeStr} IST` : `Disabled at ${timeStr} IST`,
+        isRead: false,
+      });
+    } catch (err) {
+      console.error(`[record-toggle] notification create failed: ${err.message}`);
     }
 
     // 2. Real-time alert to Admin & Managers via Socket.IO

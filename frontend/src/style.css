@@ -201,6 +201,25 @@ aside.sidebar::after {
 .app-breadcrumb strong { color: var(--ds-text); font-weight: 600; }
 .app-header-meta { display: flex; align-items: center; gap: var(--ds-space-4); font-size: var(--ds-fs-sm); color: var(--ds-text-3); }
 .sync-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ds-success-dot); display: inline-block; margin-right: 6px; box-shadow: 0 0 0 3px rgba(61, 200, 56, 0.18); }
+.notification-bell-btn {
+  background: var(--ds-surface, #ffffff);
+  border: 1px solid var(--ds-border, #e4e1d6);
+  border-radius: var(--ds-radius-sm, 6px);
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--ds-text-2, #4a5243);
+  transition: all 0.2s ease;
+  padding: 0;
+}
+.notification-bell-btn:hover {
+  background: var(--ds-surface-hover, #f4f3ee);
+  border-color: var(--ds-brand, #3dc838);
+  color: var(--ds-brand, #2e9e2b);
+}
 
 .main-viewport { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; padding: var(--ds-space-6) var(--ds-space-8) 64px; }
 .main-inner { max-width: var(--ds-content-max); margin: 0 auto; }

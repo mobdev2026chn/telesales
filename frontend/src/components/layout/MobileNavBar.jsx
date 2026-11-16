@@ -4,6 +4,7 @@ import { Button } from '../../assets/antd';
 import { setSidebarOpen } from '../../redux/slices/uiSlice';
 import Icon from '../common/Icon';
 import Logo from '../common/Logo';
+import NotificationCenter from '../common/NotificationCenter';
 
 export default function MobileNavBar() {
   const dispatch = useDispatch();
@@ -19,7 +20,9 @@ export default function MobileNavBar() {
           <Logo style={{ width: 40, height: 'auto', display: 'block' }} />
           <span className="sidebar-brand">TELESALES</span>
         </div>
-        <div style={{ width: 40 }} />
+        <div style={{ minWidth: 40, display: 'flex', justifyContent: 'flex-end' }}>
+          <NotificationCenter />
+        </div>
       </div>
       <div className={`sidebar-backdrop${open ? ' active' : ''}`} id="sidebarBackdrop" onClick={() => dispatch(setSidebarOpen(false))} />
     </>
