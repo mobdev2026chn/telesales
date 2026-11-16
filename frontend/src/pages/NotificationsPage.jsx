@@ -82,7 +82,14 @@ export default function NotificationsPage() {
             <Button
               onClick={() => markAllNotificationsAsRead()}
               icon={<Icon name="check" size="sm" />}
-              style={{ fontWeight: 600, background: '#ffffff', color: '#10180C', borderColor: '#CDC9BB' }}
+              style={{
+                fontWeight: 600,
+                background: '#ffffff',
+                backgroundColor: '#ffffff',
+                color: '#10180C',
+                borderColor: '#ffffff',
+                boxShadow: '0 2px 6px rgba(0, 0, 0, 0.06)',
+              }}
             >
               Mark all as read
             </Button>
@@ -91,7 +98,14 @@ export default function NotificationsPage() {
             onClick={() => fetchNotifications()}
             loading={pending}
             icon={<Icon name="history" size="sm" />}
-            style={{ fontWeight: 600, background: '#ffffff', color: '#10180C', borderColor: '#CDC9BB' }}
+            style={{
+              fontWeight: 600,
+              background: '#ffffff',
+              backgroundColor: '#ffffff',
+              color: '#10180C',
+              borderColor: '#ffffff',
+              boxShadow: '0 2px 6px rgba(0, 0, 0, 0.06)',
+            }}
           >
             Refresh
           </Button>
