@@ -544,7 +544,7 @@ class TeleProvider extends ChangeNotifier {
       await _telephonyChannel.invokeMethod('showNotification', {
         'title': title,
         'message': message,
-        if (id != null) 'id': id,
+        ...? (id == null ? null : {'id': id}),
       });
     } catch (e) {
       debugPrint('showSystemNotification failed: $e');

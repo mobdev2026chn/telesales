@@ -196,7 +196,7 @@ class _InAppPushBannerWidgetState extends State<_InAppPushBannerWidget>
                       child: Image.asset(
                         'assets/images/ask_eva_logo.png',
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => const Icon(
+                        errorBuilder: (context, error, stackTrace) => const Icon(
                           Icons.notifications_active_rounded,
                           color: Colors.white,
                           size: 22,
