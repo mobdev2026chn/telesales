@@ -90,6 +90,12 @@ object SpeakerAssist {
 
     /** Main thread, right after our own recording of a work call started. */
     fun begin(ctx: Context): Session {
+        // AskEVA is the Phone app: it switches the call's route itself, no screen tapping needed.
+        // The caller can switch back to the earpiece on AskEVA's call screen (customer then not recorded).
+        if (CallManager.hasCalls && CallManager.setSpeaker(true)) {
+            Log.i(TAG, "speaker on through AskEVA's own call service")
+            return Session(usedSpeakerphoneApi = false).also { it.result = "on_api" }
+        }
         var usedApi = false
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
             try {

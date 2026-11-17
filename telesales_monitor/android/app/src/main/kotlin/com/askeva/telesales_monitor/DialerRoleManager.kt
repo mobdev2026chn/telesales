@@ -2,8 +2,10 @@ package com.askeva.telesales_monitor
 
 import android.app.Activity
 import android.app.role.RoleManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.telecom.TelecomManager
 
@@ -53,6 +55,26 @@ object DialerRoleManager {
     }
 
     /**
+     * The ".DialerEntry" alias (AndroidManifest) holds the DIAL / tel: filters Android requires of a
+     * Phone app. Off by default, so tel: links keep going to the phone's own Phone app; switched on
+     * just before asking for the role, and off again whenever AskEVA is not the Phone app.
+     */
+    private fun dialerEntry(context: Context) =
+        ComponentName(context, "${DialerRoleManager::class.java.`package`!!.name}.DialerEntry")
+
+    fun setDialerEntryEnabled(context: Context, enabled: Boolean) {
+        try {
+            val state = if (enabled) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+            else PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+            if (context.packageManager.getComponentEnabledSetting(dialerEntry(context)) == state) return
+            context.packageManager.setComponentEnabledSetting(dialerEntry(context), state, PackageManager.DONT_KILL_APP)
+        } catch (_: Exception) {}
+    }
+
+    /** App start / resume / role answer: the DIAL filters are on exactly while AskEVA is the Phone app. */
+    fun syncDialerEntry(context: Context) = setDialerEntryEnabled(context, isDefaultDialer(context))
+
+    /**
      * Returns a summary map of dialer status for Flutter.
      */
     fun getStatus(context: Context): Map<String, Any> {
@@ -63,9 +85,10 @@ object DialerRoleManager {
     }
 
     /**
-     * Creates the Intent to request the default dialer role.
-     * Note: Per project policy, this should only be invoked once the incoming
-     * and ongoing call interfaces (Phases 3 and 4) are completed.
+     * Creates the Intent to request the default dialer role. Call [setDialerEntryEnabled] (true)
+     * first: without the DIAL filters Android does not offer AskEVA as a Phone app.
+     * Being the Phone app stops the phone maker's call recorder (Samsung, vivo, ...): the Call recording
+     * screen says so and asks first on those phones; on Phone-by-Google-only phones nothing is lost.
      */
     fun createRequestRoleIntent(activity: Activity): Intent? {
         return try {

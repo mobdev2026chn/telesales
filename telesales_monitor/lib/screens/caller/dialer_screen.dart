@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/tele_provider.dart';
+import '../../widgets/askeva_phone_app_prompt.dart';
+import '../../widgets/call_log_view.dart';
 
 /// Phase 1: Custom Dial Pad Screen
-/// Allows callers to type phone numbers using an on-screen keypad and initiate
-/// a phone call via the Android system dialer using the `tel:` URI scheme.
+/// Allows callers to type phone numbers using an on-screen keypad and call them on the work SIM
+/// ([TeleProvider.makeDirectCall], the same path as calling a lead). CALL LOG shows the work calls.
 class DialerScreen extends StatefulWidget {
   const DialerScreen({super.key});
 
@@ -16,6 +17,11 @@ class DialerScreen extends StatefulWidget {
 
 class _DialerScreenState extends State<DialerScreen> {
   String _dialedNumber = '';
+  /// CALL LOG instead of the keypad
+  bool _showLog = false;
+
+  /// Gap + backspace button (6 padding each side, 18 icon, 1 border each side) in the number box
+  static const double _backspaceSlot = 8 + 32;
 
   // Appends a digit or character to the current dialed number
   void _onKeyPress(String char) {
@@ -44,7 +50,8 @@ class _DialerScreenState extends State<DialerScreen> {
     }
   }
 
-  // Initiates the phone call using url_launcher (tel: URI)
+  // Places the call on the work SIM, like calling a lead: it is tracked and recorded. (A tel: link
+  // would let Android pick the app and the SIM, so the call could go out on the personal SIM.)
   Future<void> _makeCall() async {
     final clean = _dialedNumber.trim();
     if (clean.isEmpty) {
@@ -62,35 +69,19 @@ class _DialerScreenState extends State<DialerScreen> {
       return;
     }
 
-    final Uri phoneUri = Uri(scheme: 'tel', path: clean);
-    try {
-      if (await canLaunchUrl(phoneUri)) {
-        await launchUrl(phoneUri, mode: LaunchMode.externalApplication);
-      } else {
-        // Fallback to TeleProvider's direct dialer if canLaunchUrl check behaves strictly
-        if (mounted) {
-          final tele = Provider.of<TeleProvider>(context, listen: false);
-          await tele.makeDirectCall(clean);
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: AppTheme.redMissed,
-            content: Text(
-              'Could not launch dialer: $e',
-              style: AppTheme.bodyBold(size: 12, color: AppTheme.white),
-            ),
-          ),
-        );
-      }
-    }
+    // Falls back to the phone's dialer by itself when the direct call cannot be placed
+    await Provider.of<TeleProvider>(context, listen: false).makeDirectCall(clean);
   }
 
   @override
   Widget build(BuildContext context) {
     final tele = Provider.of<TeleProvider>(context);
+    // A tel: link opened from another app while AskEVA is the Phone app: type its number in
+    final prefill = tele.takeDialPrefill();
+    if (prefill != null) {
+      _dialedNumber = prefill;
+      _showLog = false;
+    }
     final sims = tele.detectedSims;
     final hasDualSim = sims.length > 1;
 
@@ -122,7 +113,7 @@ class _DialerScreenState extends State<DialerScreen> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'CUSTOM KEYPAD',
+                        _showLog ? 'CALL LOG' : 'CUSTOM KEYPAD',
                         style: AppTheme.headline(size: 26, color: AppTheme.ink900),
                       ),
                     ],
@@ -142,7 +133,18 @@ class _DialerScreenState extends State<DialerScreen> {
                     ),
                 ],
               ),
+              const SizedBox(height: 12),
+              _modeSwitch(),
+              // The phone's own call screen still shows: one tap to use AskEVA's instead
+              if (!_showLog) ...[
+                const SizedBox(height: 10),
+                const UseAskEvaCallScreenStrip(),
+              ],
 
+              if (_showLog) ...[
+                const SizedBox(height: 14),
+                const Expanded(child: CallLogView()),
+              ] else ...[
               const Spacer(flex: 1),
 
               // Phone Number Display Container
@@ -157,16 +159,25 @@ class _DialerScreenState extends State<DialerScreen> {
                 ),
                 child: Row(
                   children: [
+                    // As wide as the backspace button on the right: the number sits in the middle
+                    if (_dialedNumber.isNotEmpty) const SizedBox(width: _backspaceSlot),
                     Expanded(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        reverse: true, // Auto-scroll to end as user types
-                        child: Text(
-                          _dialedNumber.isEmpty ? 'Enter number…' : _dialedNumber,
-                          style: _dialedNumber.isEmpty
-                              ? AppTheme.mono(size: 22, color: AppTheme.ink700.withValues(alpha: 0.4))
-                              : AppTheme.mono(size: 24, color: AppTheme.ink900, weight: FontWeight.w700),
-                          maxLines: 1,
+                      child: LayoutBuilder(
+                        builder: (context, box) => SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          reverse: true, // a long number keeps its last digits in view
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(minWidth: box.maxWidth),
+                            child: Center(
+                              child: Text(
+                                _dialedNumber.isEmpty ? 'Enter number…' : _dialedNumber,
+                                style: _dialedNumber.isEmpty
+                                    ? AppTheme.mono(size: 22, color: AppTheme.ink700.withValues(alpha: 0.4))
+                                    : AppTheme.mono(size: 24, color: AppTheme.ink900, weight: FontWeight.w700),
+                                maxLines: 1,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -284,9 +295,54 @@ class _DialerScreenState extends State<DialerScreen> {
               ),
 
               const Spacer(flex: 1),
+              ],
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  /// KEYPAD | CALL LOG
+  Widget _modeSwitch() {
+    Widget segment(String label, IconData icon, bool log) {
+      final selected = _showLog == log;
+      return Expanded(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => setState(() => _showLog = log),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 9),
+            decoration: BoxDecoration(
+              color: selected ? AppTheme.limeYellow : AppTheme.white,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 15, color: AppTheme.ink900),
+                const SizedBox(width: 6),
+                Text(label, style: AppTheme.label(size: 10, color: AppTheme.ink900)),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: AppTheme.white,
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(color: AppTheme.ink900, width: 1.5),
+      ),
+      child: Row(
+        children: [
+          segment('KEYPAD', Icons.dialpad_rounded, false),
+          const SizedBox(width: 3),
+          segment('CALL LOG', Icons.history_rounded, true),
+        ],
       ),
     );
   }
