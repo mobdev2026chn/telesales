@@ -38,3 +38,20 @@ test('"Phone by Google" is named as the reason the phone recording was not found
   const issue = issueOf({ result: 'ok', talkSeconds: 60, dialerPackage: 'com.google.android.dialer' });
   assert.match(issue.reason, /Phone by Google/);
 });
+
+test('"Phone by Google" says whether switching to the phone\'s own Phone app fixes it', () => {
+  const google = { result: 'ok', talkSeconds: 60, dialerPackage: 'com.google.android.dialer' };
+  const canSwitch = issueOf({ ...google, builtInDialer: true });
+  assert.match(canSwitch.reason, /make it the default Phone app/);
+
+  const onlyGoogle = issueOf({ ...google, builtInDialer: false });
+  assert.match(onlyGoogle.reason, /only Phone app on this phone/);
+
+  // Older app builds do not send it: no advice either way
+  assert.doesNotMatch(issueOf(google).reason, /default Phone app|only Phone app/);
+
+  // A lost call on such a phone carries the same advice
+  const lost = issueOf({ result: 'silent', talkSeconds: 60, dialerPackage: 'com.google.android.dialer', builtInDialer: true });
+  assert.strictEqual(lost.kind, 'lost');
+  assert.match(lost.reason, /make it the default Phone app/);
+});
