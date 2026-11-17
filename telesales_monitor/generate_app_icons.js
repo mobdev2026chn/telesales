@@ -101,6 +101,3 @@ for (const d of densities) {
   fs.writeFileSync(path.join(dir, 'ic_launcher_round.png'), png);
   console.log(`Generated ${d.name}/ic_launcher.png (${d.size}x${d.size})`);
 }
-
-
-
