@@ -18,6 +18,7 @@ import '../services/call_recording_setup.dart';
 import '../services/realtime_service.dart';
 import '../services/work_sim.dart';
 import '../services/dialer_service.dart';
+import '../widgets/in_app_push_banner.dart';
 
 enum UserRole { manager, caller }
 enum SimTrackingMode { sim1Only, sim2Only, bothSims }
@@ -533,12 +534,79 @@ class TeleProvider extends ChangeNotifier {
 
   Timer? _syncPollingTimer;
 
+  Future<void> showSystemNotification({
+    required String title,
+    required String message,
+    int? id,
+  }) async {
+    try {
+      await _telephonyChannel.invokeMethod('showNotification', {
+        'title': title,
+        'message': message,
+        if (id != null) 'id': id,
+      });
+    } catch (e) {
+      debugPrint('showSystemNotification failed: $e');
+    }
+  }
+
   void _connectRealtime() {
     if (!_isLoggedIn || _authToken.isEmpty) return;
+
+    RealtimeService.on('callerInactivityAlert', (data) {
+      unawaited(fetchNotifications());
+      final msg = (data is Map && data['message'] != null)
+          ? data['message'].toString()
+          : 'You have been inactive for 15 minutes without any call.';
+      InAppPushBanner.showGlobal(
+        title: 'Inactivity Alert ⚠️',
+        message: msg,
+      );
+      unawaited(showSystemNotification(
+        title: 'Inactivity Alert ⚠️',
+        message: msg,
+        id: 9110,
+      ));
+    });
+
+    RealtimeService.on('leadNotification', (data) {
+      unawaited(fetchNotifications());
+      final title = (data is Map && data['title'] != null)
+          ? '${data['title']} 📋'
+          : 'Lead Updated 📋';
+      final msg = (data is Map && data['message'] != null)
+          ? data['message'].toString()
+          : 'Lead status was changed.';
+      InAppPushBanner.showGlobal(
+        title: title,
+        message: msg,
+      );
+      unawaited(showSystemNotification(
+        title: title,
+        message: msg,
+        id: 9111,
+      ));
+    });
+
+    RealtimeService.on('notificationCreated', (data) {
+      unawaited(fetchNotifications());
+      if (data is Map) {
+        final title = data['title'] != null ? '${data['title']}' : 'New Alert 🔔';
+        final msg = data['message'] != null ? '${data['message']}' : '';
+        if (msg.isNotEmpty) {
+          InAppPushBanner.showGlobal(
+            title: title,
+            message: msg,
+          );
+        }
+      }
+    });
+
     RealtimeService.connect(_authToken, onReconnected: () {
       if (!_isLoggedIn) return;
       unawaited(refreshProfile());
       unawaited(fetchBackendData());
+      unawaited(fetchNotifications());
     });
   }
 

@@ -113,4 +113,6 @@ module.exports = {
   publishForEmployee,
   publishEventsForEmployee,
   refreshEmployeeSocket,
+  emitToEmployee,
+  employeeRoom,
 };

@@ -135,6 +135,30 @@ function registerEvents(client) {
     fetchDashboard();
     fetchNotifications();
   });
+  client.on('callerInactivityAlert', (payload) => {
+    if (!payload) return;
+    const caller = payload.callerName ? String(payload.callerName).toUpperCase() : 'CALLER';
+    const phone = payload.callerPhone ? ` (${payload.callerPhone})` : '';
+    const mins = payload.inactiveMinutes || 15;
+    notify(`⚠️ INACTIVITY ALERT: ${caller}${phone} INACTIVE FOR ${mins}+ MINS!`);
+    if (payload.notification) {
+      store.dispatch(notificationAdded(payload.notification));
+    }
+    fetchNotifications();
+    fetchDashboard();
+  });
+  client.on('leadNotification', (payload) => {
+    if (!payload) return;
+    notify(`📋 LEAD UPDATE: ${payload.message || 'Status changed'}`);
+    store.dispatch(notificationAdded(payload));
+    fetchNotifications();
+    fetchDashboard();
+  });
+  client.on('notificationCreated', (payload) => {
+    if (!payload) return;
+    store.dispatch(notificationAdded(payload));
+    fetchNotifications();
+  });
   client.on('notification', (payload) => {
     if (!payload) return;
     store.dispatch(notificationAdded(payload));

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../providers/tele_provider.dart';
 import '../widgets/neo_card.dart';
+import 'in_app_push_banner.dart';
 
 class NotificationsSheet extends StatelessWidget {
   const NotificationsSheet({super.key});
@@ -81,14 +82,47 @@ class NotificationsSheet extends StatelessWidget {
                   ],
                 ],
               ),
-              if (notifs.isNotEmpty && unreadCount > 0)
-                GestureDetector(
-                  onTap: () => tele.markAllNotificationsRead(),
-                  child: Text(
-                    'Mark all read',
-                    style: AppTheme.label(size: 10, color: AppTheme.greenDark),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.pop(context);
+                      InAppPushBanner.showGlobal(
+                        title: 'Inactivity Alert ⚠️',
+                        message: 'You have been inactive for 15 minutes without any call.',
+                      );
+                      unawaited(tele.showSystemNotification(
+                        title: 'Inactivity Alert ⚠️',
+                        message: 'You have been inactive for 15 minutes without any call.',
+                        id: 9110,
+                      ));
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppTheme.paper,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: const Color(0xFFCBD5E1)),
+                      ),
+                      child: Text(
+                        'Test Banner',
+                        style: AppTheme.label(size: 9.5, color: AppTheme.ink700),
+                      ),
+                    ),
                   ),
-                ),
+                  if (notifs.isNotEmpty && unreadCount > 0) ...[
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () => tele.markAllNotificationsRead(),
+                      child: Text(
+                        'Mark all read',
+                        style: AppTheme.label(size: 10, color: AppTheme.greenDark),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ],
           ),
           const SizedBox(height: 14),

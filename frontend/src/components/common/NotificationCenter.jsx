@@ -17,30 +17,39 @@ export default function NotificationCenter() {
   );
   const [filter, setFilter] = useState('all');
 
+  const isRecordOffNotification = (item) => {
+    const text = `${item.title || ''} ${item.message || ''}`.toLowerCase();
+    return text.includes('turned off') || text.includes('disabled') || text.includes('record turned off') || text.includes('recording off');
+  };
+
+  const isRecordOnNotification = (item) => {
+    const text = `${item.title || ''} ${item.message || ''}`.toLowerCase();
+    return text.includes('turned on') || text.includes('re-enabled') || text.includes('enabled') || text.includes('record turned on');
+  };
+
+  const isInactivityNotification = (item) => {
+    const text = `${item.title || ''} ${item.message || ''}`.toLowerCase();
+    return text.includes('inactivity') || text.includes('inactive');
+  };
+
+  const isLeadNotification = (item) => {
+    const text = `${item.title || ''} ${item.message || ''}`.toLowerCase();
+    return text.includes('lead') || text.includes('follow') || text.includes('interest');
+  };
+
   const recordOffCount = useMemo(() => {
-    return list.filter((n) => {
-      const text = `${n.title || ''} ${n.message || ''}`.toLowerCase();
-      return text.includes('auto-record') || text.includes('recording') || text.includes('record turned off');
-    }).length;
+    return list.filter((n) => isRecordOffNotification(n)).length;
   }, [list]);
 
   const filteredList = useMemo(() => {
     if (filter === 'recordOff') {
-      return list.filter((n) => {
-        const text = `${n.title || ''} ${n.message || ''}`.toLowerCase();
-        return text.includes('auto-record') || text.includes('recording') || text.includes('record turned off');
-      });
+      return list.filter((n) => isRecordOffNotification(n));
     }
     if (filter === 'unread') {
       return list.filter((n) => !n.isRead);
     }
     return list;
   }, [list, filter]);
-
-  const isRecordOffNotification = (item) => {
-    const text = `${item.title || ''} ${item.message || ''}`.toLowerCase();
-    return text.includes('auto-record') || text.includes('recording') || text.includes('record turned off');
-  };
 
   return (
     <>
@@ -59,14 +68,22 @@ export default function NotificationCenter() {
 
       <Drawer
         title={
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingRight: 8 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Icon name="bell" />
-              <span style={{ fontWeight: 700, fontSize: 16 }}>Notifications</span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingRight: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Icon name="bell" size="sm" />
+              <span style={{ fontWeight: 700, fontSize: 14, color: '#1a202c' }}>Notifications</span>
               {unreadCount > 0 && (
-                <Tag color="red" style={{ borderRadius: 12, fontWeight: 700 }}>
+                <span style={{
+                  background: '#ef4444',
+                  color: '#fff',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  padding: '1px 6px',
+                  borderRadius: 10,
+                  lineHeight: 1.2
+                }}>
                   {unreadCount} NEW
-                </Tag>
+                </span>
               )}
             </div>
             <Space size="small">
@@ -77,12 +94,13 @@ export default function NotificationCenter() {
                 icon={<Icon name="history" />}
                 loading={pending}
                 title="Refresh notifications"
+                style={{ color: '#4b5563' }}
               />
               {unreadCount > 0 && (
                 <Button
                   type="link"
                   size="small"
-                  style={{ padding: '0 4px', fontSize: 12, fontWeight: 600 }}
+                  style={{ padding: '0 4px', fontSize: 11, fontWeight: 600, color: '#16a34a' }}
                   onClick={() => markAllNotificationsAsRead()}
                 >
                   Mark all read
@@ -92,14 +110,15 @@ export default function NotificationCenter() {
           </div>
         }
         placement="right"
-        width={420}
+        width={360}
         open={drawerOpen}
         onClose={() => dispatch(setNotificationsDrawer(false))}
-        bodyStyle={{ padding: '12px 16px', background: '#f9fbf8' }}
+        bodyStyle={{ padding: '8px 12px', background: '#f8fafc' }}
       >
-        <div style={{ marginBottom: 12 }}>
+        <div style={{ marginBottom: 8 }}>
           <Segmented
             block
+            size="small"
             value={filter}
             onChange={setFilter}
             options={[
@@ -107,7 +126,7 @@ export default function NotificationCenter() {
               {
                 label: (
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    <span style={{ color: '#cf1322' }}>●</span> Recording Off ({recordOffCount})
+                    <span style={{ color: '#ef4444', fontSize: 10 }}>●</span> Recording Off ({recordOffCount})
                   </span>
                 ),
                 value: 'recordOff',
@@ -118,11 +137,11 @@ export default function NotificationCenter() {
         </div>
 
         {pending && list.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '40px 0' }}>
+          <div style={{ textAlign: 'center', padding: '30px 0' }}>
             <Spin tip="Loading notifications..." />
           </div>
         ) : filteredList.length === 0 ? (
-          <div style={{ padding: '40px 0', textAlign: 'center' }}>
+          <div style={{ padding: '30px 0', textAlign: 'center' }}>
             <Empty
               image={Empty.PRESENTED_IMAGE_SIMPLE}
               description={
@@ -135,10 +154,49 @@ export default function NotificationCenter() {
             />
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {filteredList.map((item) => {
               const itemId = item.id || item._id;
               const isRecordOff = isRecordOffNotification(item);
+              const isRecordOn = isRecordOnNotification(item);
+              const isInactive = isInactivityNotification(item);
+              const isLead = isLeadNotification(item);
+
+              const cardBg = item.isRead
+                ? '#ffffff'
+                : isRecordOff
+                ? '#fffbfa'
+                : isRecordOn
+                ? '#f8fdf8'
+                : isInactive
+                ? '#fffdf7'
+                : isLead
+                ? '#faf5ff'
+                : '#f0f7ff';
+
+              const cardBorder = item.isRead
+                ? '1px solid #f1f5f9'
+                : isRecordOff
+                ? '1px solid #fecaca'
+                : isRecordOn
+                ? '1px solid #bbf7d0'
+                : isInactive
+                ? '1px solid #fed7aa'
+                : isLead
+                ? '1px solid #e9d5ff'
+                : '1px solid #bfdbfe';
+
+              const borderLeftColor = item.isRead
+                ? '#e2e8f0'
+                : isRecordOff
+                ? '#ef4444'
+                : isRecordOn
+                ? '#22c55e'
+                : isInactive
+                ? '#f59e0b'
+                : isLead
+                ? '#8b5cf6'
+                : '#3b82f6';
 
               return (
                 <div
@@ -147,69 +205,113 @@ export default function NotificationCenter() {
                     if (!item.isRead && itemId) markNotificationAsRead(itemId);
                   }}
                   style={{
-                    backgroundColor: item.isRead ? '#ffffff' : isRecordOff ? '#fff1f0' : '#f6ffed',
-                    border: item.isRead ? '1px solid #e8e8e8' : isRecordOff ? '1px solid #ffa39e' : '1px solid #b7eb8f',
-                    borderLeft: isRecordOff
-                      ? '4px solid #ff4d4f'
-                      : item.isRead
-                      ? '4px solid #d9d9d9'
-                      : '4px solid #52c41a',
-                    borderRadius: 8,
-                    padding: '12px 14px',
-                    boxShadow: item.isRead ? 'none' : '0 2px 6px rgba(0,0,0,0.04)',
+                    backgroundColor: cardBg,
+                    border: cardBorder,
+                    borderLeft: `3.5px solid ${borderLeftColor}`,
+                    borderRadius: 6,
+                    padding: '6px 10px',
                     cursor: 'pointer',
-                    transition: 'all 0.2s ease',
+                    transition: 'all 0.15s ease',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, overflow: 'hidden' }}>
                       {isRecordOff ? (
-                        <Tag color="error" style={{ fontWeight: 700, margin: 0, fontSize: 11, padding: '0 6px' }}>
-                          ⚠️ RECORDING OFF
-                        </Tag>
+                        <span style={{
+                          fontSize: 9,
+                          fontWeight: 800,
+                          color: '#dc2626',
+                          background: '#fee2e2',
+                          borderRadius: 3,
+                          padding: '1px 5px',
+                          letterSpacing: '0.02em',
+                          flexShrink: 0
+                        }}>
+                          REC OFF
+                        </span>
+                      ) : isRecordOn ? (
+                        <span style={{
+                          fontSize: 9,
+                          fontWeight: 800,
+                          color: '#15803d',
+                          background: '#dcfce7',
+                          borderRadius: 3,
+                          padding: '1px 5px',
+                          letterSpacing: '0.02em',
+                          flexShrink: 0
+                        }}>
+                          REC ON
+                        </span>
+                      ) : isInactive ? (
+                        <span style={{
+                          fontSize: 9,
+                          fontWeight: 800,
+                          color: '#b45309',
+                          background: '#fef3c7',
+                          borderRadius: 3,
+                          padding: '1px 5px',
+                          letterSpacing: '0.02em',
+                          flexShrink: 0
+                        }}>
+                          INACTIVE
+                        </span>
+                      ) : isLead ? (
+                        <span style={{
+                          fontSize: 9,
+                          fontWeight: 800,
+                          color: '#6d28d9',
+                          background: '#ede9fe',
+                          borderRadius: 3,
+                          padding: '1px 5px',
+                          letterSpacing: '0.02em',
+                          flexShrink: 0
+                        }}>
+                          LEAD
+                        </span>
                       ) : (
-                        <Tag color="green" style={{ fontWeight: 600, margin: 0, fontSize: 11, padding: '0 6px' }}>
-                          NOTIFICATION
-                        </Tag>
+                        <span style={{
+                          fontSize: 9,
+                          fontWeight: 700,
+                          color: '#2563eb',
+                          background: '#dbeafe',
+                          borderRadius: 3,
+                          padding: '1px 5px',
+                          flexShrink: 0
+                        }}>
+                          ALERT
+                        </span>
                       )}
-                      <strong style={{ fontSize: 13, color: '#162410' }}>
-                        {item.title || (isRecordOff ? 'Auto-Record Turned OFF' : 'System Alert')}
+                      <strong style={{ fontSize: 11.5, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {item.senderName ? `${item.senderName}` : item.title || 'System Alert'}
                       </strong>
                     </div>
 
-                    <span style={{ fontSize: 11, color: '#8c8c8c', whiteSpace: 'nowrap' }}>
-                      {fmtTs(item.createdAt)}
-                    </span>
-                  </div>
-
-                  <div style={{ fontSize: 13, color: '#262626', lineHeight: 1.45, marginTop: 4 }}>
-                    {item.message}
-                  </div>
-
-                  {item.comment && (
-                    <div style={{ fontSize: 11, color: '#8c8c8c', marginTop: 4, fontStyle: 'italic' }}>
-                      {item.comment}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                      <span style={{ fontSize: 10, color: '#94a3b8' }}>
+                        {fmtTs(item.createdAt)}
+                      </span>
+                      {!item.isRead ? (
+                        <span
+                          style={{ fontSize: 10, color: '#2563eb', fontWeight: 600, cursor: 'pointer' }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (itemId) markNotificationAsRead(itemId);
+                          }}
+                        >
+                          Mark read
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: 9.5, color: '#cbd5e1' }}>✓</span>
+                      )}
                     </div>
-                  )}
+                  </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, paddingTop: 6, borderTop: '1px dashed #f0f0f0' }}>
-                    <span style={{ fontSize: 11, color: '#595959' }}>
-                      {item.senderName ? `Caller: ${item.senderName}` : 'System Alert'}
-                    </span>
-                    {!item.isRead ? (
-                      <Button
-                        type="link"
-                        size="small"
-                        style={{ padding: 0, height: 'auto', fontSize: 11, color: '#1890ff' }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (itemId) markNotificationAsRead(itemId);
-                        }}
-                      >
-                        Mark as read
-                      </Button>
-                    ) : (
-                      <span style={{ fontSize: 11, color: '#bfbfbf' }}>Read</span>
+                  <div style={{ fontSize: 11, color: '#475569', lineHeight: 1.35, marginTop: 3, wordBreak: 'break-word' }}>
+                    {item.message}
+                    {item.comment && item.comment !== item.message && (
+                      <span style={{ fontSize: 10, color: '#94a3b8', fontStyle: 'italic', marginLeft: 4 }}>
+                        • {item.comment}
+                      </span>
                     )}
                   </div>
                 </div>
