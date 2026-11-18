@@ -5,7 +5,6 @@ import 'theme/app_theme.dart';
 import 'providers/tele_provider.dart';
 import 'screens/splash_screen.dart';
 import 'screens/login_screen.dart';
-import 'widgets/call_overlay.dart';
 import 'widgets/post_call_demo_prompt.dart';
 
 /// Root navigator, used to return to the login screen when the server ends the session.
@@ -54,12 +53,8 @@ class TelesalesApp extends StatelessWidget {
           useMaterial3: true,
         ),
         home: const SplashScreen(),
-        // AskEVA as the Phone app: call screen + "return to call" bar.
-        // After any call ends: pop-up offering to book a demo.
-        builder: (context, child) => CallOverlay(
-          navigatorKey: appNavigatorKey,
-          child: PostCallDemoPrompt(navigatorKey: appNavigatorKey, child: child ?? const SizedBox.shrink()),
-        ),
+        // After any call ends: pop-up offering to book a demo
+        builder: (context, child) => PostCallDemoPrompt(navigatorKey: appNavigatorKey, child: child ?? const SizedBox.shrink()),
       ),
     );
   }

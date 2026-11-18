@@ -23,7 +23,6 @@ const ALLOWED_KEYS = new Set([
   'at', 'manufacturer', 'brand', 'model', 'sdkInt', 'dialerPackage', 'accessibilityEnabled',
   'source', 'sourceName', 'sourceMode', 'recordedSeconds', 'voicedSeconds', 'peak', 'talkSeconds',
   'result', 'builtInFound', 'uploadedOwn', 'appVersion', 'note', 'backup', 'speaker', 'foundIn', 'foundAfterSec',
-  'builtInDialer',
 ]);
 
 function clean(item) {
@@ -55,25 +54,13 @@ function speakerText(speaker, a11yOn) {
   }
 }
 
-// "Phone by Google" keeps its recordings private. builtInDialer (app 1.0.6+): whether the phone also has
-// its maker's own Phone app, so the caller can fix it by switching; absent from older app builds.
-function googleDialerWhy(d) {
-  if (d.dialerPackage !== 'com.google.android.dialer') return null;
-  const base = 'The phone uses "Phone by Google", which keeps its recordings private';
-  if (d.builtInDialer === true) {
-    return `${base}. The phone also has its own Phone app: the caller should make it the default Phone app `
-      + '(AskEVA shows how on the dashboard) and turn on its automatic call recording';
-  }
-  if (d.builtInDialer === false) {
-    return `${base}. It is the only Phone app on this phone, so only AskEVA's microphone recording is possible`;
-  }
-  return base;
-}
-
 /** { kind, reason } for a call whose recording is missing or mic-only, null when it is fine. */
 function issueOf(d) {
   const talk = Number(d.talkSeconds) || 0;
-  const why = googleDialerWhy(d) || "The phone's own call recording was not found (auto-record off, or no recorder on this phone)";
+  const googleDialer = d.dialerPackage === 'com.google.android.dialer';
+  const why = googleDialer
+    ? 'The phone uses "Phone by Google", which keeps its recordings private'
+    : "The phone's own call recording was not found (auto-record off, or no recorder on this phone)";
   if (d.result === 'ok') {
     // AskEVA's microphone recording was uploaded instead of the phone's own recording
     if (talk < MIN_ALERT_TALK_SECONDS) return null;
@@ -171,7 +158,6 @@ function issueDTO(r) {
     phone: [r.brand || r.manufacturer, r.model].filter(Boolean).join(' '),
     android: r.sdkInt ? (ANDROID_VERSIONS[r.sdkInt] || `SDK ${r.sdkInt}`) : '',
     dialerPackage: r.dialerPackage,
-    appVersion: r.appVersion || '',
     at: r.callProcessedAt || r.createdAt,
   };
 }

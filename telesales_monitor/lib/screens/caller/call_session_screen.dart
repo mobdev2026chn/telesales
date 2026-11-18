@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/tele_provider.dart';
 import '../../models/lead_model.dart';
-import '../../widgets/askeva_phone_app_prompt.dart';
 import 'log_outcome_screen.dart';
 
 class CallSessionScreen extends StatefulWidget {
@@ -176,14 +175,11 @@ class _CallSessionScreenState extends State<CallSessionScreen> {
               ),
               const SizedBox(height: 14),
               Text(
-                'Mute, hold, speaker and keypad are on the call screen.',
+                'Mute, hold, speaker and keypad are on your phone\'s call screen.',
                 textAlign: TextAlign.center,
                 style: AppTheme.body(size: 11, color: AppTheme.lightMuted),
               ),
-              // The phone's own call screen still shows: one tap to use AskEVA's instead
-              const SizedBox(height: 10),
-              const UseAskEvaCallScreenStrip(dark: true),
-              const SizedBox(height: 8),
+              const SizedBox(height: 18),
 
               // WhatsApp Details Button
               GestureDetector(

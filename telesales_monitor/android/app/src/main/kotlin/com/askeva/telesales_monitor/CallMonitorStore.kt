@@ -112,23 +112,6 @@ object CallMonitorStore {
     fun nativeRecorderDetected(ctx: Context): Boolean = prefs(ctx).getBoolean(KEY_NATIVE_RECORDER, false)
 
     /**
-     * The phone's own recorder is relied on: it was found working, AskEVA may read its files, and calls
-     * still go through that Phone app. Switched to "Phone by Google" since then = its recordings are
-     * private, so AskEVA records (with the loudspeaker) from the very next call.
-     */
-    fun builtInTrusted(ctx: Context): Boolean =
-        nativeRecorderDetected(ctx) && hasMediaPermission(ctx) && !callsBypassBuiltInRecorder(ctx)
-
-    /**
-     * Calls do not go through a Phone app whose recordings AskEVA can read: "Phone by Google" (private
-     * recordings) or AskEVA itself (no recorder; Android gives it the microphone only).
-     */
-    fun callsBypassBuiltInRecorder(ctx: Context): Boolean {
-        val dialer = DeviceSetupHelper.defaultDialerPackage(ctx)
-        return dialer == DeviceSetupHelper.GOOGLE_DIALER || dialer == ctx.packageName
-    }
-
-    /**
      * Test override for the recorder's AudioSource (MediaRecorder.AudioSource constant; -1 = automatic).
      * Set on a debug build with:
      *   adb shell run-as com.askeva.telesales_monitor ... (edit shared_prefs/askeva_call_monitor.xml)
@@ -234,9 +217,12 @@ object CallMonitorStore {
 
     /** Whether the next work call our recorder captures should go through the loudspeaker. */
     fun speakerNeeded(ctx: Context): Boolean {
-        if (builtInTrusted(ctx)) return false
-        return !hasMediaPermission(ctx) || callsWithoutBuiltIn(ctx) >= 1 || callsBypassBuiltInRecorder(ctx)
+        val media = hasMediaPermission(ctx)
+        if (nativeRecorderDetected(ctx) && media) return false
+        return !media || callsWithoutBuiltIn(ctx) >= 1 || DeviceSetupHelper.defaultDialerPackage(ctx) == GOOGLE_DIALER
     }
+
+    private const val GOOGLE_DIALER = "com.google.android.dialer"
 
     /** A connected call ended without a built-in file. Returns true when the flag was just reset. */
     fun onBuiltInMissing(ctx: Context): Boolean {

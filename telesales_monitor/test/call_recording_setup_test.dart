@@ -124,96 +124,14 @@ void main() {
     expect(s.pendingUploads, 3);
   });
 
-  group('Phone by Google', () {
-    const google = 'com.google.android.dialer';
-    RecordingSetupStatus status(String dialer, [String ownDialer = '', String ownLabel = '']) =>
-        RecordingSetupStatus.fromMap({'dialerPackage': dialer, 'builtInDialerPackage': ownDialer, 'builtInDialerLabel': ownLabel});
-
-    test('can be switched away from only when the phone has its own Phone app', () {
-      expect(status(google, 'com.samsung.android.dialer').canSwitchFromGoogleDialer, isTrue);
-      expect(status(google).canSwitchFromGoogleDialer, isFalse); // Pixel, Motorola, Google-only phones
-      expect(status(google).usesGoogleDialer, isTrue);
-      expect(status('com.samsung.android.dialer', 'com.samsung.android.dialer').canSwitchFromGoogleDialer, isFalse);
-      expect(status('').usesGoogleDialer, isFalse);
-    });
-
-    test('names the phone\'s own Phone app, "Phone" when it has no label', () {
-      expect(status(google, 'com.android.contacts', 'Contacts & Phone').builtInDialerName, 'Contacts & Phone');
-      expect(status(google, 'com.android.contacts').builtInDialerName, 'Phone');
-    });
-
-    test('the built-in recorder is not trusted while calls go through it', () {
-      const ready = {'micPermission': true, 'phonePermissions': true, 'mediaPermission': true, 'nativeRecorderDetected': true};
-      expect(RecordingSetupStatus.fromMap({...ready, 'dialerPackage': 'com.samsung.android.dialer'}).builtInTrusted, isTrue);
-      final switched = RecordingSetupStatus.fromMap({...ready, 'dialerPackage': google});
-      expect(switched.builtInTrusted, isFalse);
-      expect(switched.needsAccessibility, isTrue);
-    });
-
-    test('"Use AskEVA as Phone app": offered, with a warning where the phone recorder would stop', () {
-      RecordingSetupStatus s(Map<String, dynamic> m) => RecordingSetupStatus.fromMap({'dialerRoleAvailable': true, ...m});
-      // Phone by Google only: nothing to lose
-      expect(s({'dialerPackage': google}).canOfferAskEvaDialer, isTrue);
-      expect(s({'dialerPackage': google}).askevaDialerStopsPhoneRecorder, isFalse);
-      // Samsung's own Phone app: allowed, but its recorder stops (the screen warns and asks first)
-      expect(s({'dialerPackage': 'com.samsung.android.dialer'}).canOfferAskEvaDialer, isTrue);
-      expect(s({'dialerPackage': 'com.samsung.android.dialer'}).askevaDialerStopsPhoneRecorder, isTrue);
-      // Phone by Google with the maker's Phone app installed: switching to that one is better
-      expect(s({'dialerPackage': google, 'builtInDialerPackage': 'com.samsung.android.dialer'}).canOfferAskEvaDialer, isFalse);
-      expect(s({'dialerPackage': google, 'dialerRoleAvailable': false}).canOfferAskEvaDialer, isFalse);
-      final already = s({'dialerPackage': 'com.askeva.telesales_monitor', 'askevaIsDialer': true});
-      expect(already.canOfferAskEvaDialer, isFalse);
-      expect(already.askevaDialerStopsPhoneRecorder, isFalse);
-      expect(already.usesGoogleDialer, isFalse);
-    });
-
-    test('AskEVA as the Phone app means no phone recorder: AskEVA records (Accessibility needed)', () {
-      final s = RecordingSetupStatus.fromMap({
-        'micPermission': true, 'phonePermissions': true, 'mediaPermission': true,
-        'nativeRecorderDetected': true, // left over from before the switch
-        'dialerPackage': 'com.askeva.telesales_monitor', 'askevaIsDialer': true,
-      });
-      expect(s.builtInTrusted, isFalse);
-      expect(s.needsAccessibility, isTrue);
-    });
-  });
-
-  group('recordingProblemFor (the dashboard banner)', () {
-    const ready = {'micPermission': true, 'phonePermissions': true, 'mediaPermission': true, 'accessibilityEnabled': true};
-    RecordingProblem? problem(Map<String, dynamic> m, {bool autoRecord = true}) =>
-        recordingProblemFor(RecordingSetupStatus.fromMap(m), autoRecordEnabled: autoRecord);
-
-    test('nothing to show without a status, with auto-record off, or when all is well', () {
-      expect(recordingProblemFor(null, autoRecordEnabled: true), isNull);
-      expect(problem({}, autoRecord: false), isNull);
-      expect(problem(ready), isNull);
-    });
-
-    test('recording off comes first', () {
-      final p = problem({'dialerPackage': 'com.google.android.dialer', 'builtInDialerPackage': 'x'});
-      expect(p!.title, 'CALLS ARE NOT BEING RECORDED');
-      expect(p.text, contains('off'));
-    });
-
-    test('a silent last call', () {
-      final p = problem({...ready, 'lastCaptureStatus': 'silent', 'lastCaptureA11y': true});
-      expect(p!.text, contains('without sound'));
-    });
-
-    test('Phone by Google with the phone\'s own Phone app available: ask to switch, naming it', () {
-      final p = problem({
-        ...ready,
-        'dialerPackage': 'com.google.android.dialer',
-        'builtInDialerPackage': 'com.samsung.android.dialer',
-        'builtInDialerLabel': 'Phone',
-      });
-      expect(p!.title, 'CUSTOMER VOICE MAY BE MISSING');
-      expect(p.text, contains('"Phone"'));
-    });
-
-    test('Phone by Google as the only Phone app: no banner, nothing the caller can change', () {
-      expect(problem({...ready, 'dialerPackage': 'com.google.android.dialer'}), isNull);
-    });
+  test('Phone by Google is flagged only on phones that ship their own dialer', () {
+    RecordingSetupStatus status(String manufacturer, String dialer) =>
+        RecordingSetupStatus.fromMap({'manufacturer': manufacturer, 'brand': manufacturer, 'dialerPackage': dialer});
+    expect(status('vivo', 'com.google.android.dialer').usesGoogleDialerOnOemPhone, isTrue);
+    expect(status('vivo', 'com.android.dialer').usesGoogleDialerOnOemPhone, isFalse);
+    expect(status('Google', 'com.google.android.dialer').usesGoogleDialerOnOemPhone, isFalse);
+    expect(status('motorola', 'com.google.android.dialer').usesGoogleDialerOnOemPhone, isFalse);
+    expect(status('Xiaomi', '').usesGoogleDialerOnOemPhone, isFalse);
   });
 
   group('recordingReady (the one status the setup screen shows)', () {
