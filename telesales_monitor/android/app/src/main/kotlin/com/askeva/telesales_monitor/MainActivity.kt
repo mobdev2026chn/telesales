@@ -112,14 +112,13 @@ class MainActivity : FlutterActivity() {
                     makeDirectCall(phone, slot)
                     result.success(true)
                 }
-<<<<<<< HEAD
                 "showNotification" -> {
                     val title = call.argument<String>("title") ?: "Alert"
                     val message = call.argument<String>("message") ?: ""
                     val id = (call.argument<Int>("id")) ?: 9110
                     CallMonitorStore.postAlert(this, id, title, message)
                     result.success(true)
-=======
+                }
                 // Any phone call going on (dialling, ringing, active or on hold), whichever app shows it.
                 // Null when the phone does not say (no phone permission).
                 "isInCall" -> {
@@ -130,7 +129,6 @@ class MainActivity : FlutterActivity() {
                         null
                     }
                     result.success(inCall)
->>>>>>> 5b2e77d3de2bf27d367b0da41e262cd1800aa64e
                 }
                 // ---- Call monitor (foreground service) ----
                 "startCallMonitor" -> {

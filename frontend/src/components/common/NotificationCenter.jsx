@@ -24,7 +24,10 @@ export default function NotificationCenter() {
 
   const isRecordOnNotification = (item) => {
     const text = `${item.title || ''} ${item.message || ''}`.toLowerCase();
-    return text.includes('turned on') || text.includes('re-enabled') || text.includes('enabled') || text.includes('record turned on');
+    if (text.includes('turned off') || text.includes('disabled') || text.includes('record turned off') || text.includes('recording off')) {
+      return false;
+    }
+    return text.includes('turned on') || text.includes('re-enabled') || text.includes('enabled') || text.includes('record turned on') || text.includes('recording on');
   };
 
   const isInactivityNotification = (item) => {
@@ -37,13 +40,75 @@ export default function NotificationCenter() {
     return text.includes('lead') || text.includes('follow') || text.includes('interest');
   };
 
+  const getCallerDisplayName = (item) => {
+    // If senderName is set and not a generic system/admin label or generic 'caller'
+    if (
+      item.senderName &&
+      typeof item.senderName === 'string' &&
+      !['system', 'admin', 'caller', 'system alert'].includes(item.senderName.trim().toLowerCase())
+    ) {
+      return item.senderName.trim();
+    }
+
+    // Try extracting actual caller name from message: "Caller Dineshram (89255...)"
+    const msg = String(item.message || '');
+    const callerMatch = msg.match(/^Caller\s+([A-Za-z0-9_.\s]+?)\s*\(/i);
+    if (callerMatch && callerMatch[1] && callerMatch[1].trim().toLowerCase() !== 'caller') {
+      return callerMatch[1].trim();
+    }
+
+    // Try format "<Name> (987654...)"
+    const nameMatch = msg.match(/^([A-Za-z0-9_.\s]+?)\s*\(\d{7,15}\)/);
+    if (nameMatch && nameMatch[1] && !['caller', 'admin', 'system'].includes(nameMatch[1].trim().toLowerCase())) {
+      return nameMatch[1].trim();
+    }
+
+    // Fallback to recipientName if it's an employee
+    if (
+      item.recipientName &&
+      typeof item.recipientName === 'string' &&
+      !['system', 'admin', 'caller'].includes(item.recipientName.trim().toLowerCase())
+    ) {
+      return item.recipientName.trim();
+    }
+
+    if (item.senderName && item.senderName.trim() && item.senderName.trim().toLowerCase() !== 'caller') {
+      return item.senderName.trim();
+    }
+
+    return null;
+  };
+
+  const getNotificationTitle = (item, isInactive, isRecordOff, isRecordOn, isLead) => {
+    const callerName = getCallerDisplayName(item);
+    const rawTitle = (item.title || '').trim();
+
+    // If title is missing OR if title was mistakenly set to just the caller's name
+    if (!rawTitle || (callerName && rawTitle.toLowerCase() === callerName.toLowerCase())) {
+      if (isInactive) return 'Caller Inactivity Alert';
+      if (isRecordOff) return 'Auto-Record Turned OFF';
+      if (isRecordOn) return 'Auto-Record Turned ON';
+      if (isLead) return 'Lead Status Updated';
+      return 'System Notification';
+    }
+
+    return rawTitle;
+  };
+
   const recordOffCount = useMemo(() => {
     return list.filter((n) => isRecordOffNotification(n)).length;
+  }, [list]);
+
+  const recordOnCount = useMemo(() => {
+    return list.filter((n) => isRecordOnNotification(n)).length;
   }, [list]);
 
   const filteredList = useMemo(() => {
     if (filter === 'recordOff') {
       return list.filter((n) => isRecordOffNotification(n));
+    }
+    if (filter === 'recordOn') {
+      return list.filter((n) => isRecordOnNotification(n));
     }
     if (filter === 'unread') {
       return list.filter((n) => !n.isRead);
@@ -110,30 +175,61 @@ export default function NotificationCenter() {
           </div>
         }
         placement="right"
-        width={360}
+        width={470}
         open={drawerOpen}
         onClose={() => dispatch(setNotificationsDrawer(false))}
-        bodyStyle={{ padding: '8px 12px', background: '#f8fafc' }}
+        bodyStyle={{ padding: '10px 14px', background: '#f8fafc' }}
       >
-        <div style={{ marginBottom: 8 }}>
-          <Segmented
-            block
-            size="small"
-            value={filter}
-            onChange={setFilter}
-            options={[
-              { label: `All (${list.length})`, value: 'all' },
-              {
-                label: (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    <span style={{ color: '#ef4444', fontSize: 10 }}>●</span> Recording Off ({recordOffCount})
-                  </span>
-                ),
-                value: 'recordOff',
-              },
-              { label: `Unread (${unreadCount})`, value: 'unread' },
-            ]}
-          />
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          background: '#f2f0ea',
+          padding: '3px',
+          borderRadius: 9,
+          border: '1px solid #e5e3dc',
+          marginBottom: 10,
+          gap: 2,
+          boxSizing: 'border-box',
+          width: '100%'
+        }}>
+          {[
+            { key: 'all', label: `All Alerts (${list.length})` },
+            { key: 'recordOff', label: `Recording OFF (${recordOffCount})`, isOff: true },
+            { key: 'recordOn', label: `Recording ON (${recordOnCount})`, isOn: true },
+            { key: 'unread', label: `Unread (${unreadCount})` },
+          ].map((tab) => {
+            const isActive = filter === tab.key;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setFilter(tab.key)}
+                style={{
+                  flex: 1,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 3,
+                  padding: '5px 2px',
+                  fontSize: 10.5,
+                  fontWeight: isActive ? 700 : 500,
+                  color: tab.isOff ? '#dc2626' : tab.isOn ? '#16a34a' : isActive ? '#0f172a' : '#52525b',
+                  background: isActive ? '#ffffff' : 'transparent',
+                  border: 'none',
+                  borderRadius: 7,
+                  boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  transition: 'all 0.15s ease',
+                  outline: 'none',
+                }}
+              >
+                {tab.isOff && <span style={{ fontSize: 7, color: '#dc2626' }}>●</span>}
+                {tab.isOn && <span style={{ fontSize: 7, color: '#16a34a' }}>●</span>}
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
         </div>
 
         {pending && list.length === 0 ? (
@@ -147,6 +243,8 @@ export default function NotificationCenter() {
               description={
                 filter === 'recordOff'
                   ? 'No Auto-Recording OFF alerts recorded'
+                  : filter === 'recordOn'
+                  ? 'No Auto-Recording ON alerts recorded'
                   : filter === 'unread'
                   ? 'No unread notifications'
                   : 'No notifications yet'
@@ -154,13 +252,16 @@ export default function NotificationCenter() {
             />
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {filteredList.map((item) => {
               const itemId = item.id || item._id;
               const isRecordOff = isRecordOffNotification(item);
               const isRecordOn = isRecordOnNotification(item);
               const isInactive = isInactivityNotification(item);
               const isLead = isLeadNotification(item);
+
+              const callerDisplayName = getCallerDisplayName(item);
+              const notifTitle = getNotificationTitle(item, isInactive, isRecordOff, isRecordOn, isLead);
 
               const cardBg = item.isRead
                 ? '#ffffff'
@@ -175,7 +276,7 @@ export default function NotificationCenter() {
                 : '#f0f7ff';
 
               const cardBorder = item.isRead
-                ? '1px solid #f1f5f9'
+                ? '1px solid #e2e8f0'
                 : isRecordOff
                 ? '1px solid #fecaca'
                 : isRecordOn
@@ -187,7 +288,7 @@ export default function NotificationCenter() {
                 : '1px solid #bfdbfe';
 
               const borderLeftColor = item.isRead
-                ? '#e2e8f0'
+                ? '#cbd5e1'
                 : isRecordOff
                 ? '#ef4444'
                 : isRecordOn
@@ -208,22 +309,24 @@ export default function NotificationCenter() {
                     backgroundColor: cardBg,
                     border: cardBorder,
                     borderLeft: `3.5px solid ${borderLeftColor}`,
-                    borderRadius: 6,
-                    padding: '6px 10px',
+                    borderRadius: 8,
+                    padding: '9px 12px',
+                    boxShadow: item.isRead ? 'none' : '0 1px 3px rgba(0,0,0,0.03)',
                     cursor: 'pointer',
                     transition: 'all 0.15s ease',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, overflow: 'hidden' }}>
+                  {/* Top Row: Badge + Full Title & Date + Mark read */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
                       {isRecordOff ? (
                         <span style={{
-                          fontSize: 9,
+                          fontSize: 9.5,
                           fontWeight: 800,
                           color: '#dc2626',
                           background: '#fee2e2',
                           borderRadius: 3,
-                          padding: '1px 5px',
+                          padding: '1.5px 5.5px',
                           letterSpacing: '0.02em',
                           flexShrink: 0
                         }}>
@@ -231,12 +334,12 @@ export default function NotificationCenter() {
                         </span>
                       ) : isRecordOn ? (
                         <span style={{
-                          fontSize: 9,
+                          fontSize: 9.5,
                           fontWeight: 800,
                           color: '#15803d',
                           background: '#dcfce7',
                           borderRadius: 3,
-                          padding: '1px 5px',
+                          padding: '1.5px 5.5px',
                           letterSpacing: '0.02em',
                           flexShrink: 0
                         }}>
@@ -244,12 +347,12 @@ export default function NotificationCenter() {
                         </span>
                       ) : isInactive ? (
                         <span style={{
-                          fontSize: 9,
+                          fontSize: 9.5,
                           fontWeight: 800,
                           color: '#b45309',
                           background: '#fef3c7',
                           borderRadius: 3,
-                          padding: '1px 5px',
+                          padding: '1.5px 5.5px',
                           letterSpacing: '0.02em',
                           flexShrink: 0
                         }}>
@@ -257,12 +360,12 @@ export default function NotificationCenter() {
                         </span>
                       ) : isLead ? (
                         <span style={{
-                          fontSize: 9,
+                          fontSize: 9.5,
                           fontWeight: 800,
                           color: '#6d28d9',
                           background: '#ede9fe',
                           borderRadius: 3,
-                          padding: '1px 5px',
+                          padding: '1.5px 5.5px',
                           letterSpacing: '0.02em',
                           flexShrink: 0
                         }}>
@@ -270,29 +373,29 @@ export default function NotificationCenter() {
                         </span>
                       ) : (
                         <span style={{
-                          fontSize: 9,
+                          fontSize: 9.5,
                           fontWeight: 700,
                           color: '#2563eb',
                           background: '#dbeafe',
                           borderRadius: 3,
-                          padding: '1px 5px',
+                          padding: '1.5px 5.5px',
                           flexShrink: 0
                         }}>
                           ALERT
                         </span>
                       )}
-                      <strong style={{ fontSize: 11.5, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {item.senderName ? `${item.senderName}` : item.title || 'System Alert'}
+                      <strong style={{ fontSize: 12.5, fontWeight: 700, color: '#0f172a', lineHeight: 1.3 }}>
+                        {notifTitle}
                       </strong>
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                      <span style={{ fontSize: 10, color: '#94a3b8' }}>
+                      <span style={{ fontSize: 10.5, color: '#94a3b8', whiteSpace: 'nowrap' }}>
                         {fmtTs(item.createdAt)}
                       </span>
                       {!item.isRead ? (
                         <span
-                          style={{ fontSize: 10, color: '#2563eb', fontWeight: 600, cursor: 'pointer' }}
+                          style={{ fontSize: 10.5, color: '#2563eb', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
                           onClick={(e) => {
                             e.stopPropagation();
                             if (itemId) markNotificationAsRead(itemId);
@@ -301,19 +404,41 @@ export default function NotificationCenter() {
                           Mark read
                         </span>
                       ) : (
-                        <span style={{ fontSize: 9.5, color: '#cbd5e1' }}>✓</span>
+                        <span style={{ fontSize: 10, color: '#94a3b8', whiteSpace: 'nowrap' }}>✓</span>
                       )}
                     </div>
                   </div>
 
-                  <div style={{ fontSize: 11, color: '#475569', lineHeight: 1.35, marginTop: 3, wordBreak: 'break-word' }}>
-                    {item.message}
-                    {item.comment && item.comment !== item.message && (
-                      <span style={{ fontSize: 10, color: '#94a3b8', fontStyle: 'italic', marginLeft: 4 }}>
-                        • {item.comment}
+                  {/* Row 2: Message with compact inline caller chip */}
+                  <div style={{ fontSize: 11.5, color: '#334155', lineHeight: 1.4, marginTop: 4, wordBreak: 'break-word' }}>
+                    {callerDisplayName && (
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 3,
+                        fontSize: 10.5,
+                        fontWeight: 600,
+                        color: '#1e293b',
+                        background: '#f1f5f9',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: 4,
+                        padding: '1px 5px',
+                        marginRight: 6,
+                        verticalAlign: 'baseline',
+                      }}>
+                        <span style={{ fontSize: 10 }}>👤</span>
+                        <span>Caller: <strong>{callerDisplayName}</strong></span>
                       </span>
                     )}
+                    <span>{item.message}</span>
                   </div>
+
+                  {/* Row 3: Comment / activity details */}
+                  {item.comment && item.comment !== item.message && (
+                    <div style={{ fontSize: 10.5, color: '#64748b', fontStyle: 'italic', marginTop: 3 }}>
+                      ⏱️ {item.comment}
+                    </div>
+                  )}
                 </div>
               );
             })}
