@@ -81,5 +81,56 @@ router.post(['/api/user/notifications/:id/read', '/api/notifications/:id/read'],
   }
 });
 
+router.post(['/api/user/notifications/test', '/api/notifications/test'], async (req, res) => {
+  try {
+    const io = req.app.get('io');
+    const type = req.body && req.body.type ? req.body.type : 'inactivity';
+    const callerId = req.user ? req.user.id : (req.body && req.body.callerId ? req.body.callerId : '');
+    const callerName = req.user ? req.user.name : (req.body && req.body.callerName ? req.body.callerName : 'Caller');
+    const callerPhone = req.user ? req.user.phone : (req.body && req.body.callerPhone ? req.body.callerPhone : '');
+
+    const notifId = `notif_test_${Date.now()}`;
+    const title = type === 'inactivity' ? 'Inactivity Alert ⚠️' : 'Lead Status: interested 📋';
+    const message = type === 'inactivity'
+      ? 'You have been inactive for 15 minutes without any call. Please check your assigned leads and resume calling.'
+      : `Caller ${callerName} changed lead "Siva Tech" to "interested".`;
+
+    const notif = await Notification.create({
+      id: notifId,
+      recipientId: callerId || 'ADMIN',
+      senderName: callerName,
+      senderRole: 'caller',
+      title,
+      message,
+      comment: 'Test Notification',
+      isRead: false,
+    });
+
+    if (io) {
+      if (type === 'inactivity') {
+        const payload = {
+          callerId,
+          callerName,
+          callerPhone,
+          inactiveMinutes: 15,
+          message,
+          notification: notif,
+        };
+        io.to('admin:global').emit('callerInactivityAlert', payload);
+        if (callerId) io.to(`employee:${callerId}`).emit('callerInactivityAlert', payload);
+      } else {
+        io.to('admin:global').emit('leadNotification', notif);
+        if (callerId) io.to(`employee:${callerId}`).emit('leadNotification', notif);
+      }
+      io.to('admin:global').emit('notificationCreated', notif);
+      if (callerId) io.to(`employee:${callerId}`).emit('notificationCreated', notif);
+    }
+
+    res.json({ success: true, notification: notif, message: 'Test alert dispatched' });
+  } catch (err) {
+    serverError(res, err, 'notifications.test');
+  }
+});
+
 module.exports = router;
 module.exports.recipientFilter = recipientFilter;

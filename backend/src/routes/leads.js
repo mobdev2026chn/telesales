@@ -7,6 +7,7 @@ const { resolveScope, leadQueryFor, ownerInScope, MANAGER_ROLES, findEmployeeByR
 const { LEAD_STATUSES } = require('../services/matching');
 const { findLeadsByLast10 } = require('../services/callStats');
 const { publishForEmployee, publishEventsForEmployee } = require('../services/realtime');
+const { sendLeadStatusChangeNotification } = require('../services/leadNotifications');
 
 const router = express.Router();
 
@@ -399,9 +400,14 @@ router.put('/api/admin/leads/:id', async (req, res, next) => {
     if (!manager && (b.name !== undefined || b.assignedCallerId !== undefined)) {
       return res.status(403).json({ success: false, message: 'Callers may only change status and notes.' });
     }
+    const oldStatus = lead.status;
+    let statusChanged = false;
     if (b.status !== undefined) {
       if (!LEAD_STATUSES.includes(b.status)) return res.status(400).json({ success: false, message: 'Invalid status' });
-      lead.status = b.status;
+      if (lead.status !== b.status) {
+        statusChanged = true;
+        lead.status = b.status;
+      }
     }
     if (b.notes !== undefined) lead.notes = cleanText(String(b.notes), 2000);
     if (manager && b.name !== undefined) {
@@ -420,6 +426,15 @@ router.put('/api/admin/leads/:id', async (req, res, next) => {
       lead.lastCallDate = new Date();
     }
     await lead.save();
+    if (statusChanged) {
+      await sendLeadStatusChangeNotification({
+        req,
+        lead,
+        oldStatus,
+        newStatus: lead.status,
+        user: req.user,
+      });
+    }
     const dto = toLeadDTO(lead.toObject());
     try {
       const target = dto.assignedCallerId
@@ -500,7 +515,12 @@ async function updateStatus(req, res) {
     }
 
     if (!(await canTouchLead(req, lead))) return res.status(403).json({ success: false, message: 'This lead is not assigned to you.' });
-    if (status) lead.status = status;
+    const oldStatus = lead.status;
+    let statusChanged = false;
+    if (status && lead.status !== status) {
+      lead.status = status;
+      statusChanged = true;
+    }
     if (b.notes !== undefined || b.note !== undefined) lead.notes = cleanText(String(b.notes !== undefined ? b.notes : b.note), 2000);
     if (b.name && isManager(req)) lead.name = cleanText(b.name, 120) || lead.name;
     if (b.callerName && isManager(req)) {
@@ -511,6 +531,15 @@ async function updateStatus(req, res) {
       }
     }
     await lead.save();
+    if (statusChanged) {
+      await sendLeadStatusChangeNotification({
+        req,
+        lead,
+        oldStatus,
+        newStatus: lead.status,
+        user: req.user,
+      });
+    }
     const dto = toLeadDTO(lead.toObject());
     try {
       const target = dto.assignedCallerId

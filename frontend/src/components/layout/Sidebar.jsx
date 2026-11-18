@@ -47,20 +47,7 @@ export default function Sidebar() {
         {NAV_ITEMS.filter(allowed).map(item => (
           <NavLink key={item.tab} to={item.path} className={({ isActive }) => `nav-pill${isActive ? ' active' : ''}`}>
             <Icon name={NAV_ICONS[item.tab]} />
-            <span style={{ flex: 1 }}>{item.label}</span>
-            {item.tab === 'notifications' && unreadCount > 0 && (
-              <span style={{
-                background: '#ff4d4f',
-                color: '#fff',
-                fontSize: 10,
-                fontWeight: 700,
-                padding: '1px 6px',
-                borderRadius: 10,
-                lineHeight: 1.3,
-              }}>
-                {unreadCount > 99 ? '99+' : unreadCount}
-              </span>
-            )}
+            {item.label}
           </NavLink>
         ))}
       </nav>

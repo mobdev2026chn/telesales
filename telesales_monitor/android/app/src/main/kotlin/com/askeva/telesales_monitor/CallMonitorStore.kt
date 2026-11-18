@@ -277,6 +277,7 @@ object CallMonitorStore {
 
     const val CHANNEL_TRACKING = "askeva_call_tracking"
     const val CHANNEL_ALERTS = "askeva_call_alerts"
+    const val CHANNEL_PUSH_ALERTS = "askeva_push_alerts_v2"
     const val NOTIF_ID_SERVICE = 9101
     const val NOTIF_ID_LOGIN = 9102
     const val NOTIF_ID_RESUME = 9103
@@ -297,6 +298,15 @@ object CallMonitorStore {
                 description = "Problems that stop call recordings from being uploaded"
             }
         )
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_PUSH_ALERTS, "Push Notification Alerts", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "High priority popup alerts for inactivity and lead updates"
+                enableLights(true)
+                enableVibration(true)
+                setShowBadge(true)
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+            }
+        )
     }
 
     fun openAppIntent(ctx: Context): PendingIntent {
@@ -310,11 +320,20 @@ object CallMonitorStore {
         try {
             ensureChannels(ctx)
             if (Build.VERSION.SDK_INT >= 33 && !hasPermission(ctx, Manifest.permission.POST_NOTIFICATIONS)) return
-            val n = NotificationCompat.Builder(ctx, CHANNEL_ALERTS)
-                .setSmallIcon(android.R.drawable.stat_notify_error)
+            val iconRes = try {
+                val appInfo = ctx.packageManager.getApplicationInfo(ctx.packageName, 0)
+                if (appInfo.icon != 0) appInfo.icon else android.R.drawable.stat_notify_chat
+            } catch (_: Exception) {
+                android.R.drawable.stat_notify_chat
+            }
+            val n = NotificationCompat.Builder(ctx, CHANNEL_PUSH_ALERTS)
+                .setSmallIcon(iconRes)
                 .setContentTitle(title)
                 .setContentText(text)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                .setDefaults(NotificationCompat.DEFAULT_ALL)
                 .setContentIntent(openAppIntent(ctx))
                 .setAutoCancel(true)
                 .build()

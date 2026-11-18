@@ -8,7 +8,6 @@ export const NAV_ITEMS = [
   { tab: 'recs', path: '/recordings', label: 'Call Recordings' },
   { tab: 'leads', path: '/leads', label: 'Leads Pipeline' },
   { tab: 'demos', path: '/demos', label: 'Demo Bookings', guard: 'demos' },
-  { tab: 'notifications', path: '/notifications', label: 'Notifications' },
 ];
 
 export const PATHS = {

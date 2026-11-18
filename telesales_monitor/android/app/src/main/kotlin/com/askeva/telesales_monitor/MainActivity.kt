@@ -105,6 +105,13 @@ class MainActivity : FlutterActivity() {
                     makeDirectCall(phone, slot)
                     result.success(true)
                 }
+                "showNotification" -> {
+                    val title = call.argument<String>("title") ?: "Alert"
+                    val message = call.argument<String>("message") ?: ""
+                    val id = (call.argument<Int>("id")) ?: 9110
+                    CallMonitorStore.postAlert(this, id, title, message)
+                    result.success(true)
+                }
                 // ---- Call monitor (foreground service) ----
                 "startCallMonitor" -> {
                     val baseUrl = call.argument<String>("baseUrl") ?: ""
