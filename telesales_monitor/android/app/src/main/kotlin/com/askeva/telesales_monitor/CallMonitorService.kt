@@ -320,7 +320,7 @@ class CallMonitorService : Service() {
     }
 
     private fun idleText(): String =
-        if (CallMonitorStore.builtInTrusted(this)) "Uploading your phone's call recordings"
+        if (CallMonitorStore.nativeRecorderDetected(this)) "Uploading your phone's call recordings"
         else "Work calls are recorded and uploaded"
 
     private fun goForeground(): Boolean {
@@ -441,7 +441,7 @@ class CallMonitorService : Service() {
         // The SIM of an outgoing call is often unknown at this point: record unless it is positively the
         // personal SIM. The call-log row decides after the call, and a non-work recording is deleted then.
         if (!CallMonitorStore.isWorkSim(callSlot, session.simMode, 1)) return
-        val builtInTrusted = CallMonitorStore.builtInTrusted(this)
+        val builtInTrusted = CallMonitorStore.nativeRecorderDetected(this) && CallMonitorStore.hasMediaPermission(this)
         // Android 9 and older give the mic to one app at a time: leave it to the phone's own recorder
         if (builtInTrusted && Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
         if (!CallMonitorStore.hasPermission(this, Manifest.permission.RECORD_AUDIO)) return

@@ -1,15 +1,17 @@
 package com.askeva.telesales_monitor
 
 import android.telecom.Call
-import android.telecom.CallAudioState
 import android.telecom.InCallService
 
 /**
- * Android binds this while AskEVA is the phone's Phone app (default dialer) and a call exists.
- * Everything is delegated to [CallManager] (state, Flutter call screen, notifications).
+ * Native Android InCallService for AskEVA.
+ * The Android Telecom framework binds to this service when a cellular phone call
+ * is created, received, or disconnected.
  *
- * It manages call signalling and control (ringing, answer, reject, end, hold, mute, speaker).
- * It does NOT grant access to the call audio.
+ * All state management and Flutter bridging are delegated cleanly to [CallManager].
+ *
+ * Notice: This service manages call signaling and control (ringing, answer, reject, end).
+ * It does NOT grant access to the raw cellular audio stream.
  */
 class AskEvaInCallService : InCallService() {
 
@@ -23,15 +25,10 @@ class AskEvaInCallService : InCallService() {
         CallManager.unregisterCall(call)
     }
 
-    @Deprecated("Deprecated in Java")
-    override fun onCallAudioStateChanged(audioState: CallAudioState?) {
-        @Suppress("DEPRECATION")
-        super.onCallAudioStateChanged(audioState)
-        CallManager.onAudioStateChanged(audioState)
-    }
-
     override fun onDestroy() {
-        CallManager.clearAll()
         super.onDestroy()
+        CallManager.activeCall?.let {
+            CallManager.unregisterCall(it)
+        }
     }
 }

@@ -2,6 +2,7 @@ package com.askeva.telesales_monitor
 
 import android.content.Context
 import android.os.Build
+import android.telecom.TelecomManager
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -20,16 +21,6 @@ object RecordingDiagnostics {
 
     private fun file(ctx: Context) = File(ctx.filesDir, "recording_diagnostics.json")
 
-    /** "1.0.6 (7)": lets admins see which phones still run an old build. */
-    private fun appVersion(ctx: Context): String = try {
-        val pi = ctx.packageManager.getPackageInfo(ctx.packageName, 0)
-        val code = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) pi.longVersionCode
-        else @Suppress("DEPRECATION") pi.versionCode.toLong()
-        "${pi.versionName} ($code)"
-    } catch (_: Exception) {
-        ""
-    }
-
     private fun readLocked(ctx: Context): JSONArray = try {
         val f = file(ctx)
         if (f.exists()) JSONArray(f.readText()) else JSONArray()
@@ -44,12 +35,10 @@ object RecordingDiagnostics {
             item.put("brand", Build.BRAND)
             item.put("model", Build.MODEL)
             item.put("sdkInt", Build.VERSION.SDK_INT)
-            item.put("appVersion", appVersion(ctx))
             item.put("accessibilityEnabled", CallAccessibilityService.isEnabled(ctx))
-            val dialer = DeviceSetupHelper.defaultDialerPackage(ctx)
-            item.put("dialerPackage", dialer)
-            // Phone by Google: whether switching to the phone's own Phone app would fix recording
-            if (dialer == DeviceSetupHelper.GOOGLE_DIALER) item.put("builtInDialer", DeviceSetupHelper.builtInDialer(ctx) != null)
+            item.put("dialerPackage", try {
+                (ctx.getSystemService(Context.TELECOM_SERVICE) as TelecomManager).defaultDialerPackage ?: ""
+            } catch (_: Exception) { "" })
             val arr = readLocked(ctx)
             arr.put(item)
             val trimmed = JSONArray()
