@@ -190,10 +190,10 @@ class _CallerDashboardState extends State<CallerDashboard> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(recordingProblem.title,
+                              Text('CALLS ARE NOT BEING RECORDED',
                                   style: AppTheme.label(size: 9.5, color: AppTheme.white, letterSpacing: 0.14)),
                               const SizedBox(height: 4),
-                              Text(recordingProblem.text, style: AppTheme.body(size: 12, color: AppTheme.white)),
+                              Text(recordingProblem, style: AppTheme.body(size: 12, color: AppTheme.white)),
                               const SizedBox(height: 4),
                               Text('TAP TO FIX →', style: AppTheme.mono(size: 10, color: AppTheme.white, weight: FontWeight.w700)),
                             ],

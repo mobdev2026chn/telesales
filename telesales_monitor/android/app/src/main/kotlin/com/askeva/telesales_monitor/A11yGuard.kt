@@ -33,7 +33,8 @@ object A11yGuard {
         ctx.checkSelfPermission(Manifest.permission.WRITE_SECURE_SETTINGS) == PackageManager.PERMISSION_GRANTED
 
     /** The phone's own recorder is trusted: AskEVA uploads its files and needs no accessibility service. */
-    fun builtInTrusted(ctx: Context): Boolean = CallMonitorStore.builtInTrusted(ctx)
+    fun builtInTrusted(ctx: Context): Boolean =
+        CallMonitorStore.nativeRecorderDetected(ctx) && CallMonitorStore.hasMediaPermission(ctx)
 
     /** Recording is covered on this phone without the user keeping the service on all the time. */
     fun managedOrNotNeeded(ctx: Context): Boolean = canSelfRepair(ctx) || builtInTrusted(ctx)

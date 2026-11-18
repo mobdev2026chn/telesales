@@ -304,7 +304,7 @@ function RecordingProblems({ range, queryKey }) {
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <Badge tone={kind.tone}>{kind.label}</Badge>
                   <UserLink user={{ id: i.callerId, name: i.callerName }} label={i.callerName || '—'} />
-                  <span className="muted">{fmtTs(i.at)} · {fmtDur(i.talkSeconds)}{i.phone ? ` · ${i.phone}` : ''}{i.android ? ` · Android ${i.android}` : ''}{i.appVersion ? ` · app ${i.appVersion}` : ''}</span>
+                  <span className="muted">{fmtTs(i.at)} · {fmtDur(i.talkSeconds)}{i.phone ? ` · ${i.phone}` : ''}{i.android ? ` · Android ${i.android}` : ''}</span>
                 </div>
                 <div style={{ fontSize: 'var(--ds-fs-sm)', marginTop: 4 }}>{i.reason}</div>
               </div>

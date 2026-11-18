@@ -14,7 +14,6 @@ import '../models/sim_card_info.dart';
 import '../models/notification_model.dart';
 import '../services/api_parsers.dart';
 import '../services/api_service.dart';
-import '../services/call_log_helpers.dart';
 import '../services/call_recording_setup.dart';
 import '../services/realtime_service.dart';
 import '../services/work_sim.dart';
@@ -656,9 +655,18 @@ class TeleProvider extends ChangeNotifier {
   }
 
   /// Why calls are probably not being recorded with sound, or null when recording looks fine.
-  /// The dashboard banner shows it; one tap opens call recording (CallRecordingSetupScreen autoStart).
-  RecordingProblem? get recordingProblem =>
-      recordingProblemFor(_recordingSetupStatus, autoRecordEnabled: _autoRecordEnabled);
+  /// The dashboard banner shows it; one tap turns recording on (CallRecordingSetupScreen autoStart).
+  String? get recordingProblem {
+    final s = _recordingSetupStatus;
+    if (s == null || !_autoRecordEnabled) return null;
+    if (!s.recordingReady) return 'Call recording is off. Tap once to turn it on.';
+    // Silent even though everything was on during the call: a real problem. A silent call made while
+    // Accessibility was off is fixed now that it is on (the next call shows whether recording works).
+    if (!s.builtInTrusted && s.lastCaptureStatus == 'silent' && s.lastCaptureA11y) {
+      return 'Your last call was recorded without sound. Tap to check call recording.';
+    }
+    return null;
+  }
 
   static String _syncAckKey(String userId) => 'call_sync_ack_ms_$userId';
 
@@ -1263,8 +1271,6 @@ class TeleProvider extends ChangeNotifier {
   DateTime? _lastCallSyncAck;
   DateTime? _lastCallSyncAt; // when the last sync request succeeded
   DateTime? get lastCallSyncAt => _lastCallSyncAt;
-  /// Work calls on this phone the server has not received yet (in-app call log).
-  int get unsyncedCallCount => countNotSynced(_callLogs, _lastCallSyncAck);
 
   Future<void> _syncCallsToServer() async {
     if (_callSyncInFlight) {
@@ -2714,36 +2720,6 @@ class TeleProvider extends ChangeNotifier {
 
   Future<void> launchCall(String phone) => makeDirectCall(phone);
 
-  // ---- AskEVA as the phone's Phone app ---------------------------------------------------------
-  String? _dialPrefill;
-
-  /// A tel: link or the dial pad was opened from another app: the Dialer tab with [number] typed in
-  /// ("" = empty keypad). Callers only (the Dialer tab is theirs). False while nobody is signed in.
-  bool openDialerWith(String number) {
-    if (!_isLoggedIn || !_isCallerContext) return false;
-    _dialPrefill = number;
-    _activeTabIndex = 2;
-    notifyListeners();
-    return true;
-  }
-
-  /// The number to type into the keypad, handed out once.
-  String? takeDialPrefill() {
-    final n = _dialPrefill;
-    _dialPrefill = null;
-    return n;
-  }
-
-  /// Name for [phone] on the call screen: the lead's, else the CRM contact's; null when unknown.
-  String? callerNameFor(String phone) {
-    if (last10Digits(phone).length < 6) return null;
-    for (final l in _leads) {
-      if (samePhone(l.phone, phone) && l.name.trim().isNotEmpty) return l.name.trim();
-    }
-    final crm = _crmContactNames[last10Digits(phone)];
-    return crm != null && crm.trim().isNotEmpty ? crm.trim() : null;
-  }
-
   Future<void> launchWhatsApp(String phone, {String text = 'Hello from BDE team!'}) async {
     var cleanPhone = phone.replaceAll(RegExp(r'[^0-9]'), '');
     if (cleanPhone.length == 10) {
@@ -2989,39 +2965,16 @@ class TeleProvider extends ChangeNotifier {
   DateTime? get sessionCallEndedAt => _sessionCallEndedAt;
 
   Timer? _sessionCallTimer;
-  bool _inCallCheckRunning = false;
-
-  /// Seconds after dialling before "no call" counts as ended (the phone needs a moment to start the call).
-  static const int _sessionCallGraceSeconds = 4;
 
   void _startSessionTimer() {
     _sessionCallTimer?.cancel();
     _callTimerSeconds = 0;
     _sessionCallStartedAt = DateTime.now();
     _sessionCallEndedAt = null;
-    late final Timer timer;
-    timer = Timer.periodic(const Duration(seconds: 1), (_) {
+    _sessionCallTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       _callTimerSeconds++;
       notifyListeners();
-      if (_callTimerSeconds >= _sessionCallGraceSeconds) _stopTimerIfCallEnded(timer);
     });
-    _sessionCallTimer = timer;
-  }
-
-  /// The phone call was cut (by either side, or never connected): stop the on-screen timer so the
-  /// seconds do not keep running, and CALL becomes available again.
-  Future<void> _stopTimerIfCallEnded(Timer timer) async {
-    if (_inCallCheckRunning) return;
-    _inCallCheckRunning = true;
-    try {
-      final inCall = await _telephonyChannel.invokeMethod<bool>('isInCall');
-      // Only the timer that asked: a redial meanwhile started a new one
-      if (inCall == false && identical(_sessionCallTimer, timer)) endSessionCall();
-    } catch (_) {
-      // Unknown (older native build): the timer stops when the screen closes, as before
-    } finally {
-      _inCallCheckRunning = false;
-    }
   }
 
   /// Starts a dialing session over [leads] (default: the caller's own open leads).
