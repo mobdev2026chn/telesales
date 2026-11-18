@@ -419,20 +419,29 @@ class ManagerDashboard extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        '01 · REALTIME TEAM CALL METRICS',
-                        style: AppTheme.label(
-                          size: 9,
-                          color: AppTheme.limeYellow,
-                          letterSpacing: 0.18,
+                      Flexible(
+                        child: Text(
+                          '01 · REALTIME TEAM CALL METRICS',
+                          style: AppTheme.label(
+                            size: 9,
+                            color: AppTheme.limeYellow,
+                            letterSpacing: 0.18,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      Text(
-                        tele.activeSimLabel,
-                        style: AppTheme.label(
-                          size: 9,
-                          color: AppTheme.muted,
-                          letterSpacing: 0.14,
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          tele.activeSimLabel,
+                          style: AppTheme.label(
+                            size: 9,
+                            color: AppTheme.paper,
+                            letterSpacing: 0.14,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
@@ -450,11 +459,15 @@ class ManagerDashboard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      Text(
-                        '$talkTimeFormatted talk',
-                        style: AppTheme.italicSerif(
-                          size: 20,
-                          color: AppTheme.greenGrass,
+                      Flexible(
+                        child: Text(
+                          '$talkTimeFormatted talk',
+                          style: AppTheme.italicSerif(
+                            size: 20,
+                            color: AppTheme.greenGrass,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
@@ -462,7 +475,7 @@ class ManagerDashboard extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     '$connectedCalls connected · $uniqueClients unique clients · target $teamTarget',
-                    style: AppTheme.body(size: 11, color: AppTheme.lightMuted),
+                    style: AppTheme.body(size: 11, color: AppTheme.paper),
                   ),
                   const SizedBox(height: 12),
 
@@ -728,57 +741,64 @@ class ManagerDashboard extends StatelessWidget {
                   const SizedBox(height: 18),
 
                   SizedBox(
-                    height: 100,
+                    height: 106,
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: hourlyData.map((item) {
                         final val = item['val'] as double;
                         final isPeak = item['isPeak'] as bool;
                         final calls = item['calls'] as String;
 
-                        return Column(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            if (isPeak) ...[
+                        return Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              if (isPeak) ...[
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 4,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.ink900,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      '$calls calls',
+                                      style: AppTheme.mono(
+                                        size: 7.5,
+                                        color: AppTheme.limeYellow,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                              ],
                               Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
+                                width: 14,
+                                height: (val * 60).clamp(6.0, 60.0),
                                 decoration: BoxDecoration(
-                                  color: AppTheme.ink900,
-                                  borderRadius: BorderRadius.circular(4),
+                                  color: isPeak
+                                      ? AppTheme.greenNeon
+                                      : AppTheme.ink900,
+                                  borderRadius: BorderRadius.circular(3),
                                 ),
+                              ),
+                              const SizedBox(height: 6),
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
                                 child: Text(
-                                  '$calls calls',
+                                  item['hour'] as String,
                                   style: AppTheme.mono(
                                     size: 7.5,
-                                    color: AppTheme.limeYellow,
+                                    color: AppTheme.muted,
                                   ),
                                 ),
                               ),
-                              const SizedBox(height: 4),
                             ],
-                            Container(
-                              width: 22,
-                              height: (val * 60).clamp(6.0, 60.0),
-                              decoration: BoxDecoration(
-                                color: isPeak
-                                    ? AppTheme.greenNeon
-                                    : AppTheme.ink900,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              item['hour'] as String,
-                              style: AppTheme.mono(
-                                size: 7.5,
-                                color: AppTheme.muted,
-                              ),
-                            ),
-                          ],
+                          ),
                         );
                       }).toList(),
                     ),

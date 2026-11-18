@@ -11,6 +11,7 @@ import 'caller/dialer_screen.dart';
 // import 'caller/caller_stats_screen.dart';
 import 'caller/caller_profile_screen.dart';
 import 'caller/book_demo_screen.dart';
+import 'login_screen.dart';
 import 'shared/leads_screen.dart';
 import 'shared/recordings_screen.dart';
 import 'shared/more_screen.dart';
@@ -44,6 +45,9 @@ class _MainShellState extends State<MainShell> {
   @override
   Widget build(BuildContext context) {
     final tele = Provider.of<TeleProvider>(context);
+    if (!tele.isLoggedIn) {
+      return const LoginScreen();
+    }
     _maybeAskWorkSim(tele);
     final isManager = tele.currentRole == UserRole.manager && !tele.isManagerCallerMode;
     final isEmpDetailOpen = tele.selectedEmployee != null;

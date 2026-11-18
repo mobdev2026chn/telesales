@@ -1960,13 +1960,13 @@ class TeleProvider extends ChangeNotifier {
 
   Future<bool> logout() async {
     try {
-      // Keep the local session until the server confirms the explicit logout.
-      if (!await ApiService.logout()) return false;
+      // Best-effort notify backend to record logout timestamp and update presence
+      await ApiService.logout();
     } catch (error) {
       debugPrint('Logout request failed: $error');
-      return false;
     }
     await purgeUserSession();
+    onSessionExpired?.call();
     return true;
   }
 

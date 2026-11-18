@@ -339,12 +339,12 @@ class _MoreScreenState extends State<MoreScreen> {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Text('Manage telesales team, add users/callers & view cloud telemetry.', style: AppTheme.body(size: 11, color: AppTheme.lightMuted)),
+                    Text('Manage telesales team, add users/callers & view cloud telemetry.', style: AppTheme.body(size: 11, color: AppTheme.paper)),
                     GestureDetector(
                       onTap: () {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            backgroundColor: AppTheme.ink900,
+                            backgroundColor: AppTheme.paper,
                             content: Text('ℹ Admin Web Portal (http://localhost:8080) handles role provisioning.', style: AppTheme.body(size: 12, color: AppTheme.limeYellow)),
                           ),
                         );
@@ -421,7 +421,7 @@ class _MoreScreenState extends State<MoreScreen> {
                               style: AppTheme.headline(size: 16, color: AppTheme.white),
                             ),
                             const SizedBox(height: 3),
-                            Text('Call logs, outcomes & team performance', style: AppTheme.body(size: 11, color: AppTheme.lightMuted)),
+                            Text('Call logs, outcomes & team performance', style: AppTheme.body(size: 11, color: AppTheme.paper)),
                           ],
                         ),
                         GestureDetector(
@@ -692,26 +692,8 @@ class _MoreScreenState extends State<MoreScreen> {
               ),
             ),
             onPressed: () async {
-              final navigator = Navigator.of(context);
               Navigator.of(ctx).pop();
-              final loggedOut = await tele.logout();
-              if (!loggedOut) {
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Could not log out. Please check your connection and try again.')),
-                );
-                return;
-              }
-              if (!context.mounted) return;
-              navigator.pushAndRemoveUntil(
-                PageRouteBuilder(
-                  pageBuilder: (context, animation, secondaryAnimation) => const LoginScreen(),
-                  transitionsBuilder: (context, animation, secondaryAnimation, child) =>
-                      FadeTransition(opacity: animation, child: child),
-                  transitionDuration: const Duration(milliseconds: 300),
-                ),
-                (route) => false,
-              );
+              await tele.logout();
             },
             child: Text('YES, LOGOUT', style: AppTheme.label(size: 11, color: AppTheme.white)),
           ),

@@ -234,7 +234,7 @@ class _CallerDashboardState extends State<CallerDashboard> {
                         const SizedBox(width: 10),
                         Text(
                           'calls today',
-                          style: AppTheme.body(size: 13, color: AppTheme.lightMuted),
+                          style: AppTheme.body(size: 13, color: AppTheme.paper),
                         ),
                       ],
                     ),
