@@ -296,7 +296,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                             rank < 10 ? '0$rank' : '$rank',
                             style: AppTheme.headline(
                               size: 24,
-                              color: isTop ? AppTheme.greenNeon : AppTheme.ink900,
+                              color: isTop ? AppTheme.greenNeon : AppTheme.paper,
                             ),
                           ),
                         ),
@@ -340,7 +340,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                                 '$calls/100 calls (${empData['connectRate']}% conn) · $connected conn',
                                 style: AppTheme.body(
                                   size: 11,
-                                  color: isTop ? AppTheme.lightMuted : AppTheme.muted,
+                                  color: isTop ? AppTheme.paper : AppTheme.paper,
                                 ),
                               ),
                               const SizedBox(height: 4),
@@ -377,7 +377,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                               'TALK TIME',
                               style: AppTheme.label(
                                 size: 8,
-                                color: isTop ? AppTheme.lightMuted : AppTheme.muted,
+                                color: isTop ? AppTheme.paper : AppTheme.paper,
                                 letterSpacing: 0.12,
                               ),
                             ),

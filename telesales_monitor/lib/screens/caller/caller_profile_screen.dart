@@ -426,7 +426,7 @@ class _CallerProfileScreenState extends State<CallerProfileScreen> {
                             const SizedBox(height: 2),
                             Text(
                               '$phoneStr · ${tele.activeSimLabel}',
-                              style: AppTheme.body(size: 11, color: AppTheme.lightMuted),
+                              style: AppTheme.body(size: 11, color: AppTheme.paper),
                             ),
                           ],
                         ),
@@ -637,30 +637,8 @@ class _CallerProfileScreenState extends State<CallerProfileScreen> {
               ),
             ),
             onPressed: () async {
-              final navigator = Navigator.of(context);
               Navigator.of(ctx).pop();
-              final loggedOut = await tele.logout();
-              if (!loggedOut) {
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Could not log out. Please check your connection and try again.',
-                    ),
-                  ),
-                );
-                return;
-              }
-              if (!context.mounted) return;
-              navigator.pushAndRemoveUntil(
-                PageRouteBuilder(
-                  pageBuilder: (context, animation, secondaryAnimation) => const LoginScreen(),
-                  transitionsBuilder: (context, animation, secondaryAnimation, child) =>
-                      FadeTransition(opacity: animation, child: child),
-                  transitionDuration: const Duration(milliseconds: 300),
-                ),
-                (route) => false,
-              );
+              await tele.logout();
             },
             child: Text('YES, LOGOUT', style: AppTheme.label(size: 11, color: AppTheme.white)),
           ),

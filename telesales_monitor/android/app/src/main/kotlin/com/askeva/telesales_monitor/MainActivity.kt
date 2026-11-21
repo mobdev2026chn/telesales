@@ -382,26 +382,62 @@ class MainActivity : FlutterActivity() {
             // 3. Download or stream via HTTP(S) (the URL already carries ?token=)
             if (audioUrl.startsWith("http")) {
                 ioExecutor.execute {
-                    val downloaded = File(cacheDir, "temp_play_${System.currentTimeMillis()}.audio")
+                    var currentUrl = audioUrl
                     try {
-                        val url = java.net.URL(audioUrl)
-                        val conn = url.openConnection()
-                        conn.connectTimeout = 8000
-                        conn.readTimeout = 20000
-                        val code = (conn as? java.net.HttpURLConnection)?.responseCode ?: 200
-                        if (code == 404 || code == 403 || code == 401) {
+                        var conn = java.net.URL(currentUrl).openConnection() as java.net.HttpURLConnection
+                        conn.instanceFollowRedirects = true
+                        conn.connectTimeout = 10000
+                        conn.readTimeout = 25000
+
+                        var redirects = 0
+                        while (redirects < 5) {
+                            val code = conn.responseCode
+                            if (code == 404 || code == 403 || code == 401) {
+                                mainHandler.post {
+                                    showToast(if (code == 404) "⚠️ The audio of this recording is missing on the server" else "⚠️ Not allowed to play this recording")
+                                    result.success(false)
+                                }
+                                return@execute
+                            }
+                            // Handle cross-protocol redirects (e.g. HTTP -> HTTPS Cloudinary CDN)
+                            if (code in 301..308) {
+                                val location = conn.getHeaderField("Location")
+                                if (!location.isNullOrEmpty()) {
+                                    conn.disconnect()
+                                    currentUrl = location
+                                    conn = java.net.URL(currentUrl).openConnection() as java.net.HttpURLConnection
+                                    conn.connectTimeout = 10000
+                                    conn.readTimeout = 25000
+                                    redirects++
+                                    continue
+                                }
+                            }
+                            break
+                        }
+
+                        val ext = when {
+                            currentUrl.contains(".mp4", ignoreCase = true) -> ".mp4"
+                            currentUrl.contains(".wav", ignoreCase = true) -> ".wav"
+                            currentUrl.contains(".3gp", ignoreCase = true) -> ".3gp"
+                            else -> ".m4a"
+                        }
+                        val downloaded = File(cacheDir, "temp_play_${System.currentTimeMillis()}$ext")
+                        val bytes = conn.getInputStream().use { it.readBytes() }
+                        conn.disconnect()
+
+                        if (bytes.size < 500) {
                             mainHandler.post {
-                                showToast(if (code == 404) "⚠️ The audio of this recording is missing on the server" else "⚠️ Not allowed to play this recording")
+                                showToast("⚠️ This recording could not be played")
                                 result.success(false)
                             }
                             return@execute
                         }
-                        val bytes = conn.getInputStream().use { it.readBytes() }
+
                         downloaded.writeBytes(bytes)
                         mainHandler.post { playLocalAudioFile(downloaded.absolutePath, result, downloaded) }
                     } catch (e: Exception) {
-                        try { downloaded.delete() } catch (_: Exception) {}
-                        mainHandler.post { playDirectStream(audioUrl, result) }
+                        e.printStackTrace()
+                        mainHandler.post { playDirectStream(currentUrl, result) }
                     }
                 }
                 return
