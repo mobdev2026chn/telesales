@@ -1,0 +1,194 @@
+<!doctype html>
+<!-- One Play Store screenshot (1080 x 1920): screenshot.html?shot=leads   (&debug shows the detected text boxes).
+     Rendered by render-screenshots.ps1; captions and text replacements live in screenshots-config.js. -->
+<html>
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;700&family=Playfair+Display:ital,wght@1,500;1,600&family=Space+Mono:wght@400;700&display=block" rel="stylesheet">
+<style>
+  :root { --ink: #10180C; --paper: #EFECE3; --green: #3DC838; --lime: #C8FF4A; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1080px; height: 1920px; overflow: hidden; background: var(--ink); color: var(--paper); font-family: 'Archivo', sans-serif; }
+  .caption { position: absolute; left: 60px; right: 60px; top: 84px; text-align: center; }
+  .eyebrow { display: inline-flex; align-items: center; gap: 14px; font-weight: 600; font-size: 24px; letter-spacing: 0.18em; text-transform: uppercase; }
+  .eyebrow::before { content: ''; width: 16px; height: 16px; background: var(--green); }
+  h1 { margin-top: 20px; font-weight: 400; line-height: 1; white-space: nowrap; }
+  .caps { font-family: 'Anton', sans-serif; font-size: 100px; text-transform: uppercase; }
+  .accent { font-family: 'Playfair Display', serif; font-style: italic; font-weight: 600; font-size: 92px; color: var(--lime); }
+  .accent i { font-style: normal; color: var(--green); }
+  .sub { margin-top: 18px; font-size: 30px; font-weight: 500; color: rgba(239, 236, 227, 0.82); }
+  .phone { position: absolute; left: 181px; top: 362px; width: 717px; height: 1508px; border-radius: 40px; overflow: hidden; box-shadow: 12px 12px 0 var(--lime); }
+  canvas { display: block; }
+  .band { position: absolute; left: 0; right: 0; bottom: 0; height: 14px; background: linear-gradient(135deg, #3DC838 0%, #7FD63B 55%, #C8FF4A 100%); }
+</style>
+<script src="screens-data.js"></script>
+<script src="screenshots-config.js"></script>
+</head>
+<body>
+  <div class="caption">
+    <div class="eyebrow" id="eyebrow"></div>
+    <h1><span class="caps" id="caps"></span> <span class="accent" id="accent"></span></h1>
+    <p class="sub" id="sub"></p>
+  </div>
+  <div class="phone"><canvas id="out" width="717" height="1508"></canvas></div>
+  <div class="band"></div>
+<script>
+(async () => {
+  const W = 717, H = 1600, CROP_TOP = 62, CROP_H = 1508;
+  const params = new URLSearchParams(location.search);
+  const shot = window.SHOTS[params.get('shot')];
+  const debug = params.has('debug');
+
+  document.getElementById('eyebrow').textContent = shot.eyebrow;
+  document.getElementById('caps').textContent = shot.caps;
+  document.getElementById('accent').innerHTML = shot.accent + '<i>.</i>';
+  document.getElementById('sub').textContent = shot.sub;
+
+  const fontsUsed = new Set(shot.overlays.filter(o => o.font).map(o => o.font));
+  await Promise.all([...fontsUsed].map(f => document.fonts.load(f.replace(/'([^']+)'$/, "40px '$1'"))));
+  await document.fonts.ready;
+
+  // onload, not img.decode(): headless Chrome's --virtual-time-budget waits for loads but not decodes.
+  const img = await new Promise((resolve, reject) => {
+    const i = new Image();
+    i.onload = () => resolve(i);
+    i.onerror = () => reject(new Error('Could not load screenshot ' + shot.image));
+    i.src = window.SCREENS[shot.image];
+  });
+
+  const src = document.createElement('canvas');
+  src.width = W; src.height = H;
+  const ctx = src.getContext('2d');
+  ctx.drawImage(img, 0, 0);
+  const pixels = ctx.getImageData(0, 0, W, H).data;   // original pixels, before any patching
+  const px = (x, y) => { const i = (y * W + x) * 4; return [pixels[i], pixels[i + 1], pixels[i + 2]]; };
+  const dist = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]);
+
+  // Finds the text inside a loose box. Returns `loose` (every pixel that differs from the background,
+  // for covering) and `core` (pixels at least half as dark as the text itself, for measuring),
+  // ignoring rows that are part of a straight line such as a tag's border.
+  function analyse([rx0, ry0, rx1, ry1], threshold) {
+    const border = [];
+    for (let x = rx0; x <= rx1; x++) { border.push(px(x, ry0), px(x, ry1)); }
+    for (let y = ry0; y <= ry1; y++) { border.push(px(rx0, y), px(rx1, y)); }
+    const bg = [0, 1, 2].map(c => border.map(p => p[c]).sort((a, b) => a - b)[border.length >> 1]);
+    const w = rx1 - rx0 + 1, h = ry1 - ry0 + 1, d = new Float32Array(w * h);
+    let fg = bg, best = 0;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const p = px(rx0 + x, ry0 + y), v = dist(p, bg);
+      d[y * w + x] = v;
+      if (v > best) { best = v; fg = p; }
+    }
+    const loose = Math.min(threshold, best * 0.6), core = best * 0.5;
+    const lineRow = new Array(h).fill(false);
+    for (let y = 0; y < h; y++) {
+      let run = 0, longest = 0;
+      for (let x = 0; x < w; x++) { run = d[y * w + x] > loose ? run + 1 : 0; longest = Math.max(longest, run); }
+      lineRow[y] = longest >= Math.max(30, w * 0.6);
+    }
+    // The soft edge of a border line is not text either.
+    const isLine = lineRow.slice();
+    for (let y = 0; y < h; y++) if (isLine[y]) for (let k = -2; k <= 2; k++) if (y + k >= 0 && y + k < h) lineRow[y + k] = true;
+    const box = thr => {
+      let x0 = Infinity, y0 = Infinity, x1 = -1, y1 = -1;
+      for (let y = 0; y < h; y++) if (!lineRow[y]) for (let x = 0; x < w; x++) if (d[y * w + x] > thr) {
+        x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+      }
+      if (x1 < 0) throw new Error('No text found in region ' + [rx0, ry0, rx1, ry1]);
+      return { x0: rx0 + x0, y0: ry0 + y0, x1: rx0 + x1, y1: ry0 + y1 };
+    };
+    return { loose: box(loose), core: box(core), bg, fg };
+  }
+  const rgb = c => `rgb(${c[0]},${c[1]},${c[2]})`;
+  const colour = c => Array.isArray(c) ? rgb(px(c[0], c[1])) : c;
+  const fontAt = (font, size) => font.replace(/'([^']+)'$/, `${size}px '$1'`);
+
+  const placed = {}, draws = [], cuts = [];
+  for (const o of shot.overlays) {
+    if (o.type === 'rect') {            // fill a box: { box, color: [x, y] to sample, or a CSS colour }
+      if (!debug) { ctx.fillStyle = colour(o.color); ctx.fillRect(o.box[0], o.box[1], o.box[2] - o.box[0] + 1, o.box[3] - o.box[1] + 1); }
+      continue;
+    }
+    if (o.type === 'copy') {            // copy original pixels: { from: box, to: [x, y] }
+      const [x0, y0, x1, y1] = o.from;
+      if (!debug) ctx.drawImage(img, x0, y0, x1 - x0 + 1, y1 - y0 + 1, o.to[0], o.to[1], x1 - x0 + 1, y1 - y0 + 1);
+      continue;
+    }
+    if (o.type === 'cut') { cuts.push(o); continue; }   // done last, after all text
+
+    if (o.cont) {                       // more text straight after another overlay's, same font and line
+      if (debug) continue;
+      const prev = placed[o.cont];
+      ctx.font = prev.font; ctx.letterSpacing = prev.ls;
+      const m = ctx.measureText(o.text);
+      const x = prev.drawX + prev.advance;
+      draws.push({ font: prev.font, ls: prev.ls, text: o.text, x, y: prev.baseline, color: o.colorFrom ? rgb(analyse(o.colorFrom, 90).fg) : colour(o.color) });
+      if (o.id) placed[o.id] = { ...prev, drawX: x, advance: m.width, newRight: x + m.actualBoundingBoxRight };
+      continue;
+    }
+
+    const a = analyse(o.region, o.threshold ?? 90);
+    const t = a.core;
+    const p = o.patch ? analyse(o.patch, o.threshold ?? 90).loose : a.loose;
+
+    if (debug) {
+      ctx.strokeStyle = 'rgba(0,120,255,0.8)'; ctx.lineWidth = 1;
+      ctx.strokeRect(o.region[0] + 0.5, o.region[1] + 0.5, o.region[2] - o.region[0], o.region[3] - o.region[1]);
+      ctx.strokeStyle = 'red';
+      ctx.strokeRect(p.x0 - 2.5, p.y0 - 2.5, p.x1 - p.x0 + 5, p.y1 - p.y0 + 5);
+      continue;
+    }
+
+    // Size: the original text's ink height at 100px vs. its measured height (or a fixed size).
+    ctx.letterSpacing = '0px';
+    ctx.font = fontAt(o.font, 100);
+    const m100 = ctx.measureText(o.orig);
+    const size = o.size ?? (t.y1 - t.y0 + 1) / (m100.actualBoundingBoxAscent + m100.actualBoundingBoxDescent) * 100;
+    ctx.font = fontAt(o.font, size);
+    const mOrig = ctx.measureText(o.orig);
+    let ls = typeof o.ls === 'number' ? o.ls : 0;
+    if (o.ls === 'auto' && o.orig.length > 1) {
+      ls = ((t.x1 - t.x0 + 1) - (mOrig.actualBoundingBoxLeft + mOrig.actualBoundingBoxRight)) / (o.orig.length - 1);
+    }
+    const baseline = t.y0 + mOrig.actualBoundingBoxAscent;
+
+    // Cover the original, with a margin for anti-aliased edges (big text has a wider soft edge).
+    const mg = (p.y1 - p.y0) > 40 ? 4 : 2;
+    ctx.fillStyle = rgb(a.bg);
+    ctx.fillRect(p.x0 - mg, p.y0 - mg, p.x1 - p.x0 + 1 + 2 * mg, p.y1 - p.y0 + 1 + 2 * mg);
+
+    ctx.letterSpacing = ls.toFixed(2) + 'px';
+    const m = ctx.measureText(o.text);
+    const inkW = m.actualBoundingBoxLeft + m.actualBoundingBoxRight;
+    let inkLeft = t.x0;
+    if (o.align === 'center') inkLeft = (t.x0 + t.x1 + 1) / 2 - inkW / 2;
+    if (o.align === 'right') inkLeft = t.x1 + 1 - inkW;
+    if (o.after) inkLeft = placed[o.after].newRight + (t.x0 - placed[o.after].origRight);
+    const drawX = inkLeft + m.actualBoundingBoxLeft;
+    draws.push({ font: ctx.font, ls: ctx.letterSpacing, text: o.text, x: drawX, y: baseline, color: o.color ? colour(o.color) : rgb(a.fg) });
+    if (o.id) placed[o.id] = { origRight: p.x1, newRight: inkLeft + inkW, font: ctx.font, ls: ctx.letterSpacing, baseline, drawX, advance: m.width };
+  }
+
+  // Text goes on after every patch, so a longer replacement is not covered by the next patch.
+  ctx.textAlign = 'left';
+  for (const d of draws) {
+    ctx.font = d.font; ctx.letterSpacing = d.ls; ctx.fillStyle = d.color;
+    ctx.fillText(d.text, d.x, d.y);
+  }
+
+  // Remove rows (e.g. a banner): rows y1..end move up to y0, then fillFrom..end is filled.
+  for (const c of cuts) {
+    if (debug) continue;
+    const strip = ctx.getImageData(0, c.y1, W, c.end - c.y1);
+    ctx.putImageData(strip, 0, c.y0);
+    ctx.fillStyle = colour(c.color);
+    ctx.fillRect(0, c.fillFrom, W, c.end - c.fillFrom);
+  }
+
+  const out = document.getElementById('out').getContext('2d');
+  out.drawImage(src, 0, CROP_TOP, W, CROP_H, 0, 0, W, CROP_H);
+  document.title = 'done';
+})().catch(e => { document.body.innerHTML = '<pre style="color:red;font-size:28px;padding:40px;white-space:pre-wrap">' + e.stack + '</pre>'; });
+</script>
+</body>
+</html>

@@ -168,13 +168,62 @@ CallType callTypeFromNative(String? s) {
   }
 }
 
-/// Calls in a small replay window around the last acknowledgement. Android can
+/// How far before the last acknowledged call the sync looks again. Android writes a call to the
+/// log when it ends, stamped with its START time: a long call that ends after a later, shorter
+/// call was already sent would otherwise never be sent. Calls up to this long are caught. The
+/// server de-duplicates (caller + number + exact call time), so sending a call again is harmless.
+const Duration kCallSyncReplayWindow = Duration(hours: 3);
+
+/// Most calls sent in one /calls/sync request (the server accepts up to 5000 and 2 MB).
+const int kCallSyncBatchSize = 500;
+
+/// Calls in a replay window around the last acknowledgement. Android can
 /// expose a call before its final duration/type is written, so replaying recent
 /// rows lets the server update the existing deduplicated record.
-List<CallLogModel> callsNewerThan(List<CallLogModel> calls, DateTime? lastAcked) {
+List<CallLogModel> callsNewerThan(
+  List<CallLogModel> calls,
+  DateTime? lastAcked, {
+  Duration replayWindow = kCallSyncReplayWindow,
+}) {
   if (lastAcked == null) return List<CallLogModel>.of(calls);
-  final replayFrom = lastAcked.subtract(const Duration(minutes: 10));
+  final replayFrom = lastAcked.subtract(replayWindow);
   return calls.where((c) => !c.timestamp.isBefore(replayFrom)).toList();
+}
+
+/// The server's de-duplication key for a call: exact start time + number.
+String callSyncKey(CallLogModel c) => '${c.timestamp.millisecondsSinceEpoch}_${last10Digits(c.phoneNumber)}';
+
+/// The call facts the server updates on a re-send (type, talk time, SIM).
+String callSyncSignature(CallLogModel c) => '${c.type.name}_${c.duration.inSeconds}_${c.simSlot}';
+
+/// Calls to send, oldest first: inside the replay window and not already acknowledged by the
+/// server with the same facts ([sent]: [callSyncKey] -> [callSyncSignature]). A call whose
+/// duration or type changed after it was sent is sent again.
+List<CallLogModel> callsToSync(
+  List<CallLogModel> calls,
+  DateTime? lastAcked,
+  Map<String, String> sent, {
+  Duration replayWindow = kCallSyncReplayWindow,
+}) {
+  final list = callsNewerThan(calls, lastAcked, replayWindow: replayWindow)
+      .where((c) => sent[callSyncKey(c)] != callSyncSignature(c))
+      .toList()
+    ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+  return list;
+}
+
+/// Forgets acknowledged calls that are older than the replay window (they are never re-checked).
+void pruneSentCallSignatures(
+  Map<String, String> sent,
+  DateTime? lastAcked, {
+  Duration replayWindow = kCallSyncReplayWindow,
+}) {
+  if (lastAcked == null) return;
+  final cutoff = lastAcked.subtract(replayWindow).millisecondsSinceEpoch;
+  sent.removeWhere((key, _) {
+    final ms = int.tryParse(key.split('_').first);
+    return ms != null && ms < cutoff;
+  });
 }
 
 DateTime? newestTimestamp(List<CallLogModel> calls) {
@@ -221,4 +270,123 @@ DateTime normalizeCallbackTime(DateTime candidate, DateTime now) {
 DateTime defaultCallbackTime(DateTime now, {int hoursAhead = 3}) {
   final hour = (now.hour + hoursAhead).clamp(9, 18);
   return normalizeCallbackTime(DateTime(now.year, now.month, now.day, hour, 0), now);
+}
+
+// ---------------------------------------------------------------- Live team board (manager home)
+
+enum TeamLiveState { onCall, available, onBreak, offline }
+
+class TeamLiveMember {
+  final String id;
+  final String name;
+  final TeamLiveState state;
+  final String breakType;
+  final bool recordingOff;
+
+  const TeamLiveMember({
+    required this.id,
+    required this.name,
+    required this.state,
+    this.breakType = '',
+    this.recordingOff = false,
+  });
+}
+
+class TeamLiveBoard {
+  final List<TeamLiveMember> members;
+
+  /// Names of members with auto call recording turned off; null when the server did not say.
+  final List<String>? recordingOffNames;
+
+  const TeamLiveBoard({required this.members, this.recordingOffNames});
+
+  List<TeamLiveMember> inState(TeamLiveState s) => members.where((m) => m.state == s).toList();
+}
+
+/// Live status of the team from GET /dashboard/stats (no extra request):
+/// - `callerLiveStatuses`: `status` ON CALL (a call in the last 15 minutes) / ONLINE / OFFLINE;
+/// - `teamMembers`: `online`, `onBreak`, `breakType`, `autoRecordEnabled` per member;
+/// - `disabledRecorders`: members with auto call recording off.
+/// A member on a break counts as on break first, then on call, then available (online), else offline.
+/// Null when the response carries neither list.
+TeamLiveBoard? teamLiveBoardFromStats(Map<String, dynamic>? stats) {
+  if (stats == null) return null;
+  final liveRaw = stats['callerLiveStatuses'];
+  final membersRaw = stats['teamMembers'];
+  if (liveRaw is! List && membersRaw is! List) return null;
+
+  final liveById = <String, String>{};
+  final liveRows = <Map<String, dynamic>>[];
+  if (liveRaw is List) {
+    for (final r in liveRaw.whereType<Map>()) {
+      final row = Map<String, dynamic>.from(r);
+      liveRows.add(row);
+      final id = asString(row['id']);
+      if (id.isNotEmpty) liveById[id] = asString(row['status']).toUpperCase();
+    }
+  }
+
+  final disabledIds = <String>{};
+  List<String>? recordingOffNames;
+  final disabledRaw = stats['disabledRecorders'];
+  if (disabledRaw is List) {
+    recordingOffNames = [];
+    for (final r in disabledRaw.whereType<Map>()) {
+      final id = asString(r['id']);
+      if (id.isNotEmpty) disabledIds.add(id);
+      final name = asString(r['name'], asString(r['phone']));
+      if (name.isNotEmpty) recordingOffNames.add(name);
+    }
+  }
+
+  final rows = membersRaw is List && membersRaw.isNotEmpty
+      ? membersRaw.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList()
+      : liveRows;
+  final fromMembersFlag = <String>[];
+  var anyRecordingFlag = false;
+  final members = <TeamLiveMember>[];
+  for (final m in rows) {
+    final id = asString(m['id']);
+    final name = asString(m['name'], asString(m['phone'], '—'));
+    final live = liveById[id] ?? asString(m['status']).toUpperCase();
+    final onBreak = asBool(m['onBreak']);
+    final online = asBool(m['online']) || live == 'ONLINE';
+    final TeamLiveState state;
+    if (onBreak) {
+      state = TeamLiveState.onBreak;
+    } else if (live == 'ON CALL') {
+      state = TeamLiveState.onCall;
+    } else if (online) {
+      state = TeamLiveState.available;
+    } else {
+      state = TeamLiveState.offline;
+    }
+    var recordingOff = id.isNotEmpty && disabledIds.contains(id);
+    if (m.containsKey('autoRecordEnabled')) {
+      anyRecordingFlag = true;
+      if (!asBool(m['autoRecordEnabled'], true)) {
+        recordingOff = true;
+        fromMembersFlag.add(name);
+      }
+    }
+    members.add(TeamLiveMember(
+      id: id,
+      name: name,
+      state: state,
+      breakType: onBreak ? asString(m['breakType'], 'Break') : '',
+      recordingOff: recordingOff,
+    ));
+  }
+  if (recordingOffNames == null && anyRecordingFlag) recordingOffNames = fromMembersFlag;
+  return TeamLiveBoard(members: members, recordingOffNames: recordingOffNames);
+}
+
+/// The team's daily call target (`teamDailyTarget`: sum of the agents' (callers') targets in the
+/// selected scope) and the calls counted for the selected period (`totalCalls`). Null when the server
+/// did not send a target.
+({int target, int calls})? teamTargetFromStats(Map<String, dynamic>? stats) {
+  if (stats == null || !stats.containsKey('teamDailyTarget')) return null;
+  final target = asInt(stats['teamDailyTarget'], -1);
+  if (target <= 0) return null;
+  return (target: target, calls: asInt(stats['totalCalls']));
 }

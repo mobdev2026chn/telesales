@@ -26,6 +26,15 @@ object CallUi {
     /** MainActivity extras: show the call screen (also over the lock screen) / answer the ringing call. */
     const val EXTRA_SHOW_CALL = "askeva_show_call"
     const val EXTRA_ANSWER = "askeva_answer_call"
+    const val EXTRA_ANSWER_TOKEN = "askeva_answer_token"
+
+    /**
+     * Secret carried only by our own Answer button. MainActivity is exported (launcher), so any app could
+     * send it EXTRA_ANSWER; without this token that intent no longer answers the call.
+     */
+    private val answerToken: String = java.util.UUID.randomUUID().toString()
+
+    fun isAnswerTokenValid(token: String?): Boolean = token != null && token == answerToken
 
     private var shownCallId: String? = null
 
@@ -66,6 +75,7 @@ object CallUi {
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             .putExtra(EXTRA_SHOW_CALL, true)
             .putExtra(EXTRA_ANSWER, answer)
+            .apply { if (answer) putExtra(EXTRA_ANSWER_TOKEN, answerToken) }
 
     private fun activityPi(ctx: Context, request: Int, answer: Boolean) = PendingIntent.getActivity(
         ctx, request, callScreenIntent(ctx, answer), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,

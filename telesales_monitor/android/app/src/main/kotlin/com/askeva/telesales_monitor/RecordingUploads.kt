@@ -52,6 +52,19 @@ data class QueuedRecording(
     val createdAtMs: Long = System.currentTimeMillis(),
     /** Own recordings: how the loudspeaker was handled ([SpeakerAssist.Session.result]), "" = not used. */
     val speaker: String = "",
+    /**
+     * Built-in recordings: AskEVA's own recording of the same call, kept until the built-in file has
+     * uploaded. Used instead when the built-in file disappears or is rejected. "" = none.
+     */
+    val fallbackPath: String = "",
+    val fallbackSpeaker: String = "",
+    /**
+     * Set aside (not deleted) after the server rejected it or after [RecordingUploader] gave up retrying.
+     * Parked items are retried once a day and removed only when they are too old. 0 = active.
+     */
+    val parkedAtMs: Long = 0L,
+    /** Why it was parked, e.g. "HTTP 400" (never shown to customers, kept for support). */
+    val lastError: String = "",
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("id", id).put("userId", userId).put("source", source).put("path", path).put("uri", uri)
@@ -59,6 +72,8 @@ data class QueuedRecording(
         .put("contactName", contactName).put("type", type).put("simSlot", simSlot)
         .put("durationSeconds", durationSeconds).put("attempts", attempts).put("createdAtMs", createdAtMs)
         .put("speaker", speaker)
+        .put("fallbackPath", fallbackPath).put("fallbackSpeaker", fallbackSpeaker)
+        .put("parkedAtMs", parkedAtMs).put("lastError", lastError)
 
     companion object {
         fun newId(): String = UUID.randomUUID().toString()
@@ -79,6 +94,10 @@ data class QueuedRecording(
             attempts = o.optInt("attempts"),
             createdAtMs = o.optLong("createdAtMs", System.currentTimeMillis()),
             speaker = o.optString("speaker"),
+            fallbackPath = o.optString("fallbackPath"),
+            fallbackSpeaker = o.optString("fallbackSpeaker"),
+            parkedAtMs = o.optLong("parkedAtMs", 0L),
+            lastError = o.optString("lastError"),
         )
     }
 }
@@ -87,32 +106,60 @@ data class QueuedRecording(
 object RecordingQueue {
     private val lock = Any()
     private fun file(ctx: Context) = File(ctx.filesDir, "recording_upload_queue.json")
+    /** The previous good copy: read when the main file is missing or damaged, so the queue is never wiped. */
+    private fun backupFile(ctx: Context) = File(ctx.filesDir, "recording_upload_queue.json.bak")
 
     fun all(ctx: Context): List<QueuedRecording> = synchronized(lock) { readLocked(ctx) }
 
+    private fun parse(f: File): MutableList<QueuedRecording> {
+        val arr = JSONArray(f.readText())
+        return (0 until arr.length()).mapNotNull { i -> arr.optJSONObject(i)?.let { QueuedRecording.fromJson(it) } }.toMutableList()
+    }
+
     private fun readLocked(ctx: Context): MutableList<QueuedRecording> {
-        return try {
-            val f = file(ctx)
-            if (!f.exists()) return mutableListOf()
-            val arr = JSONArray(f.readText())
-            (0 until arr.length()).mapNotNull { i -> arr.optJSONObject(i)?.let { QueuedRecording.fromJson(it) } }.toMutableList()
-        } catch (_: Exception) {
-            mutableListOf()
+        val f = file(ctx)
+        if (f.exists()) {
+            try {
+                return parse(f)
+            } catch (_: Exception) {
+                // Damaged: keep it aside for support instead of overwriting it with an empty list
+                try {
+                    val bad = File(ctx.filesDir, "recording_upload_queue.json.corrupt")
+                    bad.delete()
+                    if (!f.renameTo(bad)) f.delete()
+                } catch (_: Exception) {}
+            }
         }
+        val bak = backupFile(ctx)
+        if (bak.exists()) {
+            try { return parse(bak) } catch (_: Exception) {}
+        }
+        return mutableListOf()
     }
 
     private fun writeLocked(ctx: Context, items: List<QueuedRecording>) {
         try {
             val arr = JSONArray()
             items.forEach { arr.put(it.toJson()) }
+            val text = arr.toString()
             val tmp = File(ctx.filesDir, "recording_upload_queue.json.tmp")
-            tmp.writeText(arr.toString())
-            if (!tmp.renameTo(file(ctx))) {
-                file(ctx).writeText(arr.toString())
+            tmp.writeText(text)
+            val main = file(ctx)
+            val bak = backupFile(ctx)
+            if (main.exists()) {
+                bak.delete()
+                if (!main.renameTo(bak)) main.delete()
+            }
+            if (!tmp.renameTo(main)) {
+                main.writeText(text)
                 tmp.delete()
             }
         } catch (_: Exception) {}
     }
+
+    /** Files that belong to a queued item (its own file or the kept fallback). */
+    fun referencedPaths(ctx: Context): Set<String> =
+        all(ctx).flatMap { listOf(it.path, it.fallbackPath) }.filter { it.isNotEmpty() }.toSet()
 
     fun add(ctx: Context, item: QueuedRecording) = synchronized(lock) {
         val items = readLocked(ctx)
@@ -141,16 +188,33 @@ object RecordingQueue {
 
 object RecordingUploader {
     private const val WORK_NAME = "askeva_recording_upload"
-    /** Give up on one recording after this many failed attempts (about a week with WorkManager backoff). */
+    /** Stop retrying one recording after this many failed attempts (about a week with WorkManager backoff); it is then parked. */
     private const val MAX_ATTEMPTS = 40
     /** Logcat tag of every upload result: adb logcat -s AskEvaUpload */
     private const val UPLOAD_TAG = "AskEvaUpload"
     /** Recordings of a user who has not signed in again for this long are discarded. */
     private const val FOREIGN_USER_MAX_AGE_MS = 14L * 24 * 3600 * 1000
+    /** A parked recording (rejected by the server / gave up retrying) is tried again this often... */
+    private const val PARKED_RETRY_EVERY_MS = 24L * 3600 * 1000
+    /** ...and removed once the call is this old. */
+    private const val PARKED_MAX_AGE_MS = 30L * 24 * 3600 * 1000
+    /** Uncompressed (WAV) recordings above this size exceed the server's upload limit: compress them first. */
+    private const val LARGE_UNCOMPRESSED_BYTES = 40L * 1024 * 1024
 
     private val draining = AtomicBoolean(false)
 
-    enum class Outcome { OK, AUTH, RETRY, DROP }
+    /**
+     * OK = stored on the server. AUTH = token rejected. RETRY = temporary problem (network, 5xx, 408, 429).
+     * MISSING = the audio file is gone or empty. REJECTED = the server refused this request (other 4xx).
+     */
+    enum class Outcome { OK, AUTH, RETRY, MISSING, REJECTED }
+
+    /** Release builds never write file names (often a contact name or number) or server replies to the log. */
+    private fun isDebuggable(ctx: Context): Boolean =
+        (ctx.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+
+    private fun logLabel(ctx: Context, item: QueuedRecording): String =
+        if (isDebuggable(ctx)) item.fileName else "${item.source} recording ${item.id.take(8)}"
 
     /** Starts (or restarts) the upload worker. Runs whenever the network is available, app alive or not. */
     fun schedule(ctx: Context) {
@@ -186,13 +250,39 @@ object RecordingUploader {
                     if (now - item.createdAtMs > FOREIGN_USER_MAX_AGE_MS) discard(ctx, item)
                     continue
                 }
-                when (uploadOne(ctx, base, session, item)) {
+                val parked = item.parkedAtMs > 0L
+                if (parked) {
+                    if (now - item.createdAtMs > PARKED_MAX_AGE_MS) {
+                        Log.w(UPLOAD_TAG, "removing ${logLabel(ctx, item)}: still not accepted after 30 days (${item.lastError})")
+                        discard(ctx, item)
+                        continue
+                    }
+                    // Too big for the server: re-sending it daily would only waste mobile data
+                    val retryEvery = if (item.lastError == "HTTP 413") 7 * PARKED_RETRY_EVERY_MS else PARKED_RETRY_EVERY_MS
+                    if (now - item.parkedAtMs < retryEvery) continue
+                }
+                val result = uploadOne(ctx, base, session, item)
+                when (result.outcome) {
                     Outcome.OK -> {
                         RecordingQueue.remove(ctx, item.id)
                         if (item.source == "own" && item.path.isNotEmpty()) deleteQuietly(item.path)
+                        if (item.fallbackPath.isNotEmpty()) deleteQuietly(item.fallbackPath)
                         uploaded++
                     }
-                    Outcome.DROP -> discard(ctx, item)
+                    Outcome.MISSING, Outcome.REJECTED -> {
+                        val fallback = fallbackItem(item)
+                        when {
+                            // The phone's own file is gone or refused: send AskEVA's recording of the call instead
+                            fallback != null -> {
+                                RecordingQueue.update(ctx, fallback)
+                                needRetry = true
+                            }
+                            // Nothing left to send
+                            result.outcome == Outcome.MISSING -> discard(ctx, item)
+                            // Refused: keep the file and try again tomorrow (e.g. after a server fix)
+                            else -> park(ctx, item, now, result.error)
+                        }
+                    }
                     Outcome.AUTH -> {
                         CallMonitorStore.setAuthFailedToken(ctx, session.token)
                         CallMonitorStore.postAlert(
@@ -204,10 +294,15 @@ object RecordingUploader {
                         return false // stop retrying until a new login
                     }
                     Outcome.RETRY -> {
-                        val next = item.copy(attempts = item.attempts + 1)
-                        if (next.attempts >= MAX_ATTEMPTS) discard(ctx, item) else {
-                            RecordingQueue.update(ctx, next)
-                            needRetry = true
+                        if (parked) {
+                            // Already set aside: the next try is tomorrow, not with the fast retries
+                            park(ctx, item, now, item.lastError)
+                        } else {
+                            val next = item.copy(attempts = item.attempts + 1)
+                            if (next.attempts >= MAX_ATTEMPTS) park(ctx, item, now, result.error.ifEmpty { "too many attempts" }) else {
+                                RecordingQueue.update(ctx, next)
+                                needRetry = true
+                            }
                         }
                     }
                 }
@@ -226,6 +321,25 @@ object RecordingUploader {
     private fun discard(ctx: Context, item: QueuedRecording) {
         RecordingQueue.remove(ctx, item.id)
         if (item.source == "own" && item.path.isNotEmpty()) deleteQuietly(item.path)
+        if (item.fallbackPath.isNotEmpty()) deleteQuietly(item.fallbackPath)
+    }
+
+    /** Sets a recording aside without deleting its file; it is tried again after [PARKED_RETRY_EVERY_MS]. */
+    private fun park(ctx: Context, item: QueuedRecording, now: Long, error: String) {
+        if (item.parkedAtMs == 0L) Log.w(UPLOAD_TAG, "keeping ${logLabel(ctx, item)} on the phone, will try again tomorrow ($error)")
+        RecordingQueue.update(ctx, item.copy(parkedAtMs = now, lastError = error.take(80)))
+    }
+
+    /** The same call as AskEVA's own recording, when one was kept for a built-in recording. */
+    private fun fallbackItem(item: QueuedRecording): QueuedRecording? {
+        if (item.source != "builtin" || item.fallbackPath.isEmpty()) return null
+        val f = File(item.fallbackPath)
+        if (!f.exists() || f.length() == 0L) return null
+        return item.copy(
+            source = "own", path = item.fallbackPath, uri = "", fileName = f.name,
+            speaker = item.fallbackSpeaker, fallbackPath = "", fallbackSpeaker = "",
+            attempts = 0, parkedAtMs = 0L, lastError = "",
+        )
     }
 
     private fun deleteQuietly(path: String) {
@@ -266,7 +380,10 @@ object RecordingUploader {
     private fun playableCopy(ctx: Context, item: QueuedRecording): File? {
         if (item.source != "builtin") return null // our own recordings are already AAC
         return try {
-            if (!AudioTools.needsTranscode(ctx, item.path, item.uri)) return null
+            // AMR (browsers cannot play it), or a WAV too big for the server's upload limit
+            val needs = AudioTools.needsTranscode(ctx, item.path, item.uri) ||
+                (sizeOf(ctx, item) > LARGE_UNCOMPRESSED_BYTES && AudioTools.isPcm16(ctx, item.path, item.uri))
+            if (!needs) return null
             val out = File(ctx.cacheDir, "upload_${item.id}.m4a")
             if (AudioTools.transcodeToAac(ctx, item.path, item.uri, out)) out else { out.delete(); null }
         } catch (_: Exception) {
@@ -274,7 +391,20 @@ object RecordingUploader {
         }
     }
 
-    fun uploadOne(ctx: Context, base: String, session: CallMonitorStore.Session, item: QueuedRecording): Outcome {
+    /** Size of the recording in bytes, 0 when unknown. */
+    private fun sizeOf(ctx: Context, item: QueuedRecording): Long = try {
+        if (item.uri.isNotEmpty()) {
+            ctx.contentResolver.openAssetFileDescriptor(Uri.parse(item.uri), "r")?.use { it.length.coerceAtLeast(0L) } ?: 0L
+        } else {
+            File(item.path).length()
+        }
+    } catch (_: Exception) {
+        0L
+    }
+
+    data class UploadResult(val outcome: Outcome, val error: String = "")
+
+    fun uploadOne(ctx: Context, base: String, session: CallMonitorStore.Session, item: QueuedRecording): UploadResult {
         val converted = playableCopy(ctx, item)
         try {
             return uploadStream(ctx, base, session, item, converted)
@@ -283,15 +413,15 @@ object RecordingUploader {
         }
     }
 
-    private fun uploadStream(ctx: Context, base: String, session: CallMonitorStore.Session, item: QueuedRecording, converted: File?): Outcome {
+    private fun uploadStream(ctx: Context, base: String, session: CallMonitorStore.Session, item: QueuedRecording, converted: File?): UploadResult {
         val input: InputStream = try {
-            if (converted != null) FileInputStream(converted) else openAudio(ctx, item) ?: return Outcome.DROP
+            if (converted != null) FileInputStream(converted) else openAudio(ctx, item) ?: return UploadResult(Outcome.MISSING, "file missing")
         } catch (_: FileNotFoundException) {
-            return Outcome.DROP // the file was deleted (e.g. by the user in the recorder app)
+            return UploadResult(Outcome.MISSING, "file missing") // the file was deleted (e.g. by the user in the recorder app)
         } catch (_: SecurityException) {
-            return Outcome.RETRY // media permission revoked: keep it until access is granted again
+            return UploadResult(Outcome.RETRY, "no media permission") // permission revoked: keep it until access is granted again
         } catch (_: Exception) {
-            return Outcome.RETRY
+            return UploadResult(Outcome.RETRY, "could not open file")
         }
         val fileName = if (converted != null) item.fileName.substringBeforeLast('.') + ".m4a" else item.fileName
 
@@ -300,7 +430,8 @@ object RecordingUploader {
             .put("callerName", session.callerName)
             .put("callerPhone", session.callerPhone)
             .put("contactName", item.contactName.ifEmpty { item.phoneNumber.ifEmpty { "Unknown" } })
-            .put("phoneNumber", item.phoneNumber)
+            // Hidden-number calls have no number; the server requires one (it never links "Unknown" to a lead)
+            .put("phoneNumber", item.phoneNumber.ifBlank { "Unknown" })
             .put("durationSeconds", item.durationSeconds.coerceAtLeast(1))
             .put("fileName", fileName)
             .put("type", item.type)
@@ -339,25 +470,28 @@ object RecordingUploader {
             val reply = try {
                 (if (code < 400) conn.inputStream else conn.errorStream)?.use { String(it.readBytes(), Charsets.UTF_8) }
             } catch (_: Exception) { null }
-            // Every result is logged: a rejected recording is otherwise removed from the queue without a trace
+            // Every result is logged (file names and server replies only in debug builds)
+            val label = logLabel(ctx, item)
             if (code in 200..299) {
-                Log.i(UPLOAD_TAG, "uploaded ${item.fileName} to $base: HTTP $code")
+                Log.i(UPLOAD_TAG, "uploaded $label to $base: HTTP $code")
             } else {
-                Log.w(UPLOAD_TAG, "upload of ${item.fileName} to $base failed: HTTP $code ${reply?.take(300).orEmpty()}")
+                val detail = if (isDebuggable(ctx)) " ${reply?.take(300).orEmpty()}" else ""
+                Log.w(UPLOAD_TAG, "upload of $label to $base failed: HTTP $code$detail")
             }
             return when {
-                code in 200..299 -> Outcome.OK
-                code == 401 -> Outcome.AUTH
-                code == 408 || code == 429 || code >= 500 -> Outcome.RETRY
-                else -> Outcome.DROP // 400 / 403 / 413: the same request will never succeed
+                code in 200..299 -> UploadResult(Outcome.OK)
+                code == 401 -> UploadResult(Outcome.AUTH, "HTTP 401")
+                code == 408 || code == 429 || code >= 500 -> UploadResult(Outcome.RETRY, "HTTP $code")
+                else -> UploadResult(Outcome.REJECTED, "HTTP $code") // 400 / 403 / 413: this request will not succeed as is
             }
         } catch (e: IOException) {
-            Log.w(UPLOAD_TAG, "upload of ${item.fileName} to $base could not connect, will retry: $e")
-            return Outcome.RETRY
+            val why = if (isDebuggable(ctx)) e.toString() else e.javaClass.simpleName
+            Log.w(UPLOAD_TAG, "upload of ${logLabel(ctx, item)} to $base could not connect, will retry: $why")
+            return UploadResult(Outcome.RETRY, "no connection")
         } catch (_: SecurityException) {
-            return Outcome.RETRY
+            return UploadResult(Outcome.RETRY, "no media permission")
         } catch (_: Exception) {
-            return Outcome.RETRY
+            return UploadResult(Outcome.RETRY, "upload error")
         } finally {
             try { input.close() } catch (_: Exception) {}
             conn?.disconnect()

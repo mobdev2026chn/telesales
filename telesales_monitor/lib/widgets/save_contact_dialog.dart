@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../providers/tele_provider.dart';
+import '../services/lead_outbox.dart';
 
 class SaveContactDialog extends StatefulWidget {
   final String phoneNumber;
@@ -65,11 +66,12 @@ class _SaveContactDialogState extends State<SaveContactDialog> {
     }
 
     setState(() => _isSaving = true);
-    final success = await tele.saveContact(
+    final result = await tele.saveContactWithResult(
       phoneNumber: widget.phoneNumber,
       name: name,
       notes: _notesController.text.trim(),
     );
+    final success = result == LeadSaveResult.saved;
     setState(() => _isSaving = false);
 
     if (mounted) {
@@ -77,7 +79,7 @@ class _SaveContactDialogState extends State<SaveContactDialog> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            success ? '✓ Contact "$name" saved successfully!' : 'Failed to save contact',
+            leadSaveMessage(result, saved: '✓ Contact "$name" saved successfully!'),
             style: AppTheme.label(size: 11, color: AppTheme.ink900),
           ),
           backgroundColor: success ? AppTheme.greenNeon : AppTheme.orangePill,

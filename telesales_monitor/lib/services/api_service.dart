@@ -148,6 +148,17 @@ class ApiService {
     String path, {
     Map<String, dynamic>? body,
     Duration timeout = const Duration(seconds: 15),
+  }) async =>
+      (await _send(method, path, body: body, timeout: timeout)).response;
+
+  /// [_request] that also tells, when there is no response, whether the request may still have
+  /// reached the server ([maybeSent]: timeout or failure after sending) or certainly did not
+  /// (DNS failure, connection refused, TLS handshake on every host).
+  static Future<({http.Response? response, bool maybeSent})> _send(
+    String method,
+    String path, {
+    Map<String, dynamic>? body,
+    Duration timeout = const Duration(seconds: 15),
   }) async {
     final tokenAtSend = _token;
     final headers = <String, String>{
@@ -181,7 +192,7 @@ class ApiService {
         baseUrl = base;
         lastNetworkError = '';
         _checkAuthExpired(res, path, tokenAtSend);
-        return res;
+        return (response: res, maybeSent: true);
       } catch (e) {
         firstError ??= describeNetworkError(e);
         if (isConnectionError(e)) {
@@ -191,11 +202,19 @@ class ApiService {
         // Timeout or failure after the request may have been sent: never replay it on another host.
         debugPrint('ApiService.$method $path failed: $e');
         lastNetworkError = firstError;
-        return null;
+        return (response: null, maybeSent: true);
       }
     }
     lastNetworkError = firstError ?? '';
-    return null;
+    return (response: null, maybeSent: false);
+  }
+
+  static ApiWriteResult _writeResult(({http.Response? response, bool maybeSent}) sent) {
+    final res = sent.response;
+    if (res == null) {
+      return ApiWriteResult(0, maybeReachedServer: sent.maybeSent, message: lastNetworkError);
+    }
+    return ApiWriteResult(res.statusCode, message: _decodeMap(res)?['message']?.toString() ?? '');
   }
 
   static void _checkAuthExpired(
@@ -588,9 +607,19 @@ class ApiService {
     LeadStatus? status,
     String? notes,
     bool logAttempt = false,
+  }) async =>
+      (await updateLeadDetailed(leadId: leadId, status: status, notes: notes, logAttempt: logAttempt)).ok;
+
+  /// [updateLead] with the HTTP status (0 = no response), so the app can tell "offline, try
+  /// again later" from "the server refused it".
+  static Future<ApiWriteResult> updateLeadDetailed({
+    required String leadId,
+    LeadStatus? status,
+    String? notes,
+    bool logAttempt = false,
   }) async {
-    if (leadId.isEmpty) return false;
-    final res = await _request(
+    if (leadId.isEmpty) return const ApiWriteResult(400, message: 'Missing lead id');
+    final sent = await _send(
       'PUT',
       '/admin/leads/${Uri.encodeComponent(leadId)}',
       body: {
@@ -599,7 +628,7 @@ class ApiService {
         if (logAttempt) 'logAttempt': true,
       },
     );
-    return _ok(res);
+    return _writeResult(sent);
   }
 
   // ------------------------------------------------------------------ Recordings
@@ -892,13 +921,22 @@ class ApiService {
     required String phoneNumber,
     required String name,
     String? notes,
+  }) async =>
+      (await saveContactDetailed(phoneNumber: phoneNumber, name: name, notes: notes)).ok;
+
+  /// [saveContact] with the HTTP status (0 = no response). The server upserts by number, so a
+  /// repeated save is harmless.
+  static Future<ApiWriteResult> saveContactDetailed({
+    required String phoneNumber,
+    required String name,
+    String? notes,
   }) async {
-    final res = await _request(
+    final sent = await _send(
       'POST',
       '/user/contacts/save',
       body: {'phoneNumber': phoneNumber, 'name': name, 'notes': notes ?? ''},
     );
-    return _ok(res);
+    return _writeResult(sent);
   }
 
   /// POST /admin/users. Never retried automatically (a replay could create the user twice).
@@ -949,4 +987,19 @@ class ApiService {
           data['message'] ?? 'Failed to create user (HTTP ${res.statusCode})',
     };
   }
+}
+
+/// Outcome of a write request: the HTTP status ([statusCode] 0 = no response) and, without a
+/// response, whether the request may still have reached the server (it timed out after sending).
+class ApiWriteResult {
+  final int statusCode;
+  final bool maybeReachedServer;
+  final String message;
+
+  const ApiWriteResult(this.statusCode, {this.maybeReachedServer = false, this.message = ''});
+
+  bool get ok => statusCode >= 200 && statusCode < 300;
+
+  /// Worth sending again later: no response, or a server-side error (5xx). A 4xx would fail again.
+  bool get retryable => statusCode == 0 || statusCode >= 500;
 }

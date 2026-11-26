@@ -101,6 +101,8 @@ export function makeLeadInScope(me, scopedCallers) {
 
 export function canSeeUsersTab(me) { return me.role === 'ADMIN' || me.role === 'MANAGER'; }
 export function canSeeDemosTab(me) { return me.role !== 'CALLER'; }
+// Phone health: admins, managers, junior managers and team leaders — never callers
+export function canSeePhoneHealthTab(me) { return HEAD_ROLES.includes(me.role); }
 
 // Finds the registered user behind a name shown anywhere (same order as callBelongsTo: id, phone, name)
 export function findUserRef(users, ref) {

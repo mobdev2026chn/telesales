@@ -3,7 +3,7 @@
 // The <audio> elements live in the DOM; this module drives them and mirrors what the docked
 // bar should show into redux (ui.audio), so the bar component simply renders that state.
 // ==========================================
-import { recordingAudioUrl } from './api';
+import { recordingAudioUrl, renewAudioUrl } from './api';
 import { formatPhone } from './format';
 import { notify } from './notify';
 import { audioBarHidden, audioBarShown, audioControlsSynced } from '../redux/slices/uiSlice';
@@ -28,6 +28,28 @@ export function findCardAudio(recId) {
   return Array.from(document.querySelectorAll('audio[data-rec-id]')).find(a => a.dataset.recId === String(recId)) || null;
 }
 
+// Recording links carry a short-lived media token: a player whose link was built earlier (a page
+// left open for hours) is pointed at a fresh link before it plays, keeping its position.
+// True when the link changed.
+function renewAudioSrc(el) {
+  const next = el ? renewAudioUrl(el.getAttribute('src')) : null;
+  if (!next) return false;
+  const time = el.currentTime || 0;
+  el.src = next;
+  if (time > 0) {
+    el.addEventListener('loadedmetadata', () => { try { el.currentTime = time; } catch { /* ignore */ } }, { once: true });
+  }
+  return true;
+}
+
+// A player failed: if only its link's token had run out, retry with a fresh link (and keep playing
+// when it is the one the controls drive). False when the failure is something else.
+export function retryExpiredAudio(el) {
+  if (!renewAudioSrc(el)) return false;
+  if (Q.el === el) el.play().catch(() => {});
+  return true;
+}
+
 function showBottomAudioBar() {
   const state = store.getState();
   const r = state.recordings.list.find(x => x.id === Q.id);
@@ -47,6 +69,12 @@ export function syncAudioControls() {
 }
 
 export function onAnyAudioPlay(currentAudio) {
+  // Started from the player's own controls with an out-of-date link: switch to a fresh link and play
+  // again (this handler runs once more for that play)
+  if (renewAudioSrc(currentAudio)) {
+    currentAudio.play().catch(() => {});
+    return;
+  }
   document.querySelectorAll('audio').forEach(el => {
     if (el !== currentAudio && !el.paused) {
       try { el.pause(); } catch { /* ignore */ }
@@ -73,6 +101,7 @@ export function playCallAudioDirect(recId, source) {
     Q.id = String(recId);
     Q.el = cardAudio;
     try { cardAudio.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch { /* ignore */ }
+    renewAudioSrc(cardAudio);
     cardAudio.play().catch(() => notify('⚠️ RECORDING AUDIO COULD NOT BE PLAYED'));
     showBottomAudioBar();
     syncAudioControls();
@@ -88,6 +117,7 @@ export function playCallAudioDirect(recId, source) {
   showBottomAudioBar();
   player.src = recordingAudioUrl(recId);
   player.onerror = () => {
+    if (retryExpiredAudio(player)) return;
     notify('⚠️ RECORDING AUDIO FILE NOT FOUND ON SERVER');
     syncAudioControls();
   };
@@ -98,8 +128,10 @@ export function playCallAudioDirect(recId, source) {
 export function audioCtlToggle() {
   const el = Q.el;
   if (!el) return;
-  if (el.paused || el.ended) el.play().catch(() => notify('⚠️ RECORDING AUDIO COULD NOT BE PLAYED'));
-  else el.pause();
+  if (el.paused || el.ended) {
+    renewAudioSrc(el);
+    el.play().catch(() => notify('⚠️ RECORDING AUDIO COULD NOT BE PLAYED'));
+  } else el.pause();
 }
 
 export function audioCtlStep(delta) {

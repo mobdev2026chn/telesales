@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const Employee = require('../models/Employee');
+const { noteLegacyRequest } = require('../services/legacyClients');
 
 const TOKEN_TTL = '30d';
 
@@ -57,12 +58,27 @@ async function verifyAndUpgradePassword(emp, plain) {
   return true;
 }
 
+// Recording audio (<audio src> / the app's media player cannot send headers). Paths are relative to /api.
+const AUDIO_PATH = /^\/(admin\/)?recordings\/[^/]+\/(audio|stream)\/?$/;
+const MEDIA_TOKEN_TTL_SECONDS = 2 * 60 * 60;
+
+// { token, kind }: kind 'session' (the login token) or 'media' (short-lived, audio only, see signMediaToken)
 function readToken(req) {
   const header = req.headers.authorization || '';
-  if (header.startsWith('Bearer ')) return header.slice(7).trim();
-  // <audio src> cannot send headers, so audio URLs carry the token as a query parameter
-  if (req.query && typeof req.query.token === 'string') return req.query.token;
+  if (header.startsWith('Bearer ')) return { token: header.slice(7).trim(), kind: 'session' };
+  // Tokens in the address are accepted on audio links only, so a copied or logged URL of any other
+  // page never carries a login. ?mt= is the short-lived audio token (admin portal); ?token= is the
+  // login token, still sent by installed app builds for in-app playback.
+  if (req.query && AUDIO_PATH.test(req.path || '')) {
+    if (typeof req.query.mt === 'string' && req.query.mt) return { token: req.query.mt, kind: 'media' };
+    if (typeof req.query.token === 'string' && req.query.token) return { token: req.query.token, kind: 'session' };
+  }
   return null;
+}
+
+// A token that only plays recordings (for links in the admin portal); expires after 2 hours.
+function signMediaToken(user) {
+  return jwt.sign({ sub: user.id, sid: user.sessionId || undefined, typ: 'media' }, getSecret(), { expiresIn: MEDIA_TOKEN_TTL_SECONDS });
 }
 
 // The token only proves WHO is signed in. Role / team / name come from the account as it is now,
@@ -106,10 +122,12 @@ async function verifySocketToken(token) {
 // scoping parameters the routes read to the account's identity (clients can't claim another role).
 async function authenticate(req, res, next) {
   req.user = null;
-  const token = readToken(req);
-  if (token) {
+  const read = readToken(req);
+  if (read) {
     try {
-      const payload = jwt.verify(token, getSecret());
+      const payload = jwt.verify(read.token, getSecret());
+      // An audio token only works as ?mt= on audio links, and a login token never as ?mt=
+      if ((payload.typ === 'media') !== (read.kind === 'media')) throw new Error('wrong token type');
       req.user = {
         id: payload.sub,
         sessionId: payload.sid || null,
@@ -180,6 +198,8 @@ function requireAuth({ roles = null, legacy = false } = {}) {
     }
     if (legacy && !req.tokenInvalid && legacyGraceEnabled()) {
       req.legacyClient = true;
+      // Who still uses an old build (Phone health page), so the grace can be switched off safely
+      noteLegacyRequest(req);
       return next();
     }
     return res.status(401).json({ success: false, message: 'Please log in again.', code: 'AUTH_REQUIRED' });
@@ -190,6 +210,8 @@ const MANAGERS = ['admin', 'manager', 'jr_manager', 'team_leader'];
 
 module.exports = {
   signToken,
+  signMediaToken,
+  MEDIA_TOKEN_TTL_SECONDS,
   hashPassword,
   isHashed,
   verifyAndUpgradePassword,

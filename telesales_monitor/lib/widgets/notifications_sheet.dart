@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
@@ -85,6 +86,8 @@ class NotificationsSheet extends StatelessWidget {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Developer test button: debug builds only
+                  if (kDebugMode) ...[
                   GestureDetector(
                     onTap: () {
                       Navigator.pop(context);
@@ -111,6 +114,7 @@ class NotificationsSheet extends StatelessWidget {
                       ),
                     ),
                   ),
+                  ],
                   if (notifs.isNotEmpty && unreadCount > 0) ...[
                     const SizedBox(width: 8),
                     GestureDetector(
