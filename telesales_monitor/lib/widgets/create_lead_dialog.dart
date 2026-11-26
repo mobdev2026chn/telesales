@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../providers/tele_provider.dart';
 import '../models/lead_model.dart';
+import '../services/lead_outbox.dart';
 
 class CreateLeadDialog extends StatefulWidget {
   const CreateLeadDialog({super.key});
@@ -111,22 +112,23 @@ class _CreateLeadDialogState extends State<CreateLeadDialog> {
 
     setState(() => _isSaving = true);
 
-    final success = await tele.saveContact(
+    var result = await tele.saveContactWithResult(
       phoneNumber: phone,
       name: name,
       notes: _notesController.text.trim(),
     );
 
     // Update status if not default
-    if (success && _selectedStatus != LeadStatus.interested) {
+    if (result != LeadSaveResult.rejected && _selectedStatus != LeadStatus.interested) {
       final lead = tele.leads.cast<LeadModel?>().firstWhere(
         (l) => l?.phone == phone,
         orElse: () => null,
       );
       if (lead != null) {
-        await tele.updateLeadStatus(lead.id, _selectedStatus);
+        result = combineSaveResults(result, await tele.updateLeadStatus(lead.id, _selectedStatus));
       }
     }
+    final success = result == LeadSaveResult.saved;
 
     setState(() => _isSaving = false);
 
@@ -135,7 +137,7 @@ class _CreateLeadDialogState extends State<CreateLeadDialog> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            success ? '✓ New Lead "$name" verified & added!' : 'Failed to save lead',
+            leadSaveMessage(result, saved: '✓ New Lead "$name" verified & added!'),
             style: AppTheme.label(size: 11, color: AppTheme.ink900),
           ),
           backgroundColor: success ? AppTheme.greenNeon : AppTheme.orangePill,

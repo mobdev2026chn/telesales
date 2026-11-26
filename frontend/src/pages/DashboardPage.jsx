@@ -105,6 +105,19 @@ export default function DashboardPage() {
   const dashTxt = (v) => (m ? v : '—');
   const callsTxt = (k) => (m ? `${m[k]} CALL${m[k] === 1 ? '' : 'S'}` : '—');
 
+  // Days in the period: per-user targets and the team target are daily target × these days
+  const targetDays = periodTargetDays(dash.period, dash.customDate);
+  // Team target: the server's sum of the agents' (callers') daily targets in scope (0 / missing = no
+  // card). When the Type filter narrows the numbers above here, the agents of that type are summed so
+  // calls and target match.
+  const typeCallers = typeMembers ? typeMembers.filter(r => String(r.role || 'caller').toLowerCase() === 'caller') : null;
+  const teamDailyTarget = server && n(server.teamDailyTarget) > 0
+    ? (typeCallers && typeCallers.every(r => r.dailyTarget !== undefined)
+      ? typeCallers.reduce((s, r) => s + n(r.dailyTarget), 0)
+      : n(server.teamDailyTarget))
+    : 0;
+  const showTeamTarget = !!m && teamDailyTarget > 0;
+
   return (
     <>
       <PageHeader title="Dashboard" subtitle="Team performance and call metrics">
@@ -132,6 +145,31 @@ export default function DashboardPage() {
         { label: 'Never attended', value: dashTxt(m && m.neverAttended), meta: 'Missed + rejected follow-ups' },
         { label: 'Unique calls', value: dashTxt(m && m.uniqueClients), meta: 'Distinct clients reached', tone: 'lime' },
       ]} />
+
+      <Row gutter={[16, 16]} className="equal-row">
+        <Col xs={24} lg={showTeamTarget ? 15 : 24}>
+          <TeamNowCard
+            server={server}
+            failed={failed}
+            error={dash.error}
+            usersError={usersError}
+            callers={dashboardCallers}
+            typeFilter={typeValue}
+            users={users}
+            mgrValue={mgrValue}
+          />
+        </Col>
+        {showTeamTarget && (
+          <Col xs={24} lg={9}>
+            <TeamTargetCard
+              calls={m.total}
+              dailyTarget={teamDailyTarget}
+              days={targetDays}
+              label={periodLabel(dash.period, dash.customDate)}
+            />
+          </Col>
+        )}
+      </Row>
 
       <Row gutter={[16, 16]} className="equal-row">
         <Col xs={24} lg={9}>
@@ -169,12 +207,158 @@ export default function DashboardPage() {
         mgrOptions={mgrOptions}
         mgrValue={mgrValue}
         page={dash.teamPage}
-        targetDays={periodTargetDays(dash.period, dash.customDate)}
+        targetDays={targetDays}
         onMgr={(v) => dispatch(setDashMgrFilter(v))}
         onPage={(p) => dispatch(setDashTeamPage(p))}
         onOpen={(id) => navigate(userPath(id))}
       />
     </>
+  );
+}
+
+// "Team right now" groups, in display order. A break wins over a recent call.
+const TEAM_NOW_GROUPS = [
+  { key: 'onCall', label: 'On call', color: 'var(--ds-green-700)', title: 'Made or took a call in the last 15 minutes' },
+  { key: 'available', label: 'Available', color: 'var(--ds-green-400)', title: 'Signed in to the app, no call in the last 15 minutes' },
+  { key: 'onBreak', label: 'On break', color: 'var(--ds-warning-dot)', title: 'On a break in the app' },
+  { key: 'offline', label: 'Offline', color: 'var(--ds-chain-sep)', title: 'Not signed in to the app' },
+];
+
+// Each person in view → on call / available / on break / offline, plus whether call recording is off.
+// Reads the same live rows the presence events update (teamMembers, callerLiveStatuses).
+function teamNowGroups(server, people) {
+  const groups = { onCall: [], available: [], onBreak: [], offline: [], recOff: [] };
+  const disabled = Array.isArray(server.disabledRecorders) ? server.disabledRecorders : [];
+  people.forEach(u => {
+    const row = statsFor(server.teamMembers, u);
+    const live = statsFor(server.callerLiveStatuses, u);
+    if (row && row.onBreak) {
+      const since = row.breakStartedAt ? ` since ${presenceTime(row.breakStartedAt)}` : '';
+      groups.onBreak.push({ u, note: `${row.breakType || 'Break'}${since}` });
+    } else if (live && live.status === 'ON CALL') {
+      groups.onCall.push({ u });
+    } else if (row ? appPresence(row).online : (live && live.status === 'ONLINE')) {
+      groups.available.push({ u });
+    } else {
+      groups.offline.push({ u, note: row && row.lastSeenAt ? `last seen ${presenceTime(row.lastSeenAt)}` : '' });
+    }
+    const off = statsFor(disabled, u);
+    if (off || (row && row.autoRecordEnabled === false)) {
+      const at = (off && off.disabledAt) || (row && row.autoRecordDisabledAt);
+      groups.recOff.push({ u, note: at ? `off since ${presenceTime(at)}` : '' });
+    }
+  });
+  return groups;
+}
+
+// Live team board: counts per state for the people in the team table's view; a count opens the names
+function TeamNowCard({ server, failed, error, usersError, callers, typeFilter = 'ALL', users, mgrValue }) {
+  const [open, setOpen] = useState(null);
+  const toggle = (k) => setOpen(cur => (cur === k ? null : k));
+
+  let body;
+  if (!server) {
+    body = <EmptyState error={failed}>{failed ? `COULD NOT LOAD DASHBOARD — ${error || ''}` : 'LOADING LIVE NUMBERS…'}</EmptyState>;
+  } else if (!callers.length) {
+    body = <EmptyState>{usersError ? `COULD NOT LOAD USERS — ${usersError}` : 'NO TEAM MEMBERS IN THIS VIEW'}</EmptyState>;
+  } else {
+    // Same people as the team table: callers in view, then the Type and "Managed by" filters
+    const set = mgrFilterSet(users, mgrValue);
+    const people = callers
+      .filter(u => typeFilter === 'ALL' || ((u && u.employeeType) || 'sales_team') === typeFilter)
+      .filter(u => !set || set.has(u.id));
+    const groups = teamNowGroups(server, people);
+    const openMeta = open === 'recOff' ? { label: 'Recording off' } : TEAM_NOW_GROUPS.find(g => g.key === open);
+    const openGroup = openMeta ? { label: openMeta.label, list: groups[open] } : null;
+    const recOff = groups.recOff.length;
+
+    body = (
+      <>
+        <div className="team-now-grid">
+          {TEAM_NOW_GROUPS.map(g => (
+            <button
+              type="button"
+              key={g.key}
+              className={`team-now-tile${open === g.key ? ' is-active' : ''}`}
+              aria-expanded={open === g.key}
+              aria-controls="teamNowNames"
+              title={`${g.title} · click for names`}
+              onClick={() => toggle(g.key)}
+            >
+              <span className="team-now-label"><span className="team-now-swatch" style={{ background: g.color }} aria-hidden="true" />{g.label}</span>
+              <span className="team-now-count">{groups[g.key].length}</span>
+            </button>
+          ))}
+        </div>
+        <div className="team-now-foot">
+          <button
+            type="button"
+            className={`team-now-recoff${recOff ? ' has-off' : ''}${open === 'recOff' ? ' is-active' : ''}`}
+            aria-expanded={open === 'recOff'}
+            aria-controls="teamNowNames"
+            title="Callers whose phone has call recording turned off · click for names"
+            onClick={() => toggle('recOff')}
+          >
+            Recording off: <strong>{recOff}</strong>
+          </button>
+          <span className="card-subtitle">{people.length} {people.length === 1 ? 'caller' : 'callers'} in this view</span>
+        </div>
+        {openGroup && (
+          <div className="team-now-names" id="teamNowNames" role="region" aria-label={`${openGroup.label}: names`}>
+            <span className="team-now-names-title">{openGroup.label}</span>
+            {openGroup.list.length
+              ? openGroup.list
+                .slice()
+                .sort((a, b) => String(a.u.name).localeCompare(String(b.u.name)))
+                .map(({ u, note }) => (
+                  <span key={u.id} className="team-now-name">
+                    <UserLink user={u} />{note && <span className="team-now-note"> · {note}</span>}
+                  </span>
+                ))
+              : <span className="muted">Nobody right now</span>}
+          </div>
+        )}
+      </>
+    );
+  }
+
+  return (
+    <div className="card">
+      <div className="card-header">
+        <div className="card-title">Team right now</div>
+        <span className="card-subtitle">Live · on call = a call in the last 15 min</span>
+      </div>
+      {body}
+    </div>
+  );
+}
+
+// Team target: calls in the period against the team's daily target × days in the period
+function TeamTargetCard({ calls, dailyTarget, days, label }) {
+  const target = dailyTarget * days;
+  const pct = target > 0 ? Math.round((calls / target) * 100) : 0;
+  const left = Math.max(0, target - calls);
+  return (
+    <div className="card">
+      <div className="card-header">
+        <div className="card-title">Team target</div>
+        <span className="card-subtitle">{label}</span>
+      </div>
+      <div className="team-target-figure">
+        <strong>{calls}</strong><span> / {target} calls</span>
+      </div>
+      <Progress lg pct={Math.min(100, pct)} caption={<strong>{pct}%</strong>} />
+      <div className="stat-list">
+        <div className="stat-row">
+          <span>{left > 0 ? 'Still to go' : 'Status'}</span>
+          <strong>{left > 0 ? `${left} to go` : 'Target reached'}</strong>
+        </div>
+        <div className="stat-row">
+          <span>Daily team target</span>
+          <strong>{dailyTarget}{days > 1 ? ` × ${days} days` : ''}</strong>
+        </div>
+      </div>
+    </div>
   );
 }
 

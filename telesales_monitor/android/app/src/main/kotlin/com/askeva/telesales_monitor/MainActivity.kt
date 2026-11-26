@@ -135,6 +135,7 @@ class MainActivity : FlutterActivity() {
                     val baseUrl = call.argument<String>("baseUrl") ?: ""
                     CallMonitorStore.setBaseUrl(this, baseUrl)
                     CallMonitorStore.cancelNotification(this, CallMonitorStore.NOTIF_ID_LOGIN)
+                    CallSyncWorker.schedule(this) // keeps call sync going whenever the service cannot run
                     result.success(CallMonitorService.start(this))
                 }
                 "stopCallMonitor" -> {
@@ -146,6 +147,20 @@ class MainActivity : FlutterActivity() {
                 "retryUploads" -> {
                     RecordingUploader.schedule(this)
                     result.success(true)
+                }
+                // ---- Follow-up reminders (CallbackReminders) ----
+                "scheduleCallbackReminder" -> {
+                    val id = call.argument<String>("id") ?: ""
+                    val atMs = (call.argument<Number>("atMs"))?.toLong() ?: 0L
+                    val title = call.argument<String>("title") ?: ""
+                    val body = call.argument<String>("body") ?: ""
+                    result.success(CallbackReminders.schedule(this, id, atMs, title, body))
+                }
+                "cancelCallbackReminder" -> {
+                    result.success(CallbackReminders.cancel(this, call.argument<String>("id") ?: ""))
+                }
+                "cancelAllCallbackReminders" -> {
+                    result.success(CallbackReminders.cancelAll(this))
                 }
                 "getPendingUploadCount" -> {
                     val userId = call.argument<String>("userId") ?: ""
@@ -636,9 +651,13 @@ class MainActivity : FlutterActivity() {
         intent ?: return
         if (intent.getBooleanExtra(CallUi.EXTRA_SHOW_CALL, false)) {
             if (CallManager.hasCalls) showOverLockScreen(true)
-            if (intent.getBooleanExtra(CallUi.EXTRA_ANSWER, false)) CallManager.answerCall()
+            // Only our own notification's Answer button carries the token: other apps cannot answer calls
+            if (intent.getBooleanExtra(CallUi.EXTRA_ANSWER, false) &&
+                CallUi.isAnswerTokenValid(intent.getStringExtra(CallUi.EXTRA_ANSWER_TOKEN))
+            ) CallManager.answerCall()
             // Handled once: a later recreation of the activity must not answer again
             intent.removeExtra(CallUi.EXTRA_ANSWER)
+            intent.removeExtra(CallUi.EXTRA_ANSWER_TOKEN)
             intent.removeExtra(CallUi.EXTRA_SHOW_CALL)
             return
         }

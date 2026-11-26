@@ -6,7 +6,7 @@ import {
   CloudUploadOutlined, CrownFilled, CustomerServiceOutlined, DashboardOutlined, DeleteOutlined, DownloadOutlined, DownOutlined,
   EditOutlined, EllipsisOutlined, ExclamationCircleOutlined, EyeOutlined, FileExcelOutlined, FileOutlined, FlagOutlined,
   FunnelPlotOutlined, HistoryOutlined, InboxOutlined, LeftOutlined, LineChartOutlined, LoginOutlined, LogoutOutlined,
-  MenuOutlined, PauseOutlined, PhoneOutlined, PlayCircleOutlined, PlusOutlined, PushpinFilled, PushpinOutlined,
+  MenuOutlined, MobileOutlined, PauseOutlined, PhoneOutlined, PlayCircleOutlined, PlusOutlined, PushpinFilled, PushpinOutlined,
   RightOutlined, RiseOutlined, SaveOutlined, SearchOutlined, SendOutlined, SolutionOutlined, StarOutlined,
   StepBackwardOutlined, StepForwardOutlined, StopOutlined, SwapOutlined, TeamOutlined, TrophyOutlined, UnorderedListOutlined,
   UploadOutlined, UserOutlined,
@@ -38,6 +38,7 @@ export const ICONS = {
   list: UnorderedListOutlined,
   logout: LogoutOutlined,
   menu: MenuOutlined,
+  mobile: MobileOutlined,
   missed: CloseCircleOutlined,
   out: ArrowUpOutlined,
   phone: PhoneOutlined,
@@ -85,7 +86,7 @@ export const ICON_ROTATE = { in: 45, out: 45, phone: 90 };
 
 // Sidebar icon for each page (navigation.js `tab` keys)
 export const NAV_ICONS = {
-  dash: 'dashboard', calls: 'history', dial: 'phone', users: 'users', lb: 'award', recs: 'headphones', leads: 'funnel', demos: 'calendar', notifications: 'bell',
+  dash: 'dashboard', calls: 'history', dial: 'phone', users: 'users', lb: 'award', recs: 'headphones', health: 'mobile', leads: 'funnel', demos: 'calendar', notifications: 'bell',
 };
 
 // Theme: the same colours, type and radii as the :root tokens in styles/global.css

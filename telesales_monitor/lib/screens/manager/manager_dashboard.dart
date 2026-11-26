@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/neo_card.dart';
+import '../../widgets/team_live_board_card.dart';
 import '../../widgets/top_header.dart';
 import '../../providers/tele_provider.dart';
 import '../../services/api_parsers.dart';
@@ -138,6 +139,8 @@ class ManagerDashboard extends StatelessWidget {
     final targetProgress = totalCalls > 0 && teamTarget > 0
         ? (totalCalls / teamTarget).clamp(0.01, 1.0)
         : 0.0;
+    final liveBoard = tele.teamLiveBoard;
+    final teamTargetToday = tele.teamTargetToday;
 
     return RefreshIndicator(
       color: AppTheme.greenNeon,
@@ -487,6 +490,18 @@ class ManagerDashboard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
+
+            // Live team board (from the dashboard stats already loaded; no extra polling)
+            if (liveBoard != null && liveBoard.members.isNotEmpty) ...[
+              TeamLiveBoardCard(board: liveBoard),
+              const SizedBox(height: 12),
+            ],
+
+            // Team daily target vs. today's calls (TODAY selected only)
+            if (teamTargetToday != null) ...[
+              TeamTargetCard(target: teamTargetToday.target, calls: teamTargetToday.calls),
+              const SizedBox(height: 12),
+            ],
 
             // 2x1 Row: AVG DURATION & CONNECT RATE
             Row(

@@ -1,0 +1,11 @@
+<en-US>
+AskEVA Telesales – first release
+
+• Call your assigned leads straight from the app
+• Log the outcome of each call, schedule callbacks and book demos
+• Call recordings upload automatically for quality review
+• Track your daily call stats and call history
+• Managers: team dashboard, leaderboard and each caller's activity
+• Instant notifications from your team
+• Mark tea and lunch breaks
+</en-US>

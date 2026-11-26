@@ -79,12 +79,22 @@ object DeviceSetupHelper {
     /** OEM "autostart" / background-launch managers; falls back to this app's info page. */
     /** Settings > Accessibility, where the user switches on "AskEVA Call Recording". */
     fun openAccessibilitySettings(activity: Activity): Boolean {
-        // Android 11+ can deep-link to our own service's page on many builds
+        val service = ComponentName(activity, CallAccessibilityService::class.java).flattenToString()
+        // Android 11+: straight to our own service's page, where the phone allows it
         val details = Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
-            .putExtra(Intent.EXTRA_COMPONENT_NAME, ComponentName(activity, CallAccessibilityService::class.java).flattenToString())
+            .putExtra(Intent.EXTRA_COMPONENT_NAME, service)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && tryStart(activity, details)) return true
-        return tryStart(activity, Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        // Otherwise the Accessibility list, scrolled to "AskEVA Call Recording" and highlighted (stock Android
+        // Settings: Pixel, Motorola, Nokia, ...). Other phones ignore these extras and open the list as before.
+        val highlighted = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+            .putExtra(EXTRA_FRAGMENT_ARG_KEY, service)
+            .putExtra(EXTRA_SHOW_FRAGMENT_ARGUMENTS, android.os.Bundle().apply { putString(EXTRA_FRAGMENT_ARG_KEY, service) })
+        return tryStart(activity, highlighted) || tryStart(activity, Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
     }
+
+    /** Settings app extras that scroll to and highlight one entry (its preference key). */
+    private const val EXTRA_FRAGMENT_ARG_KEY = ":settings:fragment_args_key"
+    private const val EXTRA_SHOW_FRAGMENT_ARGUMENTS = ":settings:show_fragment_args"
 
     /** App info page (for Android 13+ "Allow restricted settings" when the APK was sideloaded). */
     /** Settings > Apps > Default apps, where the user picks the phone's own dialer as the Phone app. */

@@ -86,6 +86,7 @@ const ROUTE_RULES = [
   { test: (m, p) => /^\/admin\/users/.test(p), rule: requireAuth({ roles: MANAGERS }) },
   { test: (m, p) => m === 'GET' && p === '/admin/calls', rule: requireAuth({ roles: MANAGERS }) },
   { test: (m, p) => p === '/admin/recording-issues', rule: requireAuth({ roles: MANAGERS }) },
+  { test: (m, p) => p === '/admin/phone-health', rule: requireAuth({ roles: MANAGERS }) },
   { test: (m, p) => /\/recordings\/[^/]+\/comment$/.test(p), rule: requireAuth({ roles: MANAGERS, legacy: true }) },
   { test: (m, p) => /\/recordings\/[^/]+\/review$/.test(p), rule: requireAuth({ roles: MANAGERS }) },
   { test: (m, p) => /\/recordings\/[^/]+\/pin$/.test(p), rule: requireAuth({ roles: MANAGERS }) },
@@ -117,10 +118,20 @@ const ADMIN_WEB_FILES = new Set([
 if (fs.existsSync(path.join(FRONTEND_DIST_DIR, 'assets'))) {
   app.use('/assets', express.static(path.join(FRONTEND_DIST_DIR, 'assets')));
 }
+// True when [filePath] is inside [dir] (a request path with "../" must never reach other server files)
+function isInside(dir, filePath) {
+  const root = path.resolve(dir);
+  const target = path.resolve(filePath);
+  return target === root || target.startsWith(root + path.sep);
+}
+
 function serveAdminWeb(req, res, next) {
   if (req.method !== 'GET' && req.method !== 'HEAD') return next();
   const rawName = req.path === '/' ? 'index.html' : req.path.replace(/^\//, '');
+  // No parent-folder steps and no hidden files (.env, .git, ...): only the portal's own files are served
+  if (rawName.split(/[\\/]/).some(seg => seg === '..' || seg.startsWith('.'))) return next();
   const filePath = path.join(ADMIN_WEB_DIR, rawName);
+  if (!isInside(ADMIN_WEB_DIR, filePath)) return next();
   if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
     return res.sendFile(filePath);
   }

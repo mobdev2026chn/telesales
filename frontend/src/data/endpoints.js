@@ -7,6 +7,7 @@ export const ENDPOINTS = {
   me: '/auth/me',
   adminLogin: '/auth/admin-login',
   logout: '/auth/logout',
+  mediaToken: '/auth/media-token',   // short-lived token for recording links (?mt=)
 
   // Users
   users: '/admin/users',
@@ -33,6 +34,7 @@ export const ENDPOINTS = {
   recordingAudio: (id) => `/recordings/${enc(id)}/audio`,
   recordingReview: (id) => `/recordings/${enc(id)}/review`,
   recordingPin: (id) => `/recordings/${enc(id)}/pin`,
+  phoneHealth: (qs) => `/admin/phone-health${qs}`,
 
   // Demo bookings
   demos: (qs) => `/admin/demos${qs}`,

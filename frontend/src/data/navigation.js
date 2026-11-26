@@ -6,6 +6,7 @@ export const NAV_ITEMS = [
   { tab: 'users', path: '/users', label: 'User Management', guard: 'users' },
   { tab: 'lb', path: '/leaderboard', label: 'Leaderboard' },
   { tab: 'recs', path: '/recordings', label: 'Call Recordings' },
+  { tab: 'health', path: '/phone-health', label: 'Phone Health', guard: 'health' },
   { tab: 'leads', path: '/leads', label: 'Leads Pipeline' },
   { tab: 'demos', path: '/demos', label: 'Demo Bookings', guard: 'demos' },
 ];
@@ -17,6 +18,7 @@ export const PATHS = {
   users: '/users',
   lb: '/leaderboard',
   recs: '/recordings',
+  health: '/phone-health',
   leads: '/leads',
   demos: '/demos',
   notifications: '/notifications',
@@ -26,7 +28,7 @@ export const PATHS = {
 
 export const TAB_TITLES = {
   dash: 'Dashboard', calls: 'Call Log', dial: 'Lead Calling', users: 'User Management', lb: 'Leaderboard',
-  recs: 'Call Recordings', leads: 'Leads Pipeline', demos: 'Demo Bookings', notifications: 'Notifications', profile: 'My Profile', user: 'User Details',
+  recs: 'Call Recordings', health: 'Phone Health', leads: 'Leads Pipeline', demos: 'Demo Bookings', notifications: 'Notifications', profile: 'My Profile', user: 'User Details',
 };
 
 export function userPath(id) {

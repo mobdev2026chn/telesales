@@ -6,6 +6,7 @@ import '../../providers/tele_provider.dart';
 import '../../services/call_recording_setup.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/askeva_phone_app_prompt.dart';
+import '../../widgets/call_recording_disclosure.dart';
 import '../../widgets/neo_card.dart';
 
 /// "Call recording" (More screen entry, dashboard banner).
@@ -73,6 +74,8 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel> with 
   /// Shown under the button when the flow stopped before recording was on.
   String? _hint;
   bool _hintOffersAppInfo = false;
+  /// The Accessibility switch is still off: show the exact steps (with buttons) instead of a hint.
+  bool _showAccessibilitySteps = false;
 
   bool get _isAndroid => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
@@ -131,6 +134,7 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel> with 
       _loading = false;
       _dialerSwitchStarted = switchStarted;
       if (s?.recordingReady == true) _hint = null;
+      if (s?.recordingReady == true || s?.accessibilityEnabled == true) _showAccessibilitySteps = false;
     });
     await tele.refreshRecordingSetupStatus();
     return s;
@@ -143,6 +147,7 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel> with 
       _askedAccessibility = false;
       _hint = null;
       _hintOffersAppInfo = false;
+      _showAccessibilitySteps = false;
     });
     _continueFlow();
   }
@@ -194,18 +199,18 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel> with 
 
       // 4. Only where AskEVA records calls itself: the Accessibility switch
       if (s.needsAccessibility && !s.accessibilityEnabled) {
-        if (_askedAccessibility) {
-          return _finish(
-            hint: 'Turn on "AskEVA Call Recording" in Accessibility (under Installed apps). If its switch is '
-                'greyed out, open App info → ⋮ → Allow restricted settings, then tap Turn on again.',
-            appInfo: true,
-          );
+        if (_askedAccessibility) return _finish(accessibilitySteps: true);
+        // Google Play's prominent disclosure: what the service does and collects, and an explicit AGREE,
+        // before Android's Accessibility settings open
+        if (!mounted) return;
+        if (!await askCallRecordingConsent(context)) {
+          return _finish(hint: 'Call recording stays off. Tap TURN ON RECORDING when you want to switch it on.');
         }
         _askedAccessibility = true;
         _expectReturn();
         if (await CallRecordingChannel.openAccessibilitySettings()) return;
         _waitingForReturn = false;
-        return _finish(hint: 'Open Settings → Accessibility → AskEVA Call Recording and turn it on.');
+        return _finish(accessibilitySteps: true);
       }
 
       _finish();
@@ -236,14 +241,45 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel> with 
     if (mounted) await _refresh();
   }
 
-  void _finish({String? hint, bool appInfo = false}) {
+  void _finish({String? hint, bool appInfo = false, bool accessibilitySteps = false}) {
     if (!mounted) return;
     setState(() {
       _flowActive = false;
       _waitingForReturn = false;
       _hint = hint;
       _hintOffersAppInfo = appInfo;
+      _showAccessibilitySteps = accessibilitySteps;
     });
+  }
+
+  /// The "AskEVA Call Recording" switch is still off: buttons that take the agent straight there (the
+  /// Accessibility page, AskEVA highlighted where the phone supports it) instead of written menu paths.
+  /// Android 13+ greys the switch out for apps installed outside Google Play until "Allow restricted
+  /// settings" in App info: Android offers no direct link to that menu item, so it is named on the button.
+  Widget _accessibilitySteps(RecordingSetupStatus? s) {
+    final restricted = (s?.sdkInt ?? 0) >= 33;
+    Widget link(String label, Future<bool> Function() open) => Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+            onPressed: () async {
+              await open();
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: AppTheme.greenDark,
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(0, 32),
+            ),
+            child: Text(label, style: AppTheme.label(size: 10, color: AppTheme.greenDark)),
+          ),
+        );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Turn on "AskEVA Call Recording"', style: AppTheme.bodyBold(size: 12, color: AppTheme.ink900)),
+        link('OPEN ACCESSIBILITY SETTINGS', CallRecordingChannel.openAccessibilitySettings),
+        if (restricted) link('SWITCH GREYED OUT? ⋮ → ALLOW RESTRICTED SETTINGS', CallRecordingChannel.openAppInfo),
+      ],
+    );
   }
 
   @override
@@ -289,6 +325,10 @@ class _CallRecordingSetupPanelState extends State<CallRecordingSetupPanel> with 
             if (!ready) ...[
               const SizedBox(height: 14),
               _turnOnButton(),
+            ],
+            if (_showAccessibilitySteps && !ready && s?.accessibilityEnabled != true) ...[
+              const SizedBox(height: 12),
+              _accessibilitySteps(s),
             ],
             if (_hint != null && !ready) ...[
               const SizedBox(height: 10),

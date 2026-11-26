@@ -1,0 +1,33 @@
+AskEVA Telesales is the calling app for sales teams that use AskEVA. Callers work through their leads and log every call in one place, and managers follow the whole team's calls as they happen.
+
+You need an AskEVA Telesales account to use this app. Your company's admin creates your login.
+
+FOR CALLERS
+• See the leads assigned to you and call them in one tap
+• Log the outcome of each call and add notes
+• Schedule callbacks and keep track of your follow-ups
+• Book product demos straight after a call
+• See a contact's past calls before you dial
+• Track your calls against the daily target your admin sets
+• Mark tea and lunch breaks
+
+FOR MANAGERS
+• Live team dashboard with calls and talk time
+• Leaderboard of your callers
+• Each caller's calls and talk time
+• Listen to call recordings for quality review
+• Add leads for your team
+
+WORK CALLS ONLY
+Pick your work SIM and the app tracks only the calls on that SIM. Calls on your personal SIM are never tracked.
+
+CALL RECORDINGS
+If your phone records calls, AskEVA Telesales finds the recording of each work call and uploads it to your company's AskEVA account, so your manager can review it.
+
+PERMISSIONS
+• Call log: to log your work calls automatically
+• Phone: to place calls and find your work SIM
+• Contacts: to show the saved name for a call's number
+• Music and audio: to find your phone's recordings of work calls
+• Microphone: to record work calls on phones that allow it
+• Notifications: for reminders and messages from your team

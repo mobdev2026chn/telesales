@@ -273,6 +273,32 @@ object CallMonitorStore {
         prefs(ctx).edit().putLong("call_push_ack_ms_$userId", ms).apply()
     }
 
+    /**
+     * Highest call-log row id (CallLog.Calls._ID) the server accepted, per user. Rows get increasing ids
+     * when written, so a long call logged after a shorter later one is still found. 0 = not known yet.
+     */
+    fun callPushAckId(ctx: Context, userId: String): Long = prefs(ctx).getLong("call_push_ack_id_$userId", 0L)
+    fun setCallPushAckId(ctx: Context, userId: String, id: Long) {
+        prefs(ctx).edit().putLong("call_push_ack_id_$userId", id).apply()
+    }
+
+    /** When a sync last carried a new call-log row; recent rows are re-sent for a while after it (late duration updates). */
+    fun callPushNewRowsAt(ctx: Context, userId: String): Long = prefs(ctx).getLong("call_push_new_at_$userId", 0L)
+    fun setCallPushNewRowsAt(ctx: Context, userId: String, ms: Long) {
+        prefs(ctx).edit().putLong("call_push_new_at_$userId", ms).apply()
+    }
+
+    /**
+     * Calls up to this time have been handled (recording searched / queued) by the call monitor or the
+     * background catch-up ([CallSync.catchUpBuiltInRecordings]). 0 = not set yet (no back-fill on first run).
+     */
+    fun lastHandledCallMs(ctx: Context): Long = prefs(ctx).getLong("last_handled_call_ms", 0L)
+    @Synchronized
+    fun setLastHandledCallMs(ctx: Context, ms: Long) {
+        val p = prefs(ctx)
+        if (ms > p.getLong("last_handled_call_ms", 0L)) p.edit().putLong("last_handled_call_ms", ms).apply()
+    }
+
     fun authFailedToken(ctx: Context): String = prefs(ctx).getString(KEY_AUTH_FAILED_TOKEN, "") ?: ""
     fun setAuthFailedToken(ctx: Context, token: String) {
         prefs(ctx).edit().putString(KEY_AUTH_FAILED_TOKEN, token).apply()

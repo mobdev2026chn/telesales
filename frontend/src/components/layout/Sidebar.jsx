@@ -7,7 +7,7 @@ import { setSidebarOpen } from '../../redux/slices/uiSlice';
 import { selectScope } from '../../redux/selectors';
 import { onKeyActivate } from '../../utils/dom';
 import { roleLabel } from '../../utils/format';
-import { canSeeDemosTab, canSeeUsersTab } from '../../utils/scope';
+import { canSeeDemosTab, canSeePhoneHealthTab, canSeeUsersTab } from '../../utils/scope';
 import Avatar from '../common/Avatar';
 import Icon from '../common/Icon';
 import Logo from '../common/Logo';
@@ -23,6 +23,7 @@ export default function Sidebar() {
   const allowed = (item) => {
     if (item.guard === 'users') return canSeeUsersTab(me);
     if (item.guard === 'demos') return canSeeDemosTab(me);
+    if (item.guard === 'health') return canSeePhoneHealthTab(me);
     return true;
   };
   const openProfile = () => navigate(PATHS.profile);

@@ -27,6 +27,8 @@
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:networkSecurityConfig="@xml/network_security_config"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:enableOnBackInvokedCallback="true">
         <activity
             android:name=".MainActivity"
@@ -75,6 +77,10 @@
         <!-- Decline / Hang up on the call notifications -->
         <receiver
             android:name=".CallActionReceiver"
+            android:exported="false" />
+        <!-- Follow-up reminder alarms (CallbackReminders) -->
+        <receiver
+            android:name=".CallbackReminderReceiver"
             android:exported="false" />
         <service
             android:name=".AskEvaInCallService"

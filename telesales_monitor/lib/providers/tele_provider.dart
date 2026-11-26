@@ -16,6 +16,8 @@ import '../services/api_parsers.dart';
 import '../services/api_service.dart';
 import '../services/call_log_helpers.dart';
 import '../services/call_recording_setup.dart';
+import '../services/callback_reminders.dart';
+import '../services/lead_outbox.dart';
 import '../services/realtime_service.dart';
 import '../services/work_sim.dart';
 import '../services/dialer_service.dart';
@@ -145,7 +147,8 @@ class TeleProvider extends ChangeNotifier {
       if (_isLoggedIn) {
         fetchNotifications();
         unawaited(_sendPresenceHeartbeat());
-        fetchBackendData();
+        _refreshBackendOnResume();
+        _scheduleOutboxReplay(); // changes saved while offline
         // (Re)start call tracking while we are allowed to: after a reboot, an update or a kill
         syncCallMonitor();
         CallRecordingChannel.retryUploads();
@@ -474,6 +477,7 @@ class TeleProvider extends ChangeNotifier {
           decoded.forEach((k, v) => _crmContactNames[k] = v.toString());
         } catch (_) {}
       }
+      if (_isLoggedIn && !mustReauthenticate) _loadOutbox(prefs);
       _activeSimSlot = prefs.getInt('active_sim_slot') ?? 1;
     } catch (e) {
       debugPrint('Error loading saved preferences: $e');
@@ -511,6 +515,11 @@ class TeleProvider extends ChangeNotifier {
     if (!_isCurrentSession(gen) || res == null || res['success'] != true) return;
     final user = res['user'];
     if (user is Map) _applyUserProfile(Map<String, dynamic>.from(user), keepTrackingNumber: true);
+    if (_currentUserId.isNotEmpty && _currentUserId != _outboxUserId) {
+      final prefs = await SharedPreferences.getInstance();
+      if (!_isCurrentSession(gen)) return;
+      _loadOutbox(prefs); // the outbox is stored per user id
+    }
     await _savePreferences();
     notifyListeners();
   }
@@ -551,57 +560,63 @@ class TeleProvider extends ChangeNotifier {
     }
   }
 
+  // Realtime event handlers are methods (not closures): RealtimeService ignores a handler that is
+  // already registered, so connecting again at every login never makes an alert show twice.
+  void _onCallerInactivityAlert(dynamic data) {
+    unawaited(fetchNotifications());
+    final msg = (data is Map && data['message'] != null)
+        ? data['message'].toString()
+        : 'You have been inactive for 15 minutes without any call.';
+    InAppPushBanner.showGlobal(
+      title: 'Inactivity Alert ⚠️',
+      message: msg,
+    );
+    unawaited(showSystemNotification(
+      title: 'Inactivity Alert ⚠️',
+      message: msg,
+      id: 9110,
+    ));
+  }
+
+  void _onLeadNotification(dynamic data) {
+    unawaited(fetchNotifications());
+    final title = (data is Map && data['title'] != null)
+        ? '${data['title']} 📋'
+        : 'Lead Updated 📋';
+    final msg = (data is Map && data['message'] != null)
+        ? data['message'].toString()
+        : 'Lead status was changed.';
+    InAppPushBanner.showGlobal(
+      title: title,
+      message: msg,
+    );
+    unawaited(showSystemNotification(
+      title: title,
+      message: msg,
+      id: 9111,
+    ));
+  }
+
+  void _onNotificationCreated(dynamic data) {
+    unawaited(fetchNotifications());
+    if (data is Map) {
+      final title = data['title'] != null ? '${data['title']}' : 'New Alert 🔔';
+      final msg = data['message'] != null ? '${data['message']}' : '';
+      if (msg.isNotEmpty) {
+        InAppPushBanner.showGlobal(
+          title: title,
+          message: msg,
+        );
+      }
+    }
+  }
+
   void _connectRealtime() {
     if (!_isLoggedIn || _authToken.isEmpty) return;
 
-    RealtimeService.on('callerInactivityAlert', (data) {
-      unawaited(fetchNotifications());
-      final msg = (data is Map && data['message'] != null)
-          ? data['message'].toString()
-          : 'You have been inactive for 15 minutes without any call.';
-      InAppPushBanner.showGlobal(
-        title: 'Inactivity Alert ⚠️',
-        message: msg,
-      );
-      unawaited(showSystemNotification(
-        title: 'Inactivity Alert ⚠️',
-        message: msg,
-        id: 9110,
-      ));
-    });
-
-    RealtimeService.on('leadNotification', (data) {
-      unawaited(fetchNotifications());
-      final title = (data is Map && data['title'] != null)
-          ? '${data['title']} 📋'
-          : 'Lead Updated 📋';
-      final msg = (data is Map && data['message'] != null)
-          ? data['message'].toString()
-          : 'Lead status was changed.';
-      InAppPushBanner.showGlobal(
-        title: title,
-        message: msg,
-      );
-      unawaited(showSystemNotification(
-        title: title,
-        message: msg,
-        id: 9111,
-      ));
-    });
-
-    RealtimeService.on('notificationCreated', (data) {
-      unawaited(fetchNotifications());
-      if (data is Map) {
-        final title = data['title'] != null ? '${data['title']}' : 'New Alert 🔔';
-        final msg = data['message'] != null ? '${data['message']}' : '';
-        if (msg.isNotEmpty) {
-          InAppPushBanner.showGlobal(
-            title: title,
-            message: msg,
-          );
-        }
-      }
-    });
+    RealtimeService.on('callerInactivityAlert', _onCallerInactivityAlert);
+    RealtimeService.on('leadNotification', _onLeadNotification);
+    RealtimeService.on('notificationCreated', _onNotificationCreated);
 
     RealtimeService.connect(_authToken, onReconnected: () {
       if (!_isLoggedIn) return;
@@ -632,6 +647,7 @@ class TeleProvider extends ChangeNotifier {
         fetchBackendData();
         _refreshLiveNumbers();
         fetchNotifications();
+        _scheduleOutboxReplay();
       }
     });
   }
@@ -766,6 +782,30 @@ class TeleProvider extends ChangeNotifier {
 
   Map<String, dynamic>? _backendStats;
   Map<String, dynamic>? get backendStats => _backendStats;
+  bool _backendStatsAreToday = false; // _backendStats were loaded for the TODAY period
+
+  Map<String, dynamic>? _teamLiveBoardSource;
+  TeamLiveBoard? _teamLiveBoardCache;
+
+  /// Live team board for the manager home screen (on call / available / on break / offline /
+  /// recording off), read from the dashboard stats the app already loads. Null in caller context.
+  TeamLiveBoard? get teamLiveBoard {
+    if (_isCallerContext) return null;
+    final stats = _backendStats;
+    if (!identical(stats, _teamLiveBoardSource)) {
+      _teamLiveBoardSource = stats;
+      _teamLiveBoardCache = teamLiveBoardFromStats(stats);
+    }
+    return _teamLiveBoardCache;
+  }
+
+  /// Team daily target and today's calls (server-counted). Null unless TODAY is selected, the shown
+  /// stats are today's and the server sent a target.
+  ({int target, int calls})? get teamTargetToday {
+    final today = _selectedDateRange == null && _selectedCustomDate == null && _selectedTimeFilter == 0;
+    if (_isCallerContext || !today || !_backendStatsAreToday) return null;
+    return teamTargetFromStats(_backendStats);
+  }
   Map<String, dynamic>? _todayStats; // caller's own numbers for today (daily-target card)
   int _statsRequestSeq = 0; // only the latest stats request may update the screen
   List<EmployeeModel> _teamEmployees = [];
@@ -843,9 +883,69 @@ class TeleProvider extends ChangeNotifier {
     fetchBackendData();
   }
 
-  Future<void> fetchBackendData() async {
+  // ---- Full refresh (stats, leaderboard, recordings, leads, notifications) ----
+  // Concurrent calls for the same scope (user, filters, period) share one request. Each run gets a
+  // token; a run that is no longer the latest one started stops writing, so a slow response for a
+  // team / period the user already switched away from never replaces newer data.
+  Future<void>? _backendFetchFuture;
+  String? _backendFetchKey;
+  int _backendFetchSeq = 0;
+  DateTime? _lastBackendFetchDoneAt;
+  int _recordingsRequestSeq = 0; // only the latest recordings request may update the list
+
+  String _backendFetchScopeKey() => jsonEncode([
+        _sessionGeneration,
+        _isCallerContext,
+        _currentUserId,
+        _currentUserRole,
+        _currentUserTeam,
+        _verifiedTrackingNumber,
+        _callerName,
+        _selectedTeamFilter,
+        _selectedUserFilter,
+        _selectedTimeFilter,
+        _periodQuery(),
+      ]);
+
+  /// Reloads the server data for the current scope. [force] starts a new request even when one for
+  /// the same scope is already running (after a change the running one may not include yet).
+  Future<void> fetchBackendData({bool force = false}) {
+    if (!_isLoggedIn) return Future<void>.value();
+    final key = _backendFetchScopeKey();
+    final running = _backendFetchFuture;
+    if (!force && running != null && _backendFetchKey == key) return running;
+    final fetchId = ++_backendFetchSeq;
+    final future = _runBackendFetch(fetchId);
+    _backendFetchFuture = future;
+    _backendFetchKey = key;
+    return future;
+  }
+
+  Future<void> _runBackendFetch(int fetchId) async {
+    try {
+      await _fetchBackendDataNow(fetchId);
+    } finally {
+      if (fetchId == _backendFetchSeq) {
+        _backendFetchFuture = null;
+        _backendFetchKey = null;
+      }
+      _lastBackendFetchDoneAt = DateTime.now();
+    }
+  }
+
+  /// App back in the foreground (e.g. after a phone call): skip the full refresh when one is still
+  /// running or finished less than 30 s ago.
+  void _refreshBackendOnResume() {
+    if (_backendFetchFuture != null) return;
+    final last = _lastBackendFetchDoneAt;
+    if (last != null && DateTime.now().difference(last) < const Duration(seconds: 30)) return;
+    fetchBackendData();
+  }
+
+  Future<void> _fetchBackendDataNow(int fetchId) async {
     if (!_isLoggedIn) return;
     final gen = _sessionGeneration;
+    bool isLatest() => _isCurrentSession(gen) && fetchId == _backendFetchSeq;
     try {
       String? phoneParam;
       String? nameParam;
@@ -873,7 +973,7 @@ class TeleProvider extends ChangeNotifier {
       final String? endDateParam = q['endDate'];
 
       await _refreshServerStats();
-      if (!_isCurrentSession(gen)) return;
+      if (!isLatest()) return;
       final emps = await ApiService.fetchLeaderboard(
         callerPhone: phoneParam,
         callerName: nameParam,
@@ -888,7 +988,7 @@ class TeleProvider extends ChangeNotifier {
         loggedInTeam: _currentUserTeam,
         loggedInUserId: _currentUserId,
       );
-      if (!_isCurrentSession(gen)) return;
+      if (!isLatest()) return;
       if (emps != null) {
         _teamEmployees = emps;
         final me = _teamEmployees.where((e) => e.id == _currentUserId).toList();
@@ -899,7 +999,7 @@ class TeleProvider extends ChangeNotifier {
       }
 
       await _refreshRecordings();
-      if (!_isCurrentSession(gen)) return;
+      if (!isLatest()) return;
 
       final backendLeads = await ApiService.fetchLeads(
         callerPhone: phoneParam,
@@ -910,7 +1010,7 @@ class TeleProvider extends ChangeNotifier {
         loggedInTeam: _currentUserTeam,
         loggedInUserId: _currentUserId,
       );
-      if (!_isCurrentSession(gen)) return;
+      if (!isLatest()) return;
       if (backendLeads != null) {
         // The server response is authoritative: remove deleted/import-replaced CRM leads
         // before merging the current rows, while retaining local call-log contacts.
@@ -937,6 +1037,8 @@ class TeleProvider extends ChangeNotifier {
             _leads.add(bl);
           }
         }
+        // The server answered: send changes that were saved while it could not be reached
+        _scheduleOutboxReplay();
       }
 
       await fetchNotifications();
@@ -978,9 +1080,11 @@ class TeleProvider extends ChangeNotifier {
         );
     // The main list is the newest recordings only; pinned ones are fetched separately so an old
     // pinned recording is never missing.
+    final request = ++_recordingsRequestSeq;
     final results = await Future.wait([fetch(), fetch(pinnedOnly: true)]);
     final recs = results[0];
-    if (recs == null || !_isCurrentSession(gen)) return;
+    // A slower response for filters the user already changed must not replace the newer list
+    if (recs == null || !_isCurrentSession(gen) || request != _recordingsRequestSeq) return;
     final loadedIds = recs.map((r) => r.id).toSet();
     for (final p in results[1] ?? const <RecordingModel>[]) {
       if (p.pinned && loadedIds.add(p.id)) recs.add(p);
@@ -1246,7 +1350,7 @@ class TeleProvider extends ChangeNotifier {
   Future<void> markDemoBooked(LeadModel lead, DateTime demoAt, String clientName) async {
     final name = clientName.trim().isNotEmpty ? clientName.trim() : lead.name;
     _demoBookings[last10Digits(lead.phone)] = (DateTime.now(), demoAt);
-    addScheduledCallback(name: name.isNotEmpty ? name : lead.phone, phone: lead.phone, scheduledTime: demoAt, note: 'Demo booked');
+    addScheduledCallback(name: name.isNotEmpty ? name : lead.phone, phone: lead.phone, scheduledTime: demoAt, note: 'Demo booked', remind: true);
     await updateLeadStatus(
       lead.id.isNotEmpty ? lead.id : lead.phone,
       LeadStatus.bookDemo,
@@ -1256,11 +1360,15 @@ class TeleProvider extends ChangeNotifier {
     );
   }
 
-  // Uploads device calls to the server. Only calls newer than the last timestamp the server
-  // acknowledged are sent (persisted per user). One upload at a time; a request made meanwhile runs right after.
+  // Uploads device calls to the server. Calls from [kCallSyncReplayWindow] before the last timestamp
+  // the server acknowledged (persisted per user) are considered, so a long call that ends after a
+  // later call was sent is still sent; calls the server already has with the same facts are skipped.
+  // Only work-SIM calls since login are in [_callLogs]. At most [kCallSyncBatchSize] per request.
+  // One upload at a time; a request made meanwhile runs right after.
   bool _callSyncInFlight = false;
   bool _callSyncPending = false;
   DateTime? _lastCallSyncAck;
+  final Map<String, String> _sentCallSignatures = {}; // calls acknowledged in this session
   DateTime? _lastCallSyncAt; // when the last sync request succeeded
   DateTime? get lastCallSyncAt => _lastCallSyncAt;
   /// Work calls on this phone the server has not received yet (in-app call log).
@@ -1277,8 +1385,10 @@ class TeleProvider extends ChangeNotifier {
     try {
       do {
         _callSyncPending = false;
-        final batch = callsNewerThan(_callLogs, _lastCallSyncAck);
-        if (batch.isEmpty) break;
+        pruneSentCallSignatures(_sentCallSignatures, _lastCallSyncAck);
+        final waiting = callsToSync(_callLogs, _lastCallSyncAck, _sentCallSignatures); // oldest first
+        if (waiting.isEmpty) break;
+        final batch = waiting.length > kCallSyncBatchSize ? waiting.sublist(0, kCallSyncBatchSize) : waiting;
         final inserted = await ApiService.syncCallLogs(
           batch,
           callerId: _currentUserId,
@@ -1288,8 +1398,13 @@ class TeleProvider extends ChangeNotifier {
         if (!_isCurrentSession(gen)) return;
         if (inserted < 0) break; // failed: retried on the next call-log change / app start
         _lastCallSyncAt = DateTime.now();
+        for (final c in batch) {
+          _sentCallSignatures[callSyncKey(c)] = callSyncSignature(c);
+        }
+        if (waiting.length > batch.length) _callSyncPending = true; // next batch right after
         final newest = newestTimestamp(batch);
-        if (newest != null) {
+        // The acknowledgement only moves forward (an older long call found later must not move it back)
+        if (newest != null && (_lastCallSyncAck == null || newest.isAfter(_lastCallSyncAck!))) {
           _lastCallSyncAck = newest;
           try {
             final prefs = await SharedPreferences.getInstance();
@@ -1371,6 +1486,7 @@ class TeleProvider extends ChangeNotifier {
     final stats = results[0];
     if (stats != null) {
       _backendStats = stats;
+      _backendStatsAreToday = isToday;
       if (stats['teams'] is List) {
         final rawTeams = (stats['teams'] as List).map((t) => t.toString()).toList();
         final filtered = rawTeams.where((t) =>
@@ -1556,7 +1672,7 @@ class TeleProvider extends ChangeNotifier {
           );
         }
 
-        await fetchBackendData();
+        await fetchBackendData(force: true);
         notifyListeners();
         return true;
       }
@@ -1584,6 +1700,16 @@ class TeleProvider extends ChangeNotifier {
     _sessionGeneration++; // in-flight requests of this session are ignored from now on
     RealtimeService.disconnect();
     ApiService.clearToken();
+    CallbackReminders.cancelAll(); // the callbacks below go with the user
+    // Changes not sent yet stay stored under this user's id (replayed at their next login)
+    _outbox.clear();
+    _outboxUserId = '';
+    _outboxReplayQueued = false;
+    _sentCallSignatures.clear();
+    _backendFetchFuture = null;
+    _backendFetchKey = null;
+    _lastBackendFetchDoneAt = null;
+    _recordingsRequestSeq++;
     _isLoggedIn = false;
     _setupCompleted = true; // Setup (permissions / SIM) is per device, not per user
     _authToken = '';
@@ -1678,8 +1804,11 @@ class TeleProvider extends ChangeNotifier {
     _connectRealtime();
     _setupCompleted = true;
     _loginSessionTimestamp = DateTime.now();
-    final syncAck = (await SharedPreferences.getInstance()).getInt(_syncAckKey(_currentUserId));
+    final prefs = await SharedPreferences.getInstance();
+    final syncAck = prefs.getInt(_syncAckKey(_currentUserId));
     _lastCallSyncAck = syncAck != null ? DateTime.fromMillisecondsSinceEpoch(syncAck) : null;
+    _sentCallSignatures.clear();
+    _loadOutbox(prefs); // changes this user saved while offline in an earlier session
     if (!_isOnDuty) {
       _isOnDuty = true;
       _dutyStartTime = DateTime.now();
@@ -1959,6 +2088,15 @@ class TeleProvider extends ChangeNotifier {
   }
 
   Future<bool> logout() async {
+    // Send changes still waiting while the session token is valid. Bounded, so an offline phone
+    // is not stuck here; whatever is left stays stored for this user's next login.
+    if (_outbox.isNotEmpty) {
+      try {
+        await _runInOutboxChain(_replayOutboxNow).timeout(const Duration(seconds: 10));
+      } catch (e) {
+        debugPrint('Outbox flush before logout: $e');
+      }
+    }
     try {
       // Keep the local session until the server confirms the explicit logout.
       if (!await ApiService.logout()) return false;
@@ -2411,7 +2549,10 @@ class TeleProvider extends ChangeNotifier {
 
   static bool _isServerLeadId(String id) => id.isNotEmpty && id != 'demo' && !id.startsWith('local_');
 
-  Future<void> updateLeadStatus(
+  /// Changes a lead's status (and note / attempt) on this phone at once, then on the server. A save
+  /// the server could not take (offline / 5xx) is kept in the outbox and sent later; the returned
+  /// result tells the screen which happened.
+  Future<LeadSaveResult> updateLeadStatus(
     String leadIdOrPhone,
     LeadStatus newStatus, {
     String? phone,
@@ -2420,7 +2561,7 @@ class TeleProvider extends ChangeNotifier {
     bool logAttempt = false,
     bool scheduleDefaultCallback = true,
   }) async {
-    if (leadIdOrPhone == 'demo') return; // never persist a placeholder lead
+    if (leadIdOrPhone == 'demo') return LeadSaveResult.localOnly; // never persist a placeholder lead
     final lookupPhone = phone ?? leadIdOrPhone;
 
     LeadModel? targetLead;
@@ -2439,7 +2580,7 @@ class TeleProvider extends ChangeNotifier {
         targetLead.lastCallDate = DateTime.now();
       }
     } else {
-      if (last10Digits(lookupPhone).length < 8) return;
+      if (last10Digits(lookupPhone).length < 8) return LeadSaveResult.localOnly;
       // Local-only lead (not yet on the server)
       targetLead = LeadModel(
         id: 'local_${DateTime.now().millisecondsSinceEpoch}',
@@ -2478,23 +2619,20 @@ class TeleProvider extends ChangeNotifier {
     notifyListeners();
 
     // Persist to the backend CRM (PUT /admin/leads/:id). Local-only leads have no server id.
+    // The local override is removed once the server has the change (see _clearConfirmedOverrides).
     if (_isServerLeadId(targetLead.id)) {
-      final ok = await ApiService.updateLead(
+      return _sendWithOutbox(OutboxEntry.leadUpdate(
         leadId: targetLead.id,
-        status: newStatus,
+        phone: finalPhone,
+        status: newStatus.name,
         notes: (note != null && note.isNotEmpty) ? note : null,
         logAttempt: logAttempt,
-      );
-      if (ok) {
-        // Server has it now: the local override is no longer needed
-        _leadStatusOverrides.remove(finalPhone);
-        if (note != null && note.isNotEmpty) _leadNotes.remove(finalPhone);
-        _savePreferences();
-      }
+      ));
     }
+    return LeadSaveResult.localOnly;
   }
 
-  Future<void> addLeadNote(String leadIdOrPhone, String newNote) async {
+  Future<LeadSaveResult> addLeadNote(String leadIdOrPhone, String newNote) async {
     final idx = _leads.indexWhere((l) =>
         l.id == leadIdOrPhone ||
         l.phone == leadIdOrPhone ||
@@ -2510,13 +2648,241 @@ class TeleProvider extends ChangeNotifier {
       notifyListeners();
 
       if (_isServerLeadId(lead.id)) {
-        final ok = await ApiService.updateLead(leadId: lead.id, notes: newNote);
-        if (ok) {
-          _leadNotes.remove(lead.phone);
-          _savePreferences();
-        }
+        return _sendWithOutbox(OutboxEntry.leadUpdate(leadId: lead.id, phone: lead.phone, notes: newNote));
       }
     }
+    return LeadSaveResult.localOnly;
+  }
+
+  // ================= OUTBOX: changes saved while the server could not take them =================
+  // Lead updates / call outcomes (one entry per lead, latest value of each field wins) and contact
+  // saves (one per number). Only "no response" and 5xx failures are kept; a 4xx would fail again.
+  // Stored per user id in SharedPreferences on every change, so it survives app close and logout and
+  // is sent at the same user's next login. Sent again on app resume, after a refresh reached the
+  // server, on the 60 s timer and after any successful save. Entries older than 7 days are dropped.
+  // All sends run one after another (_outboxChain), so a replay and a new save never overlap.
+  final Map<String, OutboxEntry> _outbox = {};
+  String _outboxUserId = ''; // whose outbox is in [_outbox]
+  Future<void> _outboxChain = Future<void>.value();
+  bool _outboxReplayQueued = false;
+
+  /// Changes saved on this phone that the server does not have yet.
+  int get pendingSyncCount => _outbox.length;
+
+  Future<T> _runInOutboxChain<T>(Future<T> Function() task) {
+    final run = _outboxChain.then((_) => task());
+    _outboxChain = run.then<void>((_) {}, onError: (Object e) => debugPrint('Outbox task failed: $e'));
+    return run;
+  }
+
+  void _loadOutbox(SharedPreferences prefs) {
+    _outbox.clear();
+    _outboxUserId = _currentUserId;
+    if (_outboxUserId.isEmpty) return;
+    final key = outboxPrefsKey(_outboxUserId);
+    final raw = prefs.getString(key);
+    _outbox.addAll(decodeOutbox(raw, now: DateTime.now()));
+    if (raw != null && raw.isNotEmpty) {
+      // Write back without the expired entries
+      final pruned = encodeOutbox(_outbox);
+      if (_outbox.isEmpty) {
+        unawaited(prefs.remove(key));
+      } else if (pruned != raw) {
+        unawaited(prefs.setString(key, pruned));
+      }
+    }
+    // Keep showing the change on this phone until the server confirms it
+    for (final e in _outbox.values) {
+      _applyOutboxOverride(e);
+    }
+  }
+
+  void _applyOutboxOverride(OutboxEntry e) {
+    if (e.phone.isEmpty) return;
+    if (e.type == OutboxEntry.typeContact) {
+      final k = last10Digits(e.phone);
+      if (k.isNotEmpty && e.name.isNotEmpty) _crmContactNames[k] = e.name;
+      if (e.notes != null && e.notes!.isNotEmpty) _leadNotes[e.phone] = e.notes!;
+      return;
+    }
+    if (e.status != null) _leadStatusOverrides[e.phone] = e.status!;
+    if (e.notes != null && e.notes!.isNotEmpty) _leadNotes[e.phone] = e.notes!;
+  }
+
+  Future<void> _persistOutbox(String userId, Map<String, OutboxEntry> entries) async {
+    if (userId.isEmpty) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (entries.isEmpty) {
+        await prefs.remove(outboxPrefsKey(userId));
+      } else {
+        await prefs.setString(outboxPrefsKey(userId), encodeOutbox(entries));
+      }
+    } catch (e) {
+      debugPrint('Outbox save failed: $e');
+    }
+  }
+
+  /// Sets ([value]) or removes (null) [key] in [userId]'s outbox. When that session already ended
+  /// (logout during the request), the stored copy is changed instead of the in-memory one.
+  Future<void> _setOutboxEntry(String userId, int gen, String key, OutboxEntry? value) async {
+    if (userId.isEmpty) return;
+    if (_isCurrentSession(gen) && _outboxUserId == userId) {
+      if (value == null) {
+        _outbox.remove(key);
+      } else {
+        _outbox[key] = value;
+      }
+      await _persistOutbox(userId, _outbox);
+      return;
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final stored = decodeOutbox(prefs.getString(outboxPrefsKey(userId)), now: DateTime.now());
+      if (value == null) {
+        stored.remove(key);
+      } else {
+        stored[key] = value;
+      }
+      await _persistOutbox(userId, stored);
+      // The same user already signed in again: keep the loaded copy in step
+      if (_isLoggedIn && _outboxUserId == userId) {
+        if (value == null) {
+          _outbox.remove(key);
+        } else {
+          _outbox[key] = value;
+        }
+      }
+    } catch (e) {
+      debugPrint('Outbox update failed: $e');
+    }
+  }
+
+  Future<ApiWriteResult> _sendOutboxEntry(OutboxEntry e) {
+    if (e.type == OutboxEntry.typeContact) {
+      return ApiService.saveContactDetailed(phoneNumber: e.phone, name: e.name, notes: e.notes);
+    }
+    return ApiService.updateLeadDetailed(
+      leadId: e.leadId,
+      status: e.leadStatus,
+      notes: e.notes,
+      logAttempt: e.logAttempt,
+    );
+  }
+
+  /// The server confirmed [e]: drop the local overrides that showed it (unless a newer change
+  /// replaced them meanwhile). Returns true when something was removed.
+  bool _clearConfirmedOverrides(OutboxEntry e, int gen) {
+    if (!_isCurrentSession(gen) || e.type != OutboxEntry.typeLead || e.phone.isEmpty) return false;
+    var changed = false;
+    if (e.status != null && _leadStatusOverrides[e.phone] == e.status) {
+      _leadStatusOverrides.remove(e.phone);
+      changed = true;
+    }
+    final notes = e.notes;
+    if (notes != null && notes.isNotEmpty && _leadNotes[e.phone] == notes) {
+      _leadNotes.remove(e.phone);
+      changed = true;
+    }
+    if (changed) _savePreferences();
+    return changed;
+  }
+
+  /// Sends [update] (together with anything still waiting for the same lead / number). Network or
+  /// 5xx failure: kept in the outbox (queued). 4xx: not kept (rejected).
+  Future<LeadSaveResult> _sendWithOutbox(OutboxEntry update) {
+    final userId = _currentUserId;
+    final gen = _sessionGeneration;
+    return _runInOutboxChain(() async {
+      if (!_isCurrentSession(gen)) {
+        // Signed out before it could be sent: keep it for this user's next login
+        final stored = await _storedOutboxEntry(userId, update.key);
+        await _setOutboxEntry(userId, gen, update.key, stored == null ? update : stored.mergedWith(update));
+        return LeadSaveResult.queued;
+      }
+      final pending = _outboxUserId == userId ? _outbox[update.key] : null;
+      final toSend = pending == null ? update : pending.mergedWith(update);
+      final res = await _sendOutboxEntry(toSend);
+      if (res.ok) {
+        await _setOutboxEntry(userId, gen, toSend.key, null);
+        _clearConfirmedOverrides(toSend, gen);
+        _scheduleOutboxReplay(); // the server is reachable: send the rest
+        return LeadSaveResult.saved;
+      }
+      if (res.retryable) {
+        // A timed-out request may already have counted the call attempt: never count it twice
+        final keep = res.maybeReachedServer && toSend.logAttempt ? toSend.withoutAttempt() : toSend;
+        await _setOutboxEntry(userId, gen, toSend.key, keep);
+        if (_isCurrentSession(gen)) notifyListeners();
+        return LeadSaveResult.queued;
+      }
+      if (res.statusCode == 401) {
+        // Session expired (handled by ApiService.onAuthRequired as before): this change is not
+        // queued, but what was already waiting stays for the next login.
+        return LeadSaveResult.rejected;
+      }
+      debugPrint('Server refused ${toSend.type} update (HTTP ${res.statusCode}) ${res.message}');
+      await _setOutboxEntry(userId, gen, toSend.key, null);
+      return LeadSaveResult.rejected;
+    });
+  }
+
+  Future<OutboxEntry?> _storedOutboxEntry(String userId, String key) async {
+    if (userId.isEmpty) return null;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return decodeOutbox(prefs.getString(outboxPrefsKey(userId)), now: DateTime.now())[key];
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Queues one replay of the outbox (no-op when it is empty or a replay is already queued).
+  void _scheduleOutboxReplay() {
+    if (!_isLoggedIn || _outbox.isEmpty || _outboxReplayQueued) return;
+    _outboxReplayQueued = true;
+    unawaited(_runInOutboxChain(() async {
+      _outboxReplayQueued = false;
+      await _replayOutboxNow();
+    }));
+  }
+
+  /// Sends every waiting change, oldest lead first; stops at the first network / 5xx failure
+  /// (offline: tried again later). Must run inside [_runInOutboxChain].
+  Future<void> _replayOutboxNow() async {
+    if (!_isLoggedIn || _outbox.isEmpty) return;
+    final userId = _outboxUserId;
+    final gen = _sessionGeneration;
+    if (userId.isEmpty || userId != _currentUserId) return;
+    final now = DateTime.now();
+    final expired = _outbox.entries.where((e) => e.value.isExpired(now)).map((e) => e.key).toList();
+    for (final key in expired) {
+      await _setOutboxEntry(userId, gen, key, null);
+    }
+    final oldestFirst = _outbox.entries.toList()
+      ..sort((a, b) => a.value.updatedAtMs.compareTo(b.value.updatedAtMs));
+    var changed = expired.isNotEmpty;
+    for (final item in oldestFirst) {
+      if (!_isCurrentSession(gen) || !_isLoggedIn) return;
+      final entry = _outbox[item.key];
+      if (entry == null) continue;
+      final res = await _sendOutboxEntry(entry);
+      if (res.ok) {
+        await _setOutboxEntry(userId, gen, item.key, null);
+        _clearConfirmedOverrides(entry, gen);
+        changed = true;
+      } else if (res.retryable || res.statusCode == 401) {
+        if (res.maybeReachedServer && entry.logAttempt) {
+          await _setOutboxEntry(userId, gen, item.key, entry.withoutAttempt());
+        }
+        break; // offline, server trouble or signed out: keep the rest for later
+      } else {
+        debugPrint('Server refused queued ${entry.type} update (HTTP ${res.statusCode}) ${res.message}');
+        await _setOutboxEntry(userId, gen, item.key, null); // would fail again
+        changed = true;
+      }
+    }
+    if (changed && _isCurrentSession(gen)) notifyListeners();
   }
 
   // Scheduled Callbacks (100% Dynamic - strictly for current session & user-scheduled)
@@ -2557,34 +2923,57 @@ class TeleProvider extends ChangeNotifier {
     }
   }
 
+  /// Adds a callback, replacing the same number's earlier one (one callback per number). [remind]:
+  /// the agent chose this time themselves (outcome screen, reschedule, booked demo), so the phone
+  /// posts a reminder at that time; past times get none. A replaced callback's reminder is cancelled.
   void addScheduledCallback({
     required String name,
     required String phone,
     required DateTime scheduledTime,
     required String note,
+    bool remind = false,
   }) {
     final last10 = last10Digits(phone);
+    final lowerName = name.trim().toLowerCase();
 
-    // Remove old persisted callback record so rescheduled record does not duplicate
+    // Remove old persisted callback record so rescheduled record does not duplicate. Matched by
+    // number: two different leads with the same name keep their own callbacks. Only a callback
+    // without a number falls back to the name (and then only replaces other number-less ones).
+    final replaced = <ScheduledCallback>[];
     _callbacks.removeWhere((c) {
-      final samePhoneNumber = last10.isNotEmpty && last10Digits(c.phone) == last10;
-      final sameName = name.trim().isNotEmpty && c.name.trim().toLowerCase() == name.trim().toLowerCase();
-      return samePhoneNumber || sameName;
+      final cLast10 = last10Digits(c.phone);
+      final match = last10.isNotEmpty
+          ? cLast10 == last10
+          : cLast10.isEmpty && lowerName.isNotEmpty && c.name.trim().toLowerCase() == lowerName;
+      if (match) replaced.add(c);
+      return match;
     });
 
-    _callbacks.insert(
-      0,
-      ScheduledCallback(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        name: name,
-        phone: phone,
-        scheduledTime: normalizeCallbackTime(scheduledTime, DateTime.now()),
-        note: note.isNotEmpty ? note : 'Follow-up call scheduled',
-      ),
+    final now = DateTime.now();
+    final callback = ScheduledCallback(
+      id: now.millisecondsSinceEpoch.toString(),
+      name: name,
+      phone: phone,
+      scheduledTime: normalizeCallbackTime(scheduledTime, now),
+      note: note.isNotEmpty ? note : 'Follow-up call scheduled',
     );
+    _callbacks.insert(0, callback);
     _callbacks.sort((a, b) => a.scheduledTime.compareTo(b.scheduledTime));
     _savePreferences();
     notifyListeners();
+
+    // Phone reminders (fire-and-forget; calls on the same channel arrive in this order)
+    for (final old in replaced) {
+      CallbackReminders.cancel(CallbackReminders.reminderIdFor(phone: old.phone, callbackId: old.id));
+    }
+    if (remind && scheduledTime.isAfter(now)) {
+      CallbackReminders.schedule(
+        id: CallbackReminders.reminderIdFor(phone: callback.phone, callbackId: callback.id),
+        at: callback.scheduledTime,
+        title: CallbackReminders.titleFor(name: callback.name, phone: callback.phone),
+        body: CallbackReminders.bodyFor(phone: callback.phone, note: callback.note),
+      );
+    }
   }
 
   // Employees & Leaderboard (Strict Live DB Data)
@@ -2803,7 +3192,12 @@ class TeleProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> saveContact({required String phoneNumber, required String name, String? notes}) async {
+  /// Saves a contact name on this phone at once, then on the server. True unless the server refused
+  /// it; an offline save is queued and sent later. [saveContactWithResult] tells which happened.
+  Future<bool> saveContact({required String phoneNumber, required String name, String? notes}) async =>
+      await saveContactWithResult(phoneNumber: phoneNumber, name: name, notes: notes) != LeadSaveResult.rejected;
+
+  Future<LeadSaveResult> saveContactWithResult({required String phoneNumber, required String name, String? notes}) async {
     final cleanPhone = phoneNumber.replaceAll(RegExp(r'[^0-9]'), '');
     final last10 = cleanPhone.length >= 10 ? cleanPhone.substring(cleanPhone.length - 10) : cleanPhone;
 
@@ -2845,17 +3239,13 @@ class TeleProvider extends ChangeNotifier {
     _savePreferences();
     notifyListeners();
 
-    final success = await ApiService.saveContact(
-      phoneNumber: phoneNumber,
-      name: name,
-      notes: notes,
-    );
-    if (success) {
+    final result = await _sendWithOutbox(OutboxEntry.contactSave(phone: phoneNumber, name: name, notes: notes));
+    if (result == LeadSaveResult.saved) {
       await fetchDeviceCallLogs();
-      await fetchBackendData();
+      await fetchBackendData(force: true); // include the lead the server just created / renamed
       notifyListeners();
     }
-    return true;
+    return result;
   }
 
   Future<Map<String, dynamic>> createUser({
@@ -2881,7 +3271,7 @@ class TeleProvider extends ChangeNotifier {
       managerName: managerName ?? currentUserName,
     );
     if (res['success'] == true) {
-      await fetchBackendData();
+      await fetchBackendData(force: true);
       notifyListeners();
     }
     return res;
@@ -3118,7 +3508,8 @@ class TeleProvider extends ChangeNotifier {
 
   /// Saves the outcome of the current call. [callbackTime] is optional (null = no callback).
   /// When [dialNext] is true the next lead is dialed; the caller UI only passes it on a button tap.
-  Future<void> saveCallOutcomeAndNext({
+  /// Returns whether the server has the outcome (null when there was no lead to save).
+  Future<LeadSaveResult?> saveCallOutcomeAndNext({
     required LeadStatus status,
     String? note,
     bool sendBrochure = false,
@@ -3127,8 +3518,9 @@ class TeleProvider extends ChangeNotifier {
     bool dialNext = true,
   }) async {
     final currentLead = _activeCallLead;
+    LeadSaveResult? result;
     if (currentLead != null && currentLead.id != 'demo') {
-      await updateLeadStatus(
+      result = await updateLeadStatus(
         currentLead.id,
         status,
         phone: currentLead.phone,
@@ -3144,6 +3536,7 @@ class TeleProvider extends ChangeNotifier {
           phone: currentLead.phone,
           scheduledTime: callbackTime,
           note: (note != null && note.isNotEmpty) ? note : 'Follow-up callback',
+          remind: true,
         );
       }
 
@@ -3161,7 +3554,7 @@ class TeleProvider extends ChangeNotifier {
       _sessionCallTimer?.cancel();
       _sessionCallTimer = null;
       notifyListeners();
-      return;
+      return result;
     }
 
     if (dialNext) {
@@ -3170,10 +3563,14 @@ class TeleProvider extends ChangeNotifier {
       _activeCallLead = null;
       notifyListeners();
     }
+    return result;
   }
 
   @override
   void dispose() {
+    RealtimeService.off('callerInactivityAlert', _onCallerInactivityAlert);
+    RealtimeService.off('leadNotification', _onLeadNotification);
+    RealtimeService.off('notificationCreated', _onNotificationCreated);
     RealtimeService.disconnect();
     _sessionCallTimer?.cancel();
     _syncPollingTimer?.cancel();

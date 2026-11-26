@@ -113,7 +113,10 @@ router.get('/dashboard', async (req, res) => {
       };
     }
 
-    const teamDailyTarget = registeredEmployees.reduce((sum, emp) => sum + (Number.isFinite(emp.dailyTarget) ? emp.dailyTarget : Employee.DEFAULT_DAILY_TARGET), 0);
+    // Agents' (callers') daily targets only: managers' and admins' own targets would inflate the team's goal
+    const teamDailyTarget = registeredEmployees
+      .filter(emp => (emp.role || 'caller') === 'caller')
+      .reduce((sum, emp) => sum + (Number.isFinite(emp.dailyTarget) ? emp.dailyTarget : Employee.DEFAULT_DAILY_TARGET), 0);
 
     // Ratios: numerator uses the same scope and period as the denominator
     const connectRatioPercent = totalCalls > 0 ? +((connectedCalls / totalCalls) * 100).toFixed(1) : 0;
@@ -285,6 +288,13 @@ async function findDuplicate({ email, phone }, excludeId = null) {
   return Employee.findOne({ $or: or, ...(excludeId ? { id: { $ne: excludeId } } : {}) }).lean();
 }
 
+// Team structure: a higher rank manages a lower one (admin > manager > jr_manager > team_leader > caller)
+const ROLE_RANK = { caller: 0, team_leader: 1, jr_manager: 2, manager: 3, admin: 4 };
+function rankOf(role) {
+  const r = ROLE_RANK[String(role || 'caller').toLowerCase()];
+  return Number.isFinite(r) ? r : 0;
+}
+
 async function managerNameFor(managerId) {
   if (!managerId) return '';
   const mgr = await Employee.findOne(byIdQuery(managerId)).lean();
@@ -319,6 +329,10 @@ router.post('/users', async (req, res) => {
     if (!ROLES.includes(role)) return res.status(400).json({ success: false, message: `role must be one of ${ROLES.join(', ')}` });
     if (role === 'admin' && req.user.role !== 'admin') {
       return res.status(403).json({ success: false, message: 'Only an admin can create an admin.' });
+    }
+    // Nobody creates an account with more access than their own
+    if (req.user.role !== 'admin' && rankOf(role) > rankOf(req.user.role)) {
+      return res.status(403).json({ success: false, message: 'You can only add users at or below your own level.' });
     }
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ success: false, message: 'Invalid email' });
 
@@ -360,6 +374,19 @@ router.put('/users/:id', async (req, res) => {
     const isAdmin = req.user.role === 'admin';
     if (target.role === 'admin' && !isAdmin) {
       return res.status(403).json({ success: false, message: 'Only an admin can modify an admin account.' });
+    }
+    // Others change their own account, people below them, or someone at their level who reports to them
+    if (!isAdmin) {
+      const myRank = rankOf(req.user.role);
+      const self = target.id === req.user.id;
+      const reportsToMe = !!target.managerId && String(target.managerId) === String(req.user.id);
+      const targetRank = rankOf(target.role);
+      if (!self && !(targetRank < myRank || (targetRank === myRank && reportsToMe))) {
+        return res.status(403).json({ success: false, message: 'You can only change people below you in the team structure.' });
+      }
+      if (b.role !== undefined && rankOf(b.role) > myRank) {
+        return res.status(403).json({ success: false, message: 'You cannot give a role above your own.' });
+      }
     }
 
     const set = {};

@@ -351,6 +351,7 @@ class _RescheduleSheetState extends State<RescheduleSheet> {
                   phone: widget.phone,
                   scheduledTime: targetDateTime,
                   note: _noteCtrl.text.isNotEmpty ? _noteCtrl.text : 'Rescheduled follow-up call',
+                  remind: true, // the agent picked this time: phone reminder at that time
                 );
 
                 Navigator.of(context).pop();

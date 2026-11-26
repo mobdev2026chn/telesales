@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="g2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7AD926"/><stop offset="100%" stop-color="#3CB01A"/>
+    </linearGradient>
+    <pattern id="stripes" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(-60)">
+      <line x1="0" y1="0" x2="0" y2="14" stroke="#ffffff" stroke-opacity="0.08" stroke-width="2"/>
+    </pattern>
+  </defs>
+  <rect width="512" height="512" fill="url(#g2)"/>
+  <rect width="512" height="512" fill="url(#stripes)"/>
+  <path d="M150 112 H108 V340 H282 L348 388 L358 340 H404 V112 H212" fill="#4CBA1E" stroke="#ffffff" stroke-width="13" stroke-linejoin="miter"/>
+  <circle cx="166" cy="110" r="12" fill="#ffffff"/>
+  <circle cx="196" cy="110" r="12" fill="#ffffff"/>
+  <path transform="translate(256 228) scale(7.2) translate(-12 -12)" fill="#ffffff" d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/>
+</svg>

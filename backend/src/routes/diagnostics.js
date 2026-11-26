@@ -2,6 +2,12 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const RecordingIssue = require('../models/RecordingIssue');
+const Employee = require('../models/Employee');
+const Recording = require('../models/Recording');
+const CallLog = require('../models/CallLog');
+const LegacyClientHit = require('../models/LegacyClientHit');
+const { isOnline } = require('../services/presence');
+const { legacyGraceEnabled } = require('../middleware/auth');
 const { resolveScope } = require('../services/scope');
 const { parseLimit, parseDate } = require('../utils/common');
 
@@ -149,6 +155,31 @@ router.post('/api/diagnostics/recording', async (req, res) => {
         console.error('recording issues not stored:', err.message);
       }
     }
+
+    // The phone's current setup (latest report), shown on the Phone health page
+    const latest = cleaned.reduce((best, d) => (!best || (Number(d.at) || 0) >= (Number(best.at) || 0) ? d : best), null);
+    if (latest && user.id && (latest.model || latest.appVersion)) {
+      try {
+        const at = Number(latest.at);
+        await Employee.updateOne({ id: user.id }, {
+          $set: {
+            deviceInfo: {
+              manufacturer: latest.manufacturer || '',
+              brand: latest.brand || '',
+              model: latest.model || '',
+              sdkInt: Number(latest.sdkInt) || 0,
+              appVersion: latest.appVersion || '',
+              dialerPackage: latest.dialerPackage || '',
+              accessibilityEnabled: typeof latest.accessibilityEnabled === 'boolean' ? latest.accessibilityEnabled : null,
+              lastResult: latest.result || '',
+              reportedAt: Number.isFinite(at) && at > 0 ? new Date(at) : new Date(),
+            },
+          },
+        });
+      } catch (err) {
+        console.error('device info not stored:', err.message);
+      }
+    }
     res.json({ success: true, stored: lines.length, issues: issues.length });
   } catch (err) {
     console.error('diagnostics error:', err.message);
@@ -195,5 +226,164 @@ router.get('/api/admin/recording-issues', async (req, res) => {
   }
 });
 
+// ---- Phone health ---------------------------------------------------------------------------------
+// Is every agent's phone recording calls? Per agent: connected calls vs. calls with a recording, how
+// the recordings were made, problem reports, the phone's setup and whether it still runs an old app
+// (no login). Same scope rules as the dashboard: managers see their team, admins everyone.
+
+/** A connected call shorter than this is not counted (wrong number, quick hang-up). */
+const HEALTH_MIN_TALK_SECONDS = 10;
+const IST_OFFSET_MS = 330 * 60 * 1000;
+
+/** Start of the period: today (India time) for 1 day, else the last N days. */
+function healthSince(days, now = Date.now()) {
+  if (days === 1) {
+    const istMidnight = Math.floor((now + IST_OFFSET_MS) / 86400000) * 86400000 - IST_OFFSET_MS;
+    return new Date(istMidnight);
+  }
+  return new Date(now - days * 86400000);
+}
+
+function deviceDTO(d, fallbackAt) {
+  if (!d || !(d.model || d.appVersion)) return null;
+  return {
+    phone: [d.brand || d.manufacturer, d.model].filter(Boolean).join(' '),
+    android: d.sdkInt ? (ANDROID_VERSIONS[d.sdkInt] || `SDK ${d.sdkInt}`) : '',
+    appVersion: d.appVersion || '',
+    dialer: d.dialerPackage || '',
+    accessibilityEnabled: typeof d.accessibilityEnabled === 'boolean' ? d.accessibilityEnabled : null,
+    reportedAt: d.reportedAt || d.callProcessedAt || fallbackAt || null,
+  };
+}
+
+/** Overall verdict and its reasons, in plain words. */
+function healthVerdict(a) {
+  const problems = [];
+  const warnings = [];
+  if (!a.autoRecordEnabled) problems.push('Call recording is switched off in the app');
+  if (a.recordedPercent !== null) {
+    if (a.connectedCalls >= 3 && a.recordedPercent < 50) problems.push(`Only ${a.recordedPercent}% of connected calls were recorded`);
+    else if (a.recordedPercent < 90) warnings.push(`${a.recordedPercent}% of connected calls were recorded`);
+  }
+  if (a.issues.lost >= 3) problems.push(`${a.issues.lost} calls were not recorded at all`);
+  else if (a.issues.lost > 0) warnings.push(`${a.issues.lost} call(s) were not recorded`);
+  if (a.micOnly > 0) warnings.push(`${a.micOnly} recording(s) from the app's microphone: the customer's voice may be missing`);
+  if (a.oldAppSeenAt) warnings.push('Uses an old app version without logging in: update the app');
+  if (!a.device && a.connectedCalls > 0) warnings.push('The phone has not reported its recording setup yet');
+  if (a.device && a.device.accessibilityEnabled === false && a.micOnly > 0) {
+    warnings.push('"AskEVA Call Recording" is off in Accessibility');
+  }
+  if (problems.length) return { status: 'problem', statusReasons: [...problems, ...warnings] };
+  if (warnings.length) return { status: 'warning', statusReasons: warnings };
+  return { status: 'ok', statusReasons: a.connectedCalls === 0 && a.recordings === 0 ? ['No connected calls in this period'] : [] };
+}
+
+// GET /api/admin/phone-health?days=1|7|30&callerIds=&employeeType=  (admins / managers)
+router.get('/api/admin/phone-health', async (req, res) => {
+  try {
+    const days = [1, 7, 30].includes(Number(req.query.days)) ? Number(req.query.days) : 7;
+    const since = healthSince(days);
+    const isAdmin = req.user && req.user.role === 'admin';
+    const extra = isAdmin ? { legacyGraceEnabled: legacyGraceEnabled() } : {};
+
+    const scope = await resolveScope(req, req.query);
+    const people = scope.empty ? [] : scope.employees.filter(e => e && e.id && e.role !== 'admin');
+    const ids = people.map(e => e.id);
+
+    const [calls, recs, issues, latestIssueDevices, oldApp, profiles] = ids.length ? await Promise.all([
+      CallLog.aggregate([
+        { $match: { callerId: { $in: ids }, timestamp: { $gte: since }, durationSeconds: { $gte: HEALTH_MIN_TALK_SECONDS } } },
+        { $group: {
+          _id: '$callerId',
+          connected: { $sum: 1 },
+          recorded: { $sum: { $cond: [{ $gt: [{ $strLenCP: { $ifNull: ['$recordingId', ''] } }, 0] }, 1, 0] } },
+        } },
+      ]),
+      Recording.aggregate([
+        { $match: { callerId: { $in: ids }, $or: [{ callStartedAt: { $gte: since } }, { callStartedAt: null, createdAt: { $gte: since } }] } },
+        { $group: {
+          _id: '$callerId',
+          total: { $sum: 1 },
+          builtin: { $sum: { $cond: [{ $eq: ['$captureSource', 'builtin'] }, 1, 0] } },
+          mic: { $sum: { $cond: [{ $eq: ['$captureSource', 'mic'] }, 1, 0] } },
+          last: { $max: { $ifNull: ['$callStartedAt', '$createdAt'] } },
+        } },
+      ]),
+      RecordingIssue.aggregate([
+        { $match: { callerId: { $in: ids }, createdAt: { $gte: since } } },
+        { $group: {
+          _id: '$callerId',
+          lost: { $sum: { $cond: [{ $eq: ['$kind', 'lost'] }, 1, 0] } },
+          micOnly: { $sum: { $cond: [{ $eq: ['$kind', 'mic_only'] }, 1, 0] } },
+        } },
+      ]),
+      // Phones that reported before device details were stored on the account: their latest problem report
+      RecordingIssue.aggregate([
+        { $match: { callerId: { $in: ids } } },
+        { $sort: { createdAt: -1 } },
+        { $group: { _id: '$callerId', doc: { $first: '$$ROOT' } } },
+      ]),
+      LegacyClientHit.find({ employeeId: { $in: ids }, lastSeenAt: { $gte: since } }).lean(),
+      Employee.find({ id: { $in: ids } }).select('id deviceInfo').lean(),
+    ]) : [[], [], [], [], [], []];
+
+    const byId = (rows) => new Map(rows.map(r => [r._id, r]));
+    const callsBy = byId(calls);
+    const recsBy = byId(recs);
+    const issuesBy = byId(issues);
+    const issueDeviceBy = new Map(latestIssueDevices.map(r => [r._id, r.doc]));
+    const oldAppBy = new Map(oldApp.map(h => [h.employeeId, h]));
+    const deviceBy = new Map(profiles.map(p => [p.id, p.deviceInfo]));
+
+    const agents = [];
+    for (const e of people) {
+      const c = callsBy.get(e.id) || { connected: 0, recorded: 0 };
+      const r = recsBy.get(e.id) || { total: 0, builtin: 0, mic: 0, last: null };
+      const i = issuesBy.get(e.id) || { lost: 0, micOnly: 0 };
+      // Managers appear only when they made calls (e.g. a team leader in caller mode)
+      if (e.role !== 'caller' && c.connected === 0 && r.total === 0 && i.lost === 0 && i.micOnly === 0) continue;
+      const fromIssue = issueDeviceBy.get(e.id);
+      const agent = {
+        id: e.id,
+        name: e.name,
+        phone: e.phone || '',
+        role: e.role || 'caller',
+        team: e.team || '',
+        managerName: e.managerName || '',
+        online: isOnline(e),
+        lastSeenAt: e.lastSeenAt || null,
+        autoRecordEnabled: e.autoRecordEnabled !== false,
+        connectedCalls: c.connected,
+        recordedCalls: Math.min(c.recorded, c.connected),
+        recordedPercent: c.connected > 0 ? Math.round((Math.min(c.recorded, c.connected) / c.connected) * 100) : null,
+        recordings: r.total,
+        phoneRecorder: r.builtin,
+        micOnly: r.mic,
+        lastRecordingAt: r.last || null,
+        issues: { lost: i.lost, micOnly: i.micOnly },
+        device: deviceDTO(deviceBy.get(e.id)) || deviceDTO(fromIssue, fromIssue && fromIssue.createdAt),
+        oldAppSeenAt: oldAppBy.has(e.id) ? oldAppBy.get(e.id).lastSeenAt : null,
+      };
+      agents.push({ ...agent, ...healthVerdict(agent) });
+    }
+    const order = { problem: 0, warning: 1, ok: 2 };
+    agents.sort((a, b) => order[a.status] - order[b.status] || String(a.name).localeCompare(String(b.name)));
+
+    if (isAdmin) {
+      // Every old-app (no login) device seen in the last 30 days, including ones that matched no user
+      const hits = await LegacyClientHit.find({ lastSeenAt: { $gte: new Date(Date.now() - 30 * 86400000) } })
+        .sort({ lastSeenAt: -1 }).limit(200).lean();
+      extra.oldAppClients = hits.map(h => ({ name: h.name || '', phone: h.phone || '', lastSeenAt: h.lastSeenAt, requests: h.requests || 0 }));
+    }
+
+    res.json({ success: true, days, since: since.toISOString(), ...extra, agents });
+  } catch (err) {
+    console.error('phone health error:', err.message);
+    res.status(500).json({ success: false, message: 'Could not load phone health' });
+  }
+});
+
 module.exports = router;
 module.exports.issueOf = issueOf;
+module.exports.healthVerdict = healthVerdict;
+module.exports.healthSince = healthSince;

@@ -99,6 +99,28 @@ object AudioTools {
         }
     }
 
+    /**
+     * True for uncompressed 16-bit PCM audio (plain WAV), the only uncompressed format [transcodeToAac]
+     * handles correctly. Used to shrink WAV recordings that are too big to upload.
+     */
+    fun isPcm16(ctx: Context, path: String, uri: String): Boolean {
+        val extractor = MediaExtractor()
+        return try {
+            setSource(ctx, extractor, path, uri)
+            val track = audioTrack(extractor) ?: return false
+            val format = extractor.getTrackFormat(track)
+            val mime = format.getString(MediaFormat.KEY_MIME)?.lowercase() ?: ""
+            if (mime != MediaFormat.MIMETYPE_AUDIO_RAW) return false
+            // No encoding key = 16-bit (Android's default for raw audio)
+            !format.containsKey(MediaFormat.KEY_PCM_ENCODING) ||
+                format.getInteger(MediaFormat.KEY_PCM_ENCODING) == android.media.AudioFormat.ENCODING_PCM_16BIT
+        } catch (_: Exception) {
+            false
+        } finally {
+            try { extractor.release() } catch (_: Exception) {}
+        }
+    }
+
     /** Decodes the recording and re-encodes it as mono AAC-LC .m4a into [out]. */
     fun transcodeToAac(ctx: Context, path: String, uri: String, out: File): Boolean {
         val extractor = MediaExtractor()

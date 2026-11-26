@@ -18,10 +18,18 @@ class RealtimeService {
         .replaceFirst(RegExp(r'/$'), '');
   }
 
+  /// Registers [handler] for [event]. Handlers stay registered across disconnect / connect (they are
+  /// attached to every new socket); registering the same handler again (e.g. at every login) is
+  /// ignored, so each event reaches it once.
   static void on(String event, void Function(dynamic) handler) {
-    _eventHandlers.putIfAbsent(event, () => []).add(handler);
+    final handlers = _eventHandlers.putIfAbsent(event, () => []);
+    if (handlers.contains(handler)) return;
+    handlers.add(handler);
     _socket?.on(event, handler);
   }
+
+  @visibleForTesting
+  static int handlerCountFor(String event) => _eventHandlers[event]?.length ?? 0;
 
   static void off(String event, [void Function(dynamic)? handler]) {
     if (handler != null) {

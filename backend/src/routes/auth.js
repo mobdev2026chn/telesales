@@ -2,7 +2,7 @@ const express = require('express');
 const crypto = require('crypto');
 const router = express.Router();
 const Employee = require('../models/Employee');
-const { signToken, verifyAndUpgradePassword, requireAuth, MANAGERS } = require('../middleware/auth');
+const { signToken, signMediaToken, MEDIA_TOKEN_TTL_SECONDS, verifyAndUpgradePassword, requireAuth, MANAGERS } = require('../middleware/auth');
 const presence = require('../services/presence');
 const { publishForEmployee } = require('../services/realtime');
 
@@ -129,6 +129,17 @@ router.get('/me', requireAuth(), async (req, res) => {
   } catch (err) {
     console.error(`[auth] could not refresh profile presence userId=${req.user.id}: ${err.message}`);
     res.status(500).json({ success: false, message: 'Could not load profile.' });
+  }
+});
+
+// GET /api/auth/media-token — short-lived token for recording links (?mt=), so audio URLs in the
+// admin portal never carry the 30-day login token. Plays recordings only; expires after 2 hours.
+router.get('/media-token', requireAuth(), (req, res) => {
+  try {
+    res.json({ success: true, token: signMediaToken(req.user), expiresInSeconds: MEDIA_TOKEN_TTL_SECONDS });
+  } catch (err) {
+    console.error(`[auth] media token failed userId=${req.user.id}: ${err.message}`);
+    res.status(500).json({ success: false, message: 'Could not create a recording link.' });
   }
 });
 
