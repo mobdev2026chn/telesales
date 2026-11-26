@@ -34,6 +34,7 @@ router.post(['/api/user/record-toggle', '/api/calls/record-toggle'], async (req,
     const callerName = callerEmp ? callerEmp.name : (req.body.callerName || 'Unknown Caller');
     const callerPhone = callerEmp ? callerEmp.phone : (req.body.callerPhone || '');
     const callerId = callerEmp ? callerEmp.id : (req.body.callerId || '');
+    const senderRole = callerEmp ? callerEmp.role : (req.user && req.user.role) || 'caller';
 
     const enabled = autoRecordEnabled === true;
 
@@ -59,7 +60,7 @@ router.post(['/api/user/record-toggle', '/api/calls/record-toggle'], async (req,
         id: notifId,
         recipientId: 'ADMIN',
         senderName: callerName,
-        senderRole: 'caller',
+        senderRole,
         title: enabled ? 'Auto-Record Turned ON' : 'Auto-Record Turned OFF',
         message: enabled
           ? `${callerName} (${callerPhone || 'No Phone'}) has turned ON auto call recording on their device.`
@@ -79,6 +80,7 @@ router.post(['/api/user/record-toggle', '/api/calls/record-toggle'], async (req,
           callerId,
           callerName,
           callerPhone,
+          senderRole,
           autoRecordEnabled: enabled,
           timestamp: new Date().toISOString(),
           message: enabled

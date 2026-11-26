@@ -227,15 +227,18 @@ RecordingProblem? recordingProblemFor(RecordingSetupStatus? s, {required bool au
   return null;
 }
 
-/// Whether the call monitor should run: a signed-in caller (or manager in caller mode) with a
-/// real session token and auto-record switched on.
+/// Whether call recording is enabled for this session: a caller, a manager in caller mode, or a
+/// Team Leader with a registered phone number tied to one work SIM.
 bool shouldRunCallMonitor({
   required bool isLoggedIn,
   required bool isCallerContext,
   required bool autoRecordEnabled,
   required String authToken,
+  bool isTeamLeader = false,
+  bool hasVerifiedWorkSim = false,
 }) {
-  return isLoggedIn && isCallerContext && autoRecordEnabled && authToken.isNotEmpty && !authToken.startsWith('jwt_');
+  final hasRecordingContext = isCallerContext || (isTeamLeader && hasVerifiedWorkSim);
+  return isLoggedIn && hasRecordingContext && autoRecordEnabled && authToken.isNotEmpty && !authToken.startsWith('jwt_');
 }
 
 /// Converts the old Dart pending-upload list (prefs key `pending_recording_uploads`) into the

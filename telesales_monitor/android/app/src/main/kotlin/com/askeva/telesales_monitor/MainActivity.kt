@@ -112,8 +112,6 @@ class MainActivity : FlutterActivity() {
                     makeDirectCall(phone, slot)
                     result.success(true)
                 }
-<<<<<<<<< Temporary merge branch 1
-=========
                 "showNotification" -> {
                     val title = call.argument<String>("title") ?: "Alert"
                     val message = call.argument<String>("message") ?: ""
@@ -121,7 +119,6 @@ class MainActivity : FlutterActivity() {
                     CallMonitorStore.postAlert(this, id, title, message)
                     result.success(true)
                 }
->>>>>>>>> Temporary merge branch 2
                 // ---- Call monitor (foreground service) ----
                 "startCallMonitor" -> {
                     val baseUrl = call.argument<String>("baseUrl") ?: ""

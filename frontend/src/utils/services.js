@@ -69,4 +69,6 @@ export const notificationService = {
   list: (qs = '') => apiFetch(ENDPOINTS.notifications(qs)),
   readAll: () => apiFetch(ENDPOINTS.notificationsReadAll, { method: 'POST', body: {} }),
   markRead: (id) => apiFetch(ENDPOINTS.notificationRead(id), { method: 'POST', body: {} }),
+  remove: (id) => apiFetch(ENDPOINTS.notification(id), { method: 'DELETE' }),
+  clear: () => apiFetch(ENDPOINTS.notifications(), { method: 'DELETE' }),
 };

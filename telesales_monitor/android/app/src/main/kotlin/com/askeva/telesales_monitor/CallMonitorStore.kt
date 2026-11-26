@@ -33,6 +33,7 @@ object CallMonitorStore {
     private const val KEY_USED = "used_builtin_files"
     private const val KEY_AUTH_FAILED_TOKEN = "auth_failed_token"
     private const val KEY_CALLS_WITHOUT_BUILTIN = "calls_without_builtin"
+    private const val KEY_SOURCE_ORDER_VERSION = "source_order_version"
 
     /** Consecutive connected calls without a built-in file before we record ourselves again. */
     const val MISSES_BEFORE_RESET = 3
@@ -45,7 +46,7 @@ object CallMonitorStore {
         val autoRecord: Boolean,
         /** "sim1Only" | "sim2Only" | "bothSims" (SimTrackingMode.name in Dart). */
         val simMode: String,
-        /** A caller, or a manager in caller mode. */
+        /** A caller, a manager in caller mode, or a Team Leader with a verified work SIM. */
         val isCallerContext: Boolean,
     )
 
@@ -67,21 +68,29 @@ object CallMonitorStore {
             val userId = readString(all, "current_user_id")
             if (token.isEmpty() || token.startsWith("jwt_") || userId.isEmpty()) return null
             val role = readString(all, "user_role", "caller")
+            val userRole = readString(all, "current_user_role", "caller").lowercase()
+            val callerPhone = readString(all, "verified_tracking_number")
+            val simMode = readString(all, "sim_tracking_mode", "bothSims")
+            val hasTeamLeaderWorkSim = userRole == "team_leader" &&
+                callerPhone.filter { it.isDigit() }.takeLast(10).length == 10 &&
+                (simMode == "sim1Only" || simMode == "sim2Only")
             Session(
                 token = token,
                 userId = userId,
                 callerName = readString(all, "caller_name"),
-                callerPhone = readString(all, "verified_tracking_number"),
+                callerPhone = callerPhone,
                 autoRecord = readBool(all, "auto_record_enabled", true),
-                simMode = readString(all, "sim_tracking_mode", "bothSims"),
-                isCallerContext = role == "caller" || readBool(all, "manager_caller_mode", false),
+                simMode = simMode,
+                isCallerContext = role == "caller" ||
+                    (readBool(all, "manager_caller_mode", false) && userRole != "team_leader") ||
+                    hasTeamLeaderWorkSim,
             )
         } catch (_: Exception) {
             null
         }
     }
 
-    /** Session in which calls are recorded / uploaded: a caller context with auto-record on. */
+    /** Session in which calls are recorded / uploaded, with auto-record on. */
     fun recordingSession(ctx: Context): Session? {
         val s = session(ctx) ?: return null
         return if (s.isCallerContext && s.autoRecord) s else null
@@ -140,7 +149,7 @@ object CallMonitorStore {
     // connected work call tries the next candidate; the first that works is kept for this phone.
 
     /** MediaRecorder.AudioSource values: VOICE_RECOGNITION, VOICE_COMMUNICATION, MIC, UNPROCESSED, CAMCORDER. */
-    val SOURCE_CANDIDATES = intArrayOf(1, 6, 7, 9, 5)
+    val SOURCE_CANDIDATES = intArrayOf(6, 7, 1, 9, 5)
 
     fun sourceName(source: Int): String = when (source) {
         1 -> "MIC"; 5 -> "CAMCORDER"; 6 -> "VOICE_RECOGNITION"; 7 -> "VOICE_COMMUNICATION"
@@ -151,11 +160,18 @@ object CallMonitorStore {
 
     /** Source to use for the next call, and whether it is "forced" / "locked" / "trial". */
     fun chooseSource(ctx: Context): Pair<Int, String> {
+        val p = prefs(ctx)
+        if (p.getInt(KEY_SOURCE_ORDER_VERSION, 0) < 1) {
+            p.edit()
+                .putInt(KEY_SOURCE_ORDER_VERSION, 1)
+                .putInt("source_trial_index", 0)
+                .apply()
+        }
         val forced = forcedAudioSource(ctx)
         if (forced >= 0) return forced to "forced"
         val locked = lockedSource(ctx)
         if (locked >= 0) return locked to "locked"
-        val i = prefs(ctx).getInt("source_trial_index", 0)
+        val i = p.getInt("source_trial_index", 0)
         return SOURCE_CANDIDATES[Math.floorMod(i, SOURCE_CANDIDATES.size)] to "trial"
     }
 

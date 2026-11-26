@@ -48,6 +48,7 @@ export const ENDPOINTS = {
   notifications: (qs = '') => `/notifications${qs}`,
   notificationsReadAll: '/notifications/read-all',
   notificationRead: (id) => `/notifications/${enc(id)}/read`,
+  notification: (id) => `/notifications/${enc(id)}`,
 };
 
 export default ENDPOINTS;

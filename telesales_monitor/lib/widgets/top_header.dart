@@ -5,7 +5,6 @@ import '../theme/app_theme.dart';
 import 'notifications_sheet.dart';
 import 'profile_menu_sheet.dart';
 import '../providers/tele_provider.dart';
-import '../screens/login_screen.dart';
 
 class TopHeader extends StatelessWidget {
   final String title;

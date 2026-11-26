@@ -5,10 +5,10 @@ import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/neo_card.dart';
 import '../../widgets/neo_button.dart';
+import '../../widgets/auto_record_toggle_card.dart';
 import '../../widgets/top_header.dart';
 import '../../widgets/notifications_sheet.dart';
 import '../../providers/tele_provider.dart';
-import '../login_screen.dart';
 import 'scheduled_callbacks_screen.dart';
 
 class CallerProfileScreen extends StatefulWidget {
@@ -439,47 +439,9 @@ class _CallerProfileScreenState extends State<CallerProfileScreen> {
             ),
             const SizedBox(height: 14),
 
-          // Auto-Record Toggle Card
-          NeoCard(
-            backgroundColor: AppTheme.white,
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: AppTheme.paper,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppTheme.ink900, width: 1.2),
-                  ),
-                  child: const Icon(Icons.mic, color: AppTheme.greenDark, size: 20),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'AUTO-RECORD ALL CALLS',
-                        style: AppTheme.label(size: 9, color: AppTheme.ink900, letterSpacing: 0.1),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Auto-records audio during active ongoing calls',
-                        style: AppTheme.body(size: 11, color: AppTheme.muted),
-                      ),
-                    ],
-                  ),
-                ),
-                Switch(
-                  value: tele.autoRecordEnabled,
-                  activeThumbColor: AppTheme.greenNeon,
-                  activeTrackColor: AppTheme.ink900,
-                  onChanged: (_) => tele.toggleAutoRecord(),
-                ),
-              ],
-            ),
+          AutoRecordToggleCard(
+            isEnabled: tele.autoRecordEnabled,
+            onToggle: tele.toggleAutoRecord,
           ),
           const SizedBox(height: 14),
 

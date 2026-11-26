@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { recipientFilter } = require('../src/routes/notifications');
+const { recipientFilter, notificationIdFilter } = require('../src/routes/notifications');
 
 test('recipientFilter includes ADMIN and broadcast recipients for admin user', () => {
   const req = {
@@ -54,5 +54,18 @@ test('recipientFilter restricts caller user from viewing global ADMIN notificati
 test('recipientFilter returns null when no user or identity is supplied', () => {
   const filter = recipientFilter({}, {});
   assert.strictEqual(filter, null);
+});
+
+test('notificationIdFilter scopes an individual delete to the signed-in recipient', () => {
+  const req = { user: { id: 'emp_caller_789', role: 'caller', phone: '', name: '' } };
+  const filter = notificationIdFilter(req, 'notif_123', {});
+
+  assert.ok(filter && filter.$and);
+  assert.deepStrictEqual(filter.$and[0], { $or: [{ id: 'notif_123' }] });
+  assert.deepStrictEqual(filter.$and[1], { $or: [{ recipientId: 'emp_caller_789' }] });
+});
+
+test('notificationIdFilter refuses deletes when the recipient is unknown', () => {
+  assert.strictEqual(notificationIdFilter({}, 'notif_123', {}), null);
 });
 

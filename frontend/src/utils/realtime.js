@@ -99,7 +99,8 @@ function registerEvents(client) {
   });
   client.on('callerAutoRecordAlert', (payload) => {
     if (!payload) return;
-    const caller = payload.callerName ? String(payload.callerName).toUpperCase() : 'CALLER';
+    const senderRole = String(payload.senderRole || 'caller').replaceAll('_', ' ').toUpperCase();
+    const caller = `${senderRole} ${payload.callerName ? String(payload.callerName).toUpperCase() : ''}`.trim();
     const phone = payload.callerPhone ? ` (${payload.callerPhone})` : '';
     if (payload.autoRecordEnabled === false) {
       notify(`⚠️ ALERT: ${caller}${phone} TURNED OFF AUTO-RECORD!`);
@@ -109,7 +110,7 @@ function registerEvents(client) {
         id: `alert_off_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
         recipientId: 'ADMIN',
         senderName: payload.callerName || 'Caller',
-        senderRole: 'caller',
+        senderRole,
         title: 'Auto-Record Turned OFF',
         message: `${payload.callerName || 'Caller'}${phone} has turned OFF auto call recording on their device.`,
         comment: `Disabled at ${new Date(payload.timestamp || Date.now()).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata' })} IST`,
@@ -124,7 +125,7 @@ function registerEvents(client) {
         id: `alert_on_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
         recipientId: 'ADMIN',
         senderName: payload.callerName || 'Caller',
-        senderRole: 'caller',
+        senderRole,
         title: 'Auto-Record Turned ON',
         message: `${payload.callerName || 'Caller'}${phone} has turned ON auto call recording on their device.`,
         comment: `Enabled at ${new Date(payload.timestamp || Date.now()).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata' })} IST`,

@@ -27,8 +27,8 @@ import kotlin.math.abs
 import kotlin.random.Random
 
 /**
- * Foreground service (type "microphone") that follows every call while a caller is signed in,
- * whether or not the app's UI / Flutter engine is alive.
+ * Foreground service (type "microphone") that follows work calls while a caller or eligible Team
+ * Leader is signed in, whether or not the app's UI / Flutter engine is alive.
  *
  * Per connected call:
  *  - OFFHOOK: record the mic ourselves. Once the phone's built-in recorder is trusted this is only a

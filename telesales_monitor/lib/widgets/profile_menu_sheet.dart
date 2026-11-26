@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../providers/tele_provider.dart';
-import '../screens/login_screen.dart';
 import '../screens/setup/call_recording_setup_screen.dart';
 
 class ProfileMenuSheet {

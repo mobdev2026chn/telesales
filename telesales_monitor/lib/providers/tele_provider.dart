@@ -195,14 +195,23 @@ class TeleProvider extends ChangeNotifier {
     );
   }
 
-  /// Recording is only armed for a signed-in caller (or a manager in caller mode) with
-  /// auto-record on: the native call monitor runs exactly then.
+  /// Recording runs for callers, managers in caller mode, and Team Leaders with their registered
+  /// phone number assigned to a single work SIM.
   void _pushAutoRecordToNative() {
     syncCallMonitor();
   }
 
   /// True when the app is acting as a caller: a caller login, or a manager who switched to caller mode.
   bool get _isCallerContext => _currentRole == UserRole.caller || _isManagerCallerMode;
+
+  bool get _isTeamLeader => _currentUserRole == 'team_leader';
+
+  bool get _hasVerifiedTeamLeaderWorkSim =>
+      _isTeamLeader &&
+      last10Digits(_verifiedTrackingNumber).length == 10 &&
+      _simTrackingMode != SimTrackingMode.bothSims &&
+      !_needsWorkSimChoice;
+  bool get hasVerifiedTeamLeaderWorkSim => _hasVerifiedTeamLeaderWorkSim;
 
   Timer? _callLogDebounce;
 
@@ -259,9 +268,11 @@ class TeleProvider extends ChangeNotifier {
 
   bool get _shouldRunCallMonitor => shouldRunCallMonitor(
         isLoggedIn: _isLoggedIn,
-        isCallerContext: _isCallerContext,
+        isCallerContext: _isCallerContext && !_isTeamLeader,
         autoRecordEnabled: _autoRecordEnabled,
         authToken: _authToken,
+        isTeamLeader: _isTeamLeader,
+        hasVerifiedWorkSim: _hasVerifiedTeamLeaderWorkSim,
       );
 
   /// Starts the call monitor for a signed-in caller (only while in the foreground: Android does
@@ -489,7 +500,6 @@ class TeleProvider extends ChangeNotifier {
       _initCompleter.complete();
     }
     notifyListeners();
-    _pushAutoRecordToNative();
     await fetchDeviceSims();
     unawaited(refreshDialerStatus());
     if (_isLoggedIn) {
@@ -497,11 +507,14 @@ class TeleProvider extends ChangeNotifier {
       if (_isLoggedIn) _connectRealtime();
     }
     if (_isLoggedIn) {
-      await _checkWorkSimForSession(); // before the first sync: only the registered SIM's calls
+      await _checkWorkSimForSession(); // verify the registered SIM before starting call recording
+      _pushAutoRecordToNative();
       await fetchDeviceCallLogs();
       await fetchBackendData();
       CallRecordingChannel.retryUploads();
       refreshRecordingSetupStatus();
+    } else {
+      _pushAutoRecordToNative();
     }
     _startPeriodicSyncTimer();
   }
@@ -664,7 +677,7 @@ class TeleProvider extends ChangeNotifier {
   RecordingSetupStatus? get recordingSetupStatus => _recordingSetupStatus;
 
   Future<void> refreshRecordingSetupStatus() async {
-    if (!Platform.isAndroid || !_isLoggedIn || !_isCallerContext) return;
+    if (!Platform.isAndroid || !_isLoggedIn || (!_isCallerContext && !_hasVerifiedTeamLeaderWorkSim)) return;
     final s = await CallRecordingChannel.status(_currentUserId);
     if (s == null) return;
     _recordingSetupStatus = s;
@@ -1870,9 +1883,13 @@ class TeleProvider extends ChangeNotifier {
             'message': 'This account is registered as ${userRole.replaceAll('_', ' ').toUpperCase()}. The Team Leader tab is for team leaders only; managers use the AskEVA Web Portal.'
           };
         }
+        _simTrackingMode = SimTrackingMode.bothSims;
+        _activeSimSlot = 1;
+        _needsWorkSimChoice = false;
         await _beginSession(res, user);
         _currentRole = UserRole.manager;
         _isManagerCallerMode = false;
+        await _checkWorkSimForSession();
         await _savePreferences();
         _pushAutoRecordToNative();
         await fetchBackendData();
@@ -2005,11 +2022,13 @@ class TeleProvider extends ChangeNotifier {
     await _savePreferences();
     notifyListeners();
     await fetchDeviceCallLogs(); // re-filter the list for the chosen SIM
+    await syncCallMonitor();
+    await refreshRecordingSetupStatus();
   }
 
   /// On app start: make sure the tracked SIM is this caller's registered SIM (not an old setting).
   Future<void> _checkWorkSimForSession() async {
-    if (!_isLoggedIn || !_isCallerContext || last10Digits(_verifiedTrackingNumber).length != 10) return;
+    if (!_isLoggedIn || (!_isCallerContext && !_isTeamLeader) || last10Digits(_verifiedTrackingNumber).length != 10) return;
     final check = await verifyRegisteredSimCard(_verifiedTrackingNumber);
     final slot = await _resolveWorkSimSlot(_verifiedTrackingNumber, check);
     if (slot == null) {
@@ -3107,11 +3126,11 @@ class TeleProvider extends ChangeNotifier {
   String? _dialPrefill;
 
   /// A tel: link or the dial pad was opened from another app: the Dialer tab with [number] typed in
-  /// ("" = empty keypad). Callers only (the Dialer tab is theirs). False while nobody is signed in.
+  /// ("" = empty keypad). Available to callers and Team Leaders with their own dialer tab.
   bool openDialerWith(String number) {
-    if (!_isLoggedIn || !_isCallerContext) return false;
+    if (!_isLoggedIn || (!_isCallerContext && !_isTeamLeader)) return false;
     _dialPrefill = number;
-    _activeTabIndex = 2;
+    _activeTabIndex = _isTeamLeader && !_isManagerCallerMode ? 5 : 2;
     notifyListeners();
     return true;
   }

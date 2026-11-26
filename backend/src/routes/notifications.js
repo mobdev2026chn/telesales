@@ -33,6 +33,13 @@ function recipientFilter(req, src) {
   return or.length ? { $or: or } : null;
 }
 
+function notificationIdFilter(req, id, src) {
+  const recipient = recipientFilter(req, src);
+  if (!recipient) return null;
+  const idQuery = { $or: [{ id }, ...(isObjectId(id) ? [{ _id: id }] : [])] };
+  return { $and: [idQuery, recipient] };
+}
+
 router.get(['/api/user/notifications', '/api/notifications'], async (req, res) => {
   try {
     if (req.user) {
@@ -63,6 +70,37 @@ router.post(['/api/user/notifications/read-all', '/api/notifications/read-all'],
     res.json({ success: true, modified: r.modifiedCount, message: 'All notifications marked as read' });
   } catch (err) {
     serverError(res, err, 'notifications.readAll');
+  }
+});
+
+router.delete(['/api/user/notifications', '/api/notifications'], async (req, res) => {
+  try {
+    const filter = recipientFilter(req, { ...req.query, ...(req.body || {}) });
+    if (!filter) {
+      return res.status(401).json({ success: false, message: 'Notification recipient could not be identified' });
+    }
+    const result = await Notification.deleteMany(filter);
+    res.json({ success: true, deleted: result.deletedCount || 0 });
+  } catch (err) {
+    serverError(res, err, 'notifications.deleteAll');
+  }
+});
+
+router.delete(['/api/user/notifications/:id', '/api/notifications/:id'], async (req, res) => {
+  try {
+    const query = notificationIdFilter(
+      req,
+      String(req.params.id),
+      { ...req.query, ...(req.body || {}) },
+    );
+    if (!query) {
+      return res.status(401).json({ success: false, message: 'Notification recipient could not be identified' });
+    }
+    const notification = await Notification.findOneAndDelete(query).lean();
+    if (!notification) return res.status(404).json({ success: false, message: 'Notification not found' });
+    res.json({ success: true, notification });
+  } catch (err) {
+    serverError(res, err, 'notifications.delete');
   }
 });
 
@@ -134,3 +172,4 @@ router.post(['/api/user/notifications/test', '/api/notifications/test'], async (
 
 module.exports = router;
 module.exports.recipientFilter = recipientFilter;
+module.exports.notificationIdFilter = notificationIdFilter;

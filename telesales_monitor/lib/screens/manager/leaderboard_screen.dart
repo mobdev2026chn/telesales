@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_date_range_picker.dart';
 import '../../widgets/neo_card.dart';
 import '../../widgets/top_header.dart';
 import '../../providers/tele_provider.dart';
@@ -40,7 +41,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     final currentMgrId = tele.currentUserId;
 
     // Places by connected calls, then talk time, then total calls (same order as the admin web)
-    final ranked = [...tele.employees]..sort((a, b) {
+    final ranked = [...tele.employees]
+      ..sort((a, b) {
         final c = b.connectedCalls.compareTo(a.connectedCalls);
         if (c != 0) return c;
         final t = b.totalTalkTime.compareTo(a.totalTalkTime);
@@ -50,22 +52,36 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     for (var emp in ranked) {
       if (emp.role.toLowerCase() == 'caller') {
         // Scope strictly to callers reporting to this manager
-        if (emp.reportingManagerId != null && emp.reportingManagerId!.isNotEmpty) {
+        if (emp.reportingManagerId != null &&
+            emp.reportingManagerId!.isNotEmpty) {
           if (emp.reportingManagerId != currentMgrId) continue;
         }
 
-        final isMe = (tele.currentUserId.isNotEmpty && emp.id == tele.currentUserId) ||
-                     emp.name.toLowerCase() == tele.callerName.toLowerCase();
+        final isMe =
+            (tele.currentUserId.isNotEmpty && emp.id == tele.currentUserId) ||
+            emp.name.toLowerCase() == tele.callerName.toLowerCase();
 
         // Server-counted for the selected period — same numbers as the admin web leaderboard
         final int calls = emp.totalCalls;
         final int conn = emp.connectedCalls;
-        final String talkTime = emp.talkTimeFormatted.isNotEmpty ? emp.talkTimeFormatted : '0s';
+        final String talkTime = emp.talkTimeFormatted.isNotEmpty
+            ? emp.talkTimeFormatted
+            : '0s';
 
-        final rate = calls > 0 ? ((conn / calls) * 100).toStringAsFixed(0) : '0';
-        final progress = calls > 0 ? (calls / (emp.dailyTarget > 0 ? emp.dailyTarget : kDefaultDailyTarget)).clamp(0.01, 1.0) : 0.0;
+        final rate = calls > 0
+            ? ((conn / calls) * 100).toStringAsFixed(0)
+            : '0';
+        final progress = calls > 0
+            ? (calls /
+                      (emp.dailyTarget > 0
+                          ? emp.dailyTarget
+                          : kDefaultDailyTarget))
+                  .clamp(0.01, 1.0)
+            : 0.0;
 
-        final photo = isMe && tele.profilePhotoBase64.isNotEmpty ? tele.profilePhotoBase64 : emp.photoBase64;
+        final photo = isMe && tele.profilePhotoBase64.isNotEmpty
+            ? tele.profilePhotoBase64
+            : emp.photoBase64;
 
         callers.add({
           'employee': emp,
@@ -104,16 +120,20 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
 
     String calendarHeaderLabel = '📅 TODAY';
     if (tele.selectedDateRange != null) {
-      calendarHeaderLabel = '📅 ${DateFormat('d MMM').format(tele.selectedDateRange!.start)} - ${DateFormat('d MMM').format(tele.selectedDateRange!.end)}'.toUpperCase();
+      calendarHeaderLabel =
+          '📅 ${DateFormat('d MMM').format(tele.selectedDateRange!.start)} - ${DateFormat('d MMM').format(tele.selectedDateRange!.end)}'
+              .toUpperCase();
     } else if (tele.selectedCustomDate != null) {
-      calendarHeaderLabel = '📅 ${DateFormat('d MMM yyyy').format(tele.selectedCustomDate!).toUpperCase()}';
+      calendarHeaderLabel =
+          '📅 ${DateFormat('d MMM yyyy').format(tele.selectedCustomDate!).toUpperCase()}';
     } else if (tele.selectedTimeFilter == 1) {
       calendarHeaderLabel = '📅 THIS WEEK';
     } else if (tele.selectedTimeFilter == 2) {
       calendarHeaderLabel = '📅 THIS MONTH';
     }
 
-    final hasCustomCalendar = tele.selectedDateRange != null || tele.selectedCustomDate != null;
+    final hasCustomCalendar =
+        tele.selectedDateRange != null || tele.selectedCustomDate != null;
 
     return RefreshIndicator(
       color: AppTheme.greenNeon,
@@ -161,9 +181,14 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                 GestureDetector(
                   onTap: () => _showCalendarPicker(context, tele),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
-                      color: hasCustomCalendar ? AppTheme.limeYellow : AppTheme.white,
+                      color: hasCustomCalendar
+                          ? AppTheme.limeYellow
+                          : AppTheme.white,
                       borderRadius: BorderRadius.circular(999),
                       border: Border.all(color: AppTheme.ink900, width: 1.5),
                       boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
@@ -171,11 +196,19 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.calendar_month_rounded, size: 16, color: AppTheme.ink900),
+                        const Icon(
+                          Icons.calendar_month_rounded,
+                          size: 16,
+                          color: AppTheme.ink900,
+                        ),
                         const SizedBox(width: 6),
                         Text(
                           calendarHeaderLabel,
-                          style: AppTheme.label(size: 10, color: AppTheme.ink900, letterSpacing: 0.12),
+                          style: AppTheme.label(
+                            size: 10,
+                            color: AppTheme.ink900,
+                            letterSpacing: 0.12,
+                          ),
                         ),
                         if (hasCustomCalendar) ...[
                           const SizedBox(width: 6),
@@ -184,7 +217,11 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                               tele.setCustomDate(null);
                               tele.setDateRange(null);
                             },
-                            child: const Icon(Icons.cancel_rounded, size: 16, color: AppTheme.ink900),
+                            child: const Icon(
+                              Icons.cancel_rounded,
+                              size: 16,
+                              color: AppTheme.ink900,
+                            ),
                           ),
                         ],
                       ],
@@ -193,7 +230,11 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                 ),
                 Text(
                   '${callers.length} AGENTS RANKED',
-                  style: AppTheme.label(size: 9.5, color: AppTheme.muted, letterSpacing: 0.1),
+                  style: AppTheme.label(
+                    size: 9.5,
+                    color: AppTheme.muted,
+                    letterSpacing: 0.1,
+                  ),
                 ),
               ],
             ),
@@ -216,7 +257,11 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                   hintText: 'Search caller by name...',
                   hintStyle: TextStyle(color: AppTheme.muted, fontSize: 13),
                   border: InputBorder.none,
-                  prefixIcon: Icon(Icons.search, size: 18, color: AppTheme.ink900),
+                  prefixIcon: Icon(
+                    Icons.search,
+                    size: 18,
+                    color: AppTheme.ink900,
+                  ),
                   isDense: true,
                   contentPadding: EdgeInsets.symmetric(vertical: 10),
                 ),
@@ -232,7 +277,11 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                   const SizedBox(width: 8),
                   Text(
                     'TOP PERFORMERS · PODIUM',
-                    style: AppTheme.label(size: 10, color: AppTheme.ink900, letterSpacing: 0.18),
+                    style: AppTheme.label(
+                      size: 10,
+                      color: AppTheme.ink900,
+                      letterSpacing: 0.18,
+                    ),
                   ),
                 ],
               ),
@@ -249,7 +298,11 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                 const SizedBox(width: 8),
                 Text(
                   isSearching ? 'SEARCH RESULTS' : 'RANKINGS · TALK TIME',
-                  style: AppTheme.label(size: 10, color: AppTheme.ink900, letterSpacing: 0.18),
+                  style: AppTheme.label(
+                    size: 10,
+                    color: AppTheme.ink900,
+                    letterSpacing: 0.18,
+                  ),
                 ),
               ],
             ),
@@ -271,7 +324,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: restOfCallers.length,
-                separatorBuilder: (context, index) => const SizedBox(height: 10),
+                separatorBuilder: (context, index) =>
+                    const SizedBox(height: 10),
                 itemBuilder: (context, index) {
                   final empData = restOfCallers[index];
                   final rank = empData['rank'] as int;
@@ -285,8 +339,13 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                   return NeoCard(
                     backgroundColor: isTop ? AppTheme.ink900 : AppTheme.white,
                     shadowColor: AppTheme.ink900,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                    onTap: () => widget.onSelectEmployee(empData['employee'] as EmployeeModel),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
+                    onTap: () => widget.onSelectEmployee(
+                      empData['employee'] as EmployeeModel,
+                    ),
                     child: Row(
                       children: [
                         // Rank Digit
@@ -296,7 +355,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                             rank < 10 ? '0$rank' : '$rank',
                             style: AppTheme.headline(
                               size: 24,
-                              color: isTop ? AppTheme.greenNeon : AppTheme.paper,
+                              color: isTop
+                                  ? AppTheme.greenNeon
+                                  : AppTheme.paper,
                             ),
                           ),
                         ),
@@ -320,14 +381,19 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                               Row(
                                 children: [
                                   if (isCrown) ...[
-                                    const Text('👑 ', style: TextStyle(fontSize: 14)),
+                                    const Text(
+                                      '👑 ',
+                                      style: TextStyle(fontSize: 14),
+                                    ),
                                   ],
                                   Flexible(
                                     child: Text(
                                       name,
                                       style: AppTheme.bodyBold(
                                         size: 14,
-                                        color: isTop ? AppTheme.white : AppTheme.ink900,
+                                        color: isTop
+                                            ? AppTheme.white
+                                            : AppTheme.ink900,
                                       ),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
@@ -340,7 +406,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                                 '$calls/100 calls (${empData['connectRate']}% conn) · $connected conn',
                                 style: AppTheme.body(
                                   size: 11,
-                                  color: isTop ? AppTheme.paper : AppTheme.paper,
+                                  color: isTop
+                                      ? AppTheme.paper
+                                      : AppTheme.paper,
                                 ),
                               ),
                               const SizedBox(height: 4),
@@ -349,11 +417,19 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                                 child: Container(
                                   height: 4,
                                   width: 120,
-                                  color: isTop ? AppTheme.ink800 : AppTheme.paper,
+                                  color: isTop
+                                      ? AppTheme.ink800
+                                      : AppTheme.paper,
                                   child: FractionallySizedBox(
                                     alignment: Alignment.centerLeft,
-                                    widthFactor: (empData['targetProgress'] as double? ?? 0.0),
-                                    child: Container(color: isTop ? AppTheme.limeYellow : AppTheme.greenNeon),
+                                    widthFactor:
+                                        (empData['targetProgress'] as double? ??
+                                        0.0),
+                                    child: Container(
+                                      color: isTop
+                                          ? AppTheme.limeYellow
+                                          : AppTheme.greenNeon,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -413,7 +489,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         }
       } else {
         try {
-          final cleanBase64 = photoBase64.contains(',') ? photoBase64.split(',').last : photoBase64;
+          final cleanBase64 = photoBase64.contains(',')
+              ? photoBase64.split(',').last
+              : photoBase64;
           final bytes = base64Decode(cleanBase64);
           imageProvider = MemoryImage(bytes);
         } catch (_) {}
@@ -423,7 +501,13 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
       imageProvider = NetworkImage(avatarUrl);
     }
 
-    final initials = name.trim().split(' ').map((e) => e.isNotEmpty ? e[0] : '').take(2).join('').toUpperCase();
+    final initials = name
+        .trim()
+        .split(' ')
+        .map((e) => e.isNotEmpty ? e[0] : '')
+        .take(2)
+        .join('')
+        .toUpperCase();
 
     return Container(
       width: size,
@@ -431,8 +515,15 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
       decoration: BoxDecoration(
         color: isDark ? AppTheme.ink800 : AppTheme.paper,
         shape: BoxShape.circle,
-        border: showBorder ? Border.all(color: isDark ? AppTheme.limeYellow : AppTheme.ink900, width: 1.5) : null,
-        boxShadow: showBorder ? AppTheme.neoShadowSm(color: AppTheme.ink900) : null,
+        border: showBorder
+            ? Border.all(
+                color: isDark ? AppTheme.limeYellow : AppTheme.ink900,
+                width: 1.5,
+              )
+            : null,
+        boxShadow: showBorder
+            ? AppTheme.neoShadowSm(color: AppTheme.ink900)
+            : null,
         image: imageProvider != null
             ? DecorationImage(image: imageProvider, fit: BoxFit.cover)
             : null,
@@ -452,7 +543,11 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   }
 
   // PODIUM LAYOUT WIDGET (Rank 2 on Left, Rank 1 in Center, Rank 3 on Right)
-  Widget _buildPodium(Map<String, dynamic> r1, Map<String, dynamic> r2, Map<String, dynamic> r3) {
+  Widget _buildPodium(
+    Map<String, dynamic> r1,
+    Map<String, dynamic> r2,
+    Map<String, dynamic> r3,
+  ) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
@@ -544,7 +639,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         const SizedBox(height: 2),
         Text(
           talkTime,
-          style: AppTheme.mono(size: 11, color: isDark ? AppTheme.greenDark : AppTheme.muted),
+          style: AppTheme.mono(
+            size: 11,
+            color: isDark ? AppTheme.greenDark : AppTheme.muted,
+          ),
         ),
         const SizedBox(height: 8),
 
@@ -562,7 +660,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
               children: [
                 // Rank Badge Pill
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: badgeBg,
                     borderRadius: BorderRadius.circular(999),
@@ -628,7 +729,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     );
   }
 
-  Future<void> _showCalendarPicker(BuildContext context, TeleProvider tele) async {
+  Future<void> _showCalendarPicker(
+    BuildContext context,
+    TeleProvider tele,
+  ) async {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -654,12 +758,21 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            Text('FILTER LEADERBOARD BY DATE', style: AppTheme.headline(size: 16, color: AppTheme.ink900)),
+            Text(
+              'FILTER LEADERBOARD BY DATE',
+              style: AppTheme.headline(size: 16, color: AppTheme.ink900),
+            ),
             const SizedBox(height: 14),
             ListTile(
               leading: const Icon(Icons.event, color: AppTheme.ink900),
-              title: Text('Select Specific Date', style: AppTheme.bodyBold(size: 14)),
-              subtitle: Text('View standings for a single specific day', style: AppTheme.body(size: 12, color: AppTheme.muted)),
+              title: Text(
+                'Select Specific Date',
+                style: AppTheme.bodyBold(size: 14),
+              ),
+              subtitle: Text(
+                'View standings for a single specific day',
+                style: AppTheme.body(size: 12, color: AppTheme.muted),
+              ),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
                 side: const BorderSide(color: AppTheme.ink900, width: 1.5),
@@ -690,8 +803,14 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
             const SizedBox(height: 10),
             ListTile(
               leading: const Icon(Icons.date_range, color: AppTheme.ink900),
-              title: Text('Select Date Range', style: AppTheme.bodyBold(size: 14)),
-              subtitle: Text('View standings across a custom period', style: AppTheme.body(size: 12, color: AppTheme.muted)),
+              title: Text(
+                'Select Date Range',
+                style: AppTheme.bodyBold(size: 14),
+              ),
+              subtitle: Text(
+                'View standings across a custom period',
+                style: AppTheme.body(size: 12, color: AppTheme.muted),
+              ),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
                 side: const BorderSide(color: AppTheme.ink900, width: 1.5),
@@ -699,25 +818,16 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
               tileColor: AppTheme.white,
               onTap: () async {
                 Navigator.pop(ctx);
-                final picked = await showDateRangePicker(
+                final picked = await showAppDateRangePicker(
                   context: context,
                   firstDate: DateTime.now().subtract(const Duration(days: 365)),
                   lastDate: DateTime.now(),
-                  initialDateRange: tele.selectedDateRange ?? DateTimeRange(
-                    start: DateTime.now().subtract(const Duration(days: 7)),
-                    end: DateTime.now(),
-                  ),
-                  builder: (c, child) => Theme(
-                    data: Theme.of(c).copyWith(
-                      colorScheme: const ColorScheme.light(
-                        primary: AppTheme.ink900,
-                        onPrimary: AppTheme.limeYellow,
-                        surface: AppTheme.paper,
-                        onSurface: AppTheme.ink900,
+                  initialDateRange:
+                      tele.selectedDateRange ??
+                      DateTimeRange(
+                        start: DateTime.now().subtract(const Duration(days: 7)),
+                        end: DateTime.now(),
                       ),
-                    ),
-                    child: child!,
-                  ),
                 );
                 if (picked != null) tele.setDateRange(picked);
               },

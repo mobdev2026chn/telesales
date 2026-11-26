@@ -69,8 +69,25 @@ class _DialerScreenState extends State<DialerScreen> {
       return;
     }
 
+    final tele = Provider.of<TeleProvider>(context, listen: false);
+    if (tele.currentUserRole.toLowerCase() == 'team_leader' &&
+        !tele.hasVerifiedTeamLeaderWorkSim) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppTheme.ink900,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          content: Text(
+            'Complete work SIM setup before calling',
+            style: AppTheme.bodyBold(size: 12, color: AppTheme.limeYellow),
+          ),
+        ),
+      );
+      return;
+    }
+
     // Falls back to the phone's dialer by itself when the direct call cannot be placed
-    await Provider.of<TeleProvider>(context, listen: false).makeDirectCall(clean);
+    await tele.makeDirectCall(clean);
   }
 
   @override

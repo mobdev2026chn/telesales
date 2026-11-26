@@ -7,9 +7,10 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/neo_card.dart';
+import '../../widgets/auto_record_toggle_card.dart';
+import '../../widgets/app_date_range_picker.dart';
 import '../../widgets/top_header.dart';
 import '../../providers/tele_provider.dart';
-import '../login_screen.dart';
 import '../setup/call_recording_setup_screen.dart';
 
 class MoreScreen extends StatefulWidget {
@@ -26,27 +27,13 @@ class _MoreScreenState extends State<MoreScreen> {
 
   Future<void> _selectReportDateRange(BuildContext context) async {
     final now = DateTime.now();
-    final picked = await showDateRangePicker(
+    final picked = await showAppDateRangePicker(
       context: context,
       firstDate: now.subtract(const Duration(days: 365)),
       lastDate: now.add(const Duration(days: 1)),
-      initialDateRange: _reportDateRange ?? DateTimeRange(
-        start: now.subtract(const Duration(days: 7)),
-        end: now,
-      ),
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.light().copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: AppTheme.ink900,
-              onPrimary: AppTheme.limeYellow,
-              surface: AppTheme.white,
-              onSurface: AppTheme.ink900,
-            ),
-          ),
-          child: child!,
-        );
-      },
+      initialDateRange:
+          _reportDateRange ??
+          DateTimeRange(start: now.subtract(const Duration(days: 7)), end: now),
     );
     if (picked != null) {
       setState(() => _reportDateRange = picked);
@@ -101,12 +88,20 @@ class _MoreScreenState extends State<MoreScreen> {
                     child: GestureDetector(
                       onTap: () async {
                         Navigator.pop(ctx);
-                        final ok = await tele.pickAndSaveProfilePhoto(source: ImageSource.gallery);
+                        final ok = await tele.pickAndSaveProfilePhoto(
+                          source: ImageSource.gallery,
+                        );
                         if (ok) {
                           messenger.showSnackBar(
                             SnackBar(
                               backgroundColor: AppTheme.ink900,
-                              content: Text('✓ Profile photo updated successfully!', style: AppTheme.bodyBold(size: 12, color: AppTheme.greenNeon)),
+                              content: Text(
+                                '✓ Profile photo updated successfully!',
+                                style: AppTheme.bodyBold(
+                                  size: 12,
+                                  color: AppTheme.greenNeon,
+                                ),
+                              ),
                             ),
                           );
                         }
@@ -116,15 +111,31 @@ class _MoreScreenState extends State<MoreScreen> {
                         decoration: BoxDecoration(
                           color: AppTheme.limeYellow,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppTheme.ink900, width: 1.5),
-                          boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+                          border: Border.all(
+                            color: AppTheme.ink900,
+                            width: 1.5,
+                          ),
+                          boxShadow: AppTheme.neoShadowSm(
+                            color: AppTheme.ink900,
+                          ),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.photo_library_rounded, size: 18, color: AppTheme.ink900),
+                            const Icon(
+                              Icons.photo_library_rounded,
+                              size: 18,
+                              color: AppTheme.ink900,
+                            ),
                             const SizedBox(width: 8),
-                            Text('CHOOSE PHOTO', style: AppTheme.label(size: 9.5, color: AppTheme.ink900, letterSpacing: 0.12)),
+                            Text(
+                              'CHOOSE PHOTO',
+                              style: AppTheme.label(
+                                size: 9.5,
+                                color: AppTheme.ink900,
+                                letterSpacing: 0.12,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -135,12 +146,20 @@ class _MoreScreenState extends State<MoreScreen> {
                     child: GestureDetector(
                       onTap: () async {
                         Navigator.pop(ctx);
-                        final ok = await tele.pickAndSaveProfilePhoto(source: ImageSource.camera);
+                        final ok = await tele.pickAndSaveProfilePhoto(
+                          source: ImageSource.camera,
+                        );
                         if (ok) {
                           messenger.showSnackBar(
                             SnackBar(
                               backgroundColor: AppTheme.ink900,
-                              content: Text('✓ Profile photo taken successfully!', style: AppTheme.bodyBold(size: 12, color: AppTheme.greenNeon)),
+                              content: Text(
+                                '✓ Profile photo taken successfully!',
+                                style: AppTheme.bodyBold(
+                                  size: 12,
+                                  color: AppTheme.greenNeon,
+                                ),
+                              ),
                             ),
                           );
                         }
@@ -150,15 +169,31 @@ class _MoreScreenState extends State<MoreScreen> {
                         decoration: BoxDecoration(
                           color: AppTheme.white,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppTheme.ink900, width: 1.5),
-                          boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+                          border: Border.all(
+                            color: AppTheme.ink900,
+                            width: 1.5,
+                          ),
+                          boxShadow: AppTheme.neoShadowSm(
+                            color: AppTheme.ink900,
+                          ),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.camera_alt_rounded, size: 18, color: AppTheme.ink900),
+                            const Icon(
+                              Icons.camera_alt_rounded,
+                              size: 18,
+                              color: AppTheme.ink900,
+                            ),
                             const SizedBox(width: 8),
-                            Text('TAKE PHOTO', style: AppTheme.label(size: 9.5, color: AppTheme.ink900, letterSpacing: 0.12)),
+                            Text(
+                              'TAKE PHOTO',
+                              style: AppTheme.label(
+                                size: 9.5,
+                                color: AppTheme.ink900,
+                                letterSpacing: 0.12,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -166,7 +201,8 @@ class _MoreScreenState extends State<MoreScreen> {
                   ),
                 ],
               ),
-              if (tele.profilePhotoBase64.isNotEmpty || tele.profilePhotoPath.isNotEmpty) ...[
+              if (tele.profilePhotoBase64.isNotEmpty ||
+                  tele.profilePhotoPath.isNotEmpty) ...[
                 const SizedBox(height: 14),
                 GestureDetector(
                   onTap: () async {
@@ -175,7 +211,10 @@ class _MoreScreenState extends State<MoreScreen> {
                     messenger.showSnackBar(
                       SnackBar(
                         backgroundColor: AppTheme.ink900,
-                        content: Text('Profile photo removed', style: AppTheme.body(size: 12, color: AppTheme.white)),
+                        content: Text(
+                          'Profile photo removed',
+                          style: AppTheme.body(size: 12, color: AppTheme.white),
+                        ),
                       ),
                     );
                   },
@@ -187,7 +226,13 @@ class _MoreScreenState extends State<MoreScreen> {
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(color: AppTheme.redMissed, width: 1),
                     ),
-                    child: Text('REMOVE CURRENT PHOTO', style: AppTheme.label(size: 8.5, color: AppTheme.redMissed)),
+                    child: Text(
+                      'REMOVE CURRENT PHOTO',
+                      style: AppTheme.label(
+                        size: 8.5,
+                        color: AppTheme.redMissed,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -217,175 +262,507 @@ class _MoreScreenState extends State<MoreScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-              // Top Header Bar
-              TopHeader(
-                title: 'PROFILE',
-                userName: tele.currentUserName,
-                selectedSimIndex: tele.activeSimSlot,
-              ),
-              const SizedBox(height: 16),
+                // Top Header Bar
+                TopHeader(
+                  title: 'PROFILE',
+                  userName: tele.currentUserName,
+                  selectedSimIndex: tele.activeSimSlot,
+                ),
+                const SizedBox(height: 16),
 
-              // Card -1: MANAGER PROFILE CARD
-              NeoCard(
-                backgroundColor: AppTheme.white,
-                shadowColor: AppTheme.ink900,
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    GestureDetector(
-                      onTap: () => _showManagerPhotoPicker(context, tele),
-                      child: Stack(
-                        children: [
-                          Container(
-                            width: 56,
-                            height: 56,
-                            decoration: BoxDecoration(
-                              color: AppTheme.limeYellow,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: AppTheme.ink900, width: 1.5),
-                              boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
-                            ),
-                            child: ClipOval(
-                              child: tele.profilePhotoBase64.isNotEmpty
-                                  ? Image.memory(
-                                      base64Decode(tele.profilePhotoBase64.contains(',') ? tele.profilePhotoBase64.split(',').last : tele.profilePhotoBase64),
-                                      width: 56,
-                                      height: 56,
-                                      fit: BoxFit.cover,
-                                    )
-                                  : Center(
-                                      child: Text(
-                                        tele.currentUserName.isNotEmpty ? tele.currentUserName[0].toUpperCase() : '👨‍💼',
-                                        style: AppTheme.headline(size: 22, color: AppTheme.ink900),
-                                      ),
-                                    ),
-                            ),
-                          ),
-                          Positioned(
-                            bottom: 0,
-                            right: 0,
-                            child: Container(
-                              padding: const EdgeInsets.all(3),
-                              decoration: const BoxDecoration(
-                                color: AppTheme.greenNeon,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(Icons.photo_camera, size: 11, color: AppTheme.ink900),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            tele.currentUserName.toUpperCase(),
-                            style: AppTheme.bodyBold(size: 15, color: AppTheme.ink900),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '${tele.currentUserRole.toUpperCase()} · ${tele.currentUserTeam}',
-                            style: AppTheme.label(size: 8.5, color: AppTheme.muted, letterSpacing: 0.12),
-                          ),
-                          const SizedBox(height: 6),
-                          GestureDetector(
-                            onTap: () => _showManagerPhotoPicker(context, tele),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                // Card -1: MANAGER PROFILE CARD
+                NeoCard(
+                  backgroundColor: AppTheme.white,
+                  shadowColor: AppTheme.ink900,
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      GestureDetector(
+                        onTap: () => _showManagerPhotoPicker(context, tele),
+                        child: Stack(
+                          children: [
+                            Container(
+                              width: 56,
+                              height: 56,
                               decoration: BoxDecoration(
                                 color: AppTheme.limeYellow,
-                                borderRadius: BorderRadius.circular(999),
-                                border: Border.all(color: AppTheme.ink900, width: 1),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: AppTheme.ink900,
+                                  width: 1.5,
+                                ),
+                                boxShadow: AppTheme.neoShadowSm(
+                                  color: AppTheme.ink900,
+                                ),
                               ),
-                              child: Text(
-                                '📷 SET PROFILE PHOTO',
-                                style: AppTheme.label(size: 8, color: AppTheme.ink900),
+                              child: ClipOval(
+                                child: tele.profilePhotoBase64.isNotEmpty
+                                    ? Image.memory(
+                                        base64Decode(
+                                          tele.profilePhotoBase64.contains(',')
+                                              ? tele.profilePhotoBase64
+                                                    .split(',')
+                                                    .last
+                                              : tele.profilePhotoBase64,
+                                        ),
+                                        width: 56,
+                                        height: 56,
+                                        fit: BoxFit.cover,
+                                      )
+                                    : Center(
+                                        child: Text(
+                                          tele.currentUserName.isNotEmpty
+                                              ? tele.currentUserName[0]
+                                                    .toUpperCase()
+                                              : '👨‍💼',
+                                          style: AppTheme.headline(
+                                            size: 22,
+                                            color: AppTheme.ink900,
+                                          ),
+                                        ),
+                                      ),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              // Card 0: ADMIN WEB PORTAL & USER MANAGEMENT
-              NeoCard(
-                backgroundColor: AppTheme.ink900,
-                shadowColor: AppTheme.ink900,
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('ADMIN WEB PORTAL', style: AppTheme.headline(size: 18, color: AppTheme.white)),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: AppTheme.greenNeon,
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(color: AppTheme.ink900, width: 1),
-                          ),
-                          child: Text('WEB APP', style: AppTheme.label(size: 8.5, color: AppTheme.ink900)),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text('Manage telesales team, add users/callers & view cloud telemetry.', style: AppTheme.body(size: 11, color: AppTheme.paper)),
-                    GestureDetector(
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            backgroundColor: AppTheme.paper,
-                            content: Text(
-                              // The local address is a developer hint: debug builds only
-                              kDebugMode
-                                  ? 'ℹ Admin Web Portal (http://localhost:8080) handles role provisioning.'
-                                  : 'ℹ The Admin Web Portal handles role provisioning.',
-                              style: AppTheme.body(size: 12, color: AppTheme.limeYellow),
-                            ),
-                          ),
-                        );
-                      },
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        decoration: BoxDecoration(
-                          color: AppTheme.greenNeon,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: AppTheme.ink900, width: 1.2),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.language_rounded, size: 16, color: AppTheme.ink900),
-                            const SizedBox(width: 6),
-                            Text(
-                              'OPEN WEB ADMIN PORTAL',
-                              style: AppTheme.label(size: 10, color: AppTheme.ink900, letterSpacing: 0.1),
+                            Positioned(
+                              bottom: 0,
+                              right: 0,
+                              child: Container(
+                                padding: const EdgeInsets.all(3),
+                                decoration: const BoxDecoration(
+                                  color: AppTheme.greenNeon,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.photo_camera,
+                                  size: 11,
+                                  color: AppTheme.ink900,
+                                ),
+                              ),
                             ),
                           ],
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              tele.currentUserName.toUpperCase(),
+                              style: AppTheme.bodyBold(
+                                size: 15,
+                                color: AppTheme.ink900,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${tele.currentUserRole.toUpperCase()} · ${tele.currentUserTeam}',
+                              style: AppTheme.label(
+                                size: 8.5,
+                                color: AppTheme.muted,
+                                letterSpacing: 0.12,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            GestureDetector(
+                              onTap: () =>
+                                  _showManagerPhotoPicker(context, tele),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.limeYellow,
+                                  borderRadius: BorderRadius.circular(999),
+                                  border: Border.all(
+                                    color: AppTheme.ink900,
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Text(
+                                  '📷 SET PROFILE PHOTO',
+                                  style: AppTheme.label(
+                                    size: 8,
+                                    color: AppTheme.ink900,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
+                const SizedBox(height: 12),
 
-              // Card 1: Employee detail
-              GestureDetector(
-                onTap: widget.onNavigateToBoard,
-                child: NeoCard(
+                AutoRecordToggleCard(
+                  isEnabled: tele.autoRecordEnabled,
+                  onToggle: tele.toggleAutoRecord,
+                ),
+                const SizedBox(height: 14),
+
+                // Card 0: ADMIN WEB PORTAL & USER MANAGEMENT
+                NeoCard(
+                  backgroundColor: AppTheme.ink900,
+                  shadowColor: AppTheme.ink900,
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'ADMIN WEB PORTAL',
+                            style: AppTheme.headline(
+                              size: 18,
+                              color: AppTheme.white,
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppTheme.greenNeon,
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: AppTheme.ink900,
+                                width: 1,
+                              ),
+                            ),
+                            child: Text(
+                              'WEB APP',
+                              style: AppTheme.label(
+                                size: 8.5,
+                                color: AppTheme.ink900,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Manage telesales team, add users/callers & view cloud telemetry.',
+                        style: AppTheme.body(size: 11, color: AppTheme.paper),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              backgroundColor: AppTheme.paper,
+                              content: Text(
+                                // The local address is a developer hint: debug builds only
+                                kDebugMode
+                                    ? 'ℹ Admin Web Portal (http://localhost:8080) handles role provisioning.'
+                                    : 'ℹ The Admin Web Portal handles role provisioning.',
+                                style: AppTheme.body(
+                                  size: 12,
+                                  color: AppTheme.limeYellow,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: AppTheme.greenNeon,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: AppTheme.ink900,
+                              width: 1.2,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.language_rounded,
+                                size: 16,
+                                color: AppTheme.ink900,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'OPEN WEB ADMIN PORTAL',
+                                style: AppTheme.label(
+                                  size: 10,
+                                  color: AppTheme.ink900,
+                                  letterSpacing: 0.1,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Card 1: Employee detail
+                GestureDetector(
+                  onTap: widget.onNavigateToBoard,
+                  child: NeoCard(
+                    backgroundColor: AppTheme.white,
+                    shadowColor: AppTheme.ink900,
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Employee detail',
+                              style: AppTheme.bodyBold(
+                                size: 15,
+                                color: AppTheme.ink900,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Per-caller breakdown via leaderboard',
+                              style: AppTheme.body(
+                                size: 12,
+                                color: AppTheme.muted,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Icon(
+                          Icons.arrow_forward,
+                          size: 18,
+                          color: AppTheme.ink900,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Card 2: Performance Report with Date Range Filter
+                NeoCard(
+                  backgroundColor: AppTheme.ink900,
+                  shadowColor: AppTheme.ink900,
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _reportDateRange != null
+                                    ? 'Report · ${DateFormat('d MMM').format(_reportDateRange!.start)} - ${DateFormat('d MMM').format(_reportDateRange!.end)}'
+                                    : 'Activity Report · ${DateFormat('d MMM yyyy').format(DateTime.now())}',
+                                style: AppTheme.headline(
+                                  size: 16,
+                                  color: AppTheme.white,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                'Call logs, outcomes & team performance',
+                                style: AppTheme.body(
+                                  size: 11,
+                                  color: AppTheme.paper,
+                                ),
+                              ),
+                            ],
+                          ),
+                          GestureDetector(
+                            onTap: () => _selectReportDateRange(context),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppTheme.paper,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.date_range_rounded,
+                                    size: 14,
+                                    color: AppTheme.ink900,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'DATE RANGE',
+                                    style: AppTheme.label(
+                                      size: 8.5,
+                                      color: AppTheme.ink900,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      GestureDetector(
+                        onTap: _triggerExport,
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: AppTheme.limeYellow,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: AppTheme.ink900,
+                              width: 1.2,
+                            ),
+                            boxShadow: AppTheme.neoShadowSm(
+                              color: AppTheme.limeYellow,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.download_rounded,
+                                size: 16,
+                                color: AppTheme.ink900,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'EXPORT REPORT · WEB PORTAL',
+                                style: AppTheme.label(
+                                  size: 10.5,
+                                  color: AppTheme.ink900,
+                                  letterSpacing: 0.12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Call recording (Android): ON / OFF and the one-tap "Turn on recording"
+                if (Platform.isAndroid) ...[
+                  NeoCard(
+                    backgroundColor: AppTheme.white,
+                    shadowColor: AppTheme.ink900,
+                    padding: const EdgeInsets.all(16),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const CallRecordingSetupScreen(),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.settings_voice_outlined,
+                          size: 22,
+                          color: AppTheme.ink900,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Call recording',
+                                style: AppTheme.bodyBold(
+                                  size: 15,
+                                  color: AppTheme.ink900,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                switch (tele
+                                    .recordingSetupStatus
+                                    ?.recordingReady) {
+                                  true => 'On',
+                                  false => 'Off: tap to turn on',
+                                  null => 'Tap to check',
+                                },
+                                style: AppTheme.body(
+                                  size: 12,
+                                  color: AppTheme.muted,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.chevron_right, color: AppTheme.ink900),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+
+                // Card 3: RECORDING STORAGE
+                Builder(
+                  builder: (ctx) {
+                    final count = tele.recordings.length;
+                    final pending = tele.pendingUploadCount;
+
+                    return NeoCard(
+                      backgroundColor: AppTheme.white,
+                      shadowColor: AppTheme.ink900,
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'RECORDING STORAGE',
+                                style: AppTheme.label(
+                                  size: 9,
+                                  color: AppTheme.ink900,
+                                  letterSpacing: 0.18,
+                                ),
+                              ),
+                              Text(
+                                '$count ON SERVER',
+                                style: AppTheme.mono(
+                                  size: 9,
+                                  color: AppTheme.greenDark,
+                                  weight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            pending > 0
+                                ? '$pending recording(s) on this device waiting to upload — retried automatically.'
+                                : 'No recordings waiting to upload.',
+                            style: AppTheme.mono(
+                              size: 10,
+                              color: AppTheme.muted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
+
+                // Card 4: Sync device call log
+                NeoCard(
                   backgroundColor: AppTheme.white,
                   shadowColor: AppTheme.ink900,
                   padding: const EdgeInsets.all(16),
@@ -395,232 +772,100 @@ class _MoreScreenState extends State<MoreScreen> {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Employee detail', style: AppTheme.bodyBold(size: 15, color: AppTheme.ink900)),
+                          Text(
+                            'Sync device call log',
+                            style: AppTheme.bodyBold(
+                              size: 15,
+                              color: AppTheme.ink900,
+                            ),
+                          ),
                           const SizedBox(height: 2),
-                          Text('Per-caller breakdown via leaderboard', style: AppTheme.body(size: 12, color: AppTheme.muted)),
+                          Text(
+                            tele.lastCallSyncAt != null
+                                ? 'Last synced ${DateFormat("h:mm a").format(tele.lastCallSyncAt!)}'
+                                : 'Not synced yet',
+                            style: AppTheme.body(
+                              size: 12,
+                              color: AppTheme.muted,
+                            ),
+                          ),
                         ],
                       ),
-                      const Icon(Icons.arrow_forward, size: 18, color: AppTheme.ink900),
+                      Row(
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: const BoxDecoration(
+                              color: AppTheme.greenNeon,
+                              shape: BoxShape.rectangle,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '• LIVE',
+                            style: AppTheme.label(
+                              size: 9.5,
+                              color: AppTheme.greenNeon,
+                              letterSpacing: 0.1,
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
-              ),
-              const SizedBox(height: 12),
+                const SizedBox(height: 20),
 
-              // Card 2: Performance Report with Date Range Filter
-              NeoCard(
-                backgroundColor: AppTheme.ink900,
-                shadowColor: AppTheme.ink900,
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _reportDateRange != null
-                                  ? 'Report · ${DateFormat('d MMM').format(_reportDateRange!.start)} - ${DateFormat('d MMM').format(_reportDateRange!.end)}'
-                                  : 'Activity Report · ${DateFormat('d MMM yyyy').format(DateTime.now())}',
-                              style: AppTheme.headline(size: 16, color: AppTheme.white),
-                            ),
-                            const SizedBox(height: 3),
-                            Text('Call logs, outcomes & team performance', style: AppTheme.body(size: 11, color: AppTheme.paper)),
-                          ],
-                        ),
-                        GestureDetector(
-                          onTap: () => _selectReportDateRange(context),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: AppTheme.paper,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.date_range_rounded, size: 14, color: AppTheme.ink900),
-                                const SizedBox(width: 4),
-                                Text('DATE RANGE', style: AppTheme.label(size: 8.5, color: AppTheme.ink900)),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    GestureDetector(
-                      onTap: _triggerExport,
+                // Card 5: Centered Compact Logout Button
+                Center(
+                  child: SizedBox(
+                    width: 200,
+                    child: GestureDetector(
+                      onTap: () => _showMoreLogoutConfirmDialog(context, tele),
                       child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        alignment: Alignment.center,
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 10,
+                          horizontal: 16,
+                        ),
                         decoration: BoxDecoration(
-                          color: AppTheme.limeYellow,
+                          color: AppTheme.white,
                           borderRadius: BorderRadius.circular(999),
-                          border: Border.all(color: AppTheme.ink900, width: 1.2),
-                          boxShadow: AppTheme.neoShadowSm(color: AppTheme.limeYellow),
+                          border: Border.all(
+                            color: AppTheme.redMissed,
+                            width: 1.5,
+                          ),
+                          boxShadow: AppTheme.neoShadowSm(
+                            color: AppTheme.ink900,
+                          ),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.download_rounded, size: 16, color: AppTheme.ink900),
+                            const Icon(
+                              Icons.logout_rounded,
+                              color: AppTheme.redMissed,
+                              size: 16,
+                            ),
                             const SizedBox(width: 6),
                             Text(
-                              'EXPORT REPORT · WEB PORTAL',
-                              style: AppTheme.label(size: 10.5, color: AppTheme.ink900, letterSpacing: 0.12),
+                              'LOGOUT',
+                              style: AppTheme.label(
+                                size: 11,
+                                color: AppTheme.redMissed,
+                                letterSpacing: 0.12,
+                              ),
                             ),
                           ],
                         ),
                       ),
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              // Call recording (Android): ON / OFF and the one-tap "Turn on recording"
-              if (Platform.isAndroid) ...[
-                NeoCard(
-                  backgroundColor: AppTheme.white,
-                  shadowColor: AppTheme.ink900,
-                  padding: const EdgeInsets.all(16),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const CallRecordingSetupScreen()),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.settings_voice_outlined, size: 22, color: AppTheme.ink900),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Call recording', style: AppTheme.bodyBold(size: 15, color: AppTheme.ink900)),
-                            const SizedBox(height: 2),
-                            Text(
-                              switch (tele.recordingSetupStatus?.recordingReady) {
-                                true => 'On',
-                                false => 'Off: tap to turn on',
-                                null => 'Tap to check',
-                              },
-                              style: AppTheme.body(size: 12, color: AppTheme.muted),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Icon(Icons.chevron_right, color: AppTheme.ink900),
-                    ],
                   ),
                 ),
-                const SizedBox(height: 12),
               ],
-
-              // Card 3: RECORDING STORAGE
-              Builder(
-                builder: (ctx) {
-                  final count = tele.recordings.length;
-                  final pending = tele.pendingUploadCount;
-
-                  return NeoCard(
-                    backgroundColor: AppTheme.white,
-                    shadowColor: AppTheme.ink900,
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'RECORDING STORAGE',
-                              style: AppTheme.label(size: 9, color: AppTheme.ink900, letterSpacing: 0.18),
-                            ),
-                            Text(
-                              '$count ON SERVER',
-                              style: AppTheme.mono(size: 9, color: AppTheme.greenDark, weight: FontWeight.w700),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          pending > 0
-                              ? '$pending recording(s) on this device waiting to upload — retried automatically.'
-                              : 'No recordings waiting to upload.',
-                          style: AppTheme.mono(size: 10, color: AppTheme.muted),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 12),
-
-              // Card 4: Sync device call log
-              NeoCard(
-                backgroundColor: AppTheme.white,
-                shadowColor: AppTheme.ink900,
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Sync device call log', style: AppTheme.bodyBold(size: 15, color: AppTheme.ink900)),
-                        const SizedBox(height: 2),
-                        Text(
-                          tele.lastCallSyncAt != null
-                              ? 'Last synced ${DateFormat("h:mm a").format(tele.lastCallSyncAt!)}'
-                              : 'Not synced yet',
-                          style: AppTheme.body(size: 12, color: AppTheme.muted),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        Container(width: 6, height: 6, decoration: const BoxDecoration(color: AppTheme.greenNeon, shape: BoxShape.rectangle)),
-                        const SizedBox(width: 6),
-                        Text('• LIVE', style: AppTheme.label(size: 9.5, color: AppTheme.greenNeon, letterSpacing: 0.1)),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // Card 5: Centered Compact Logout Button
-              Center(
-                child: SizedBox(
-                  width: 200,
-                  child: GestureDetector(
-                    onTap: () => _showMoreLogoutConfirmDialog(context, tele),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-                      decoration: BoxDecoration(
-                        color: AppTheme.white,
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(color: AppTheme.redMissed, width: 1.5),
-                        boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.logout_rounded, color: AppTheme.redMissed, size: 16),
-                          const SizedBox(width: 6),
-                          Text('LOGOUT', style: AppTheme.label(size: 11, color: AppTheme.redMissed, letterSpacing: 0.12)),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
-      ),
 
         // Bottom Notification Banner matching Screenshot 3
         if (_showBanner)
@@ -635,7 +880,10 @@ class _MoreScreenState extends State<MoreScreen> {
                 color: AppTheme.ink900,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: AppTheme.greenNeon, width: 1.5),
-                boxShadow: AppTheme.neoShadow(color: AppTheme.ink900, offset: 4),
+                boxShadow: AppTheme.neoShadow(
+                  color: AppTheme.ink900,
+                  offset: 4,
+                ),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -674,7 +922,11 @@ class _MoreScreenState extends State<MoreScreen> {
                 shape: BoxShape.circle,
                 border: Border.all(color: AppTheme.ink900, width: 1.5),
               ),
-              child: const Icon(Icons.logout_rounded, color: AppTheme.white, size: 16),
+              child: const Icon(
+                Icons.logout_rounded,
+                color: AppTheme.white,
+                size: 16,
+              ),
             ),
             const SizedBox(width: 10),
             Text('LOGOUT', style: AppTheme.headline(size: 18)),
@@ -687,7 +939,10 @@ class _MoreScreenState extends State<MoreScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: Text('CANCEL', style: AppTheme.label(size: 11, color: AppTheme.muted)),
+            child: Text(
+              'CANCEL',
+              style: AppTheme.label(size: 11, color: AppTheme.muted),
+            ),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
@@ -702,7 +957,10 @@ class _MoreScreenState extends State<MoreScreen> {
               Navigator.of(ctx).pop();
               await tele.logout();
             },
-            child: Text('YES, LOGOUT', style: AppTheme.label(size: 11, color: AppTheme.white)),
+            child: Text(
+              'YES, LOGOUT',
+              style: AppTheme.label(size: 11, color: AppTheme.white),
+            ),
           ),
         ],
       ),

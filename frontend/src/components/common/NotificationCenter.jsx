@@ -1,13 +1,15 @@
 import { useState, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Badge, Button, Drawer, Empty, Segmented, Space, Spin, Tag, Tooltip } from '../../assets/antd';
+import { Badge, Button, Drawer, Empty, Popconfirm, Segmented, Space, Spin, Tag, Tooltip } from '../../assets/antd';
 import Icon from './Icon';
-import { fmtTs } from '../../utils/format';
+import { fmtTs, roleLabel } from '../../utils/format';
 import { setNotificationsDrawer } from '../../redux/slices/notificationsSlice';
 import {
   fetchNotifications,
   markNotificationAsRead,
   markAllNotificationsAsRead,
+  clearAllNotifications,
+  deleteNotification,
 } from '../../utils/actions/notificationActions';
 
 export default function NotificationCenter() {
@@ -170,6 +172,24 @@ export default function NotificationCenter() {
                 >
                   Mark all read
                 </Button>
+              )}
+              {list.length > 0 && (
+                <Popconfirm
+                  title="Clear all notifications?"
+                  description="This permanently deletes all notifications in your inbox."
+                  okText="Clear all"
+                  okButtonProps={{ danger: true }}
+                  onConfirm={clearAllNotifications}
+                >
+                  <Button
+                    type="link"
+                    danger
+                    size="small"
+                    style={{ padding: '0 4px', fontSize: 11, fontWeight: 600 }}
+                  >
+                    Clear all
+                  </Button>
+                </Popconfirm>
               )}
             </Space>
           </div>
@@ -406,6 +426,23 @@ export default function NotificationCenter() {
                       ) : (
                         <span style={{ fontSize: 10, color: '#94a3b8', whiteSpace: 'nowrap' }}>✓</span>
                       )}
+                      <span onClick={(event) => event.stopPropagation()}>
+                        <Popconfirm
+                          title="Delete this notification?"
+                          okText="Delete"
+                          okButtonProps={{ danger: true }}
+                          onConfirm={() => itemId && deleteNotification(itemId)}
+                        >
+                          <Button
+                            type="text"
+                            danger
+                            size="small"
+                            icon={<Icon name="delete" />}
+                            title="Delete notification"
+                            aria-label="Delete notification"
+                          />
+                        </Popconfirm>
+                      </span>
                     </div>
                   </div>
 
@@ -427,7 +464,9 @@ export default function NotificationCenter() {
                         verticalAlign: 'baseline',
                       }}>
                         <span style={{ fontSize: 10 }}>👤</span>
-                        <span>Caller: <strong>{callerDisplayName}</strong></span>
+                        <span style={{ textTransform: 'capitalize' }}>
+                          {roleLabel(item.senderRole || 'caller')}: <strong>{callerDisplayName}</strong>
+                        </span>
                       </span>
                     )}
                     <span>{item.message}</span>

@@ -17,6 +17,31 @@ void main() {
       expect(shouldRunCallMonitor(isLoggedIn: true, isCallerContext: true, autoRecordEnabled: true, authToken: ''), isFalse);
     });
 
+    test('Team Leaders record only after their registered work SIM is selected', () {
+      expect(
+        shouldRunCallMonitor(
+          isLoggedIn: true,
+          isCallerContext: false,
+          isTeamLeader: true,
+          hasVerifiedWorkSim: false,
+          autoRecordEnabled: true,
+          authToken: 'eyJ.abc.def',
+        ),
+        isFalse,
+      );
+      expect(
+        shouldRunCallMonitor(
+          isLoggedIn: true,
+          isCallerContext: false,
+          isTeamLeader: true,
+          hasVerifiedWorkSim: true,
+          autoRecordEnabled: true,
+          authToken: 'eyJ.abc.def',
+        ),
+        isTrue,
+      );
+    });
+
     test('legacy fake tokens do not count as a session', () {
       expect(shouldRunCallMonitor(isLoggedIn: true, isCallerContext: true, autoRecordEnabled: true, authToken: 'jwt_123'), isFalse);
     });

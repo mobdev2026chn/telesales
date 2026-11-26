@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_date_range_picker.dart';
 import '../../widgets/neo_card.dart';
 import '../../widgets/team_live_board_card.dart';
 import '../../widgets/top_header.dart';
@@ -512,7 +513,10 @@ class ManagerDashboard extends StatelessWidget {
 
             // Team daily target vs. today's calls (TODAY selected only)
             if (teamTargetToday != null) ...[
-              TeamTargetCard(target: teamTargetToday.target, calls: teamTargetToday.calls),
+              TeamTargetCard(
+                target: teamTargetToday.target,
+                calls: teamTargetToday.calls,
+              ),
               const SizedBox(height: 12),
             ],
 
@@ -997,7 +1001,7 @@ class ManagerDashboard extends StatelessWidget {
               tileColor: AppTheme.white,
               onTap: () async {
                 Navigator.pop(ctx);
-                final picked = await showDateRangePicker(
+                final picked = await showAppDateRangePicker(
                   context: context,
                   firstDate: DateTime.now().subtract(const Duration(days: 365)),
                   lastDate: DateTime.now(),
@@ -1007,17 +1011,6 @@ class ManagerDashboard extends StatelessWidget {
                         start: DateTime.now().subtract(const Duration(days: 7)),
                         end: DateTime.now(),
                       ),
-                  builder: (c, child) => Theme(
-                    data: Theme.of(c).copyWith(
-                      colorScheme: const ColorScheme.light(
-                        primary: AppTheme.ink900,
-                        onPrimary: AppTheme.limeYellow,
-                        surface: AppTheme.paper,
-                        onSurface: AppTheme.ink900,
-                      ),
-                    ),
-                    child: child!,
-                  ),
                 );
                 if (picked != null) tele.setDateRange(picked);
               },

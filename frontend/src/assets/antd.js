@@ -13,7 +13,7 @@ import {
 } from '@ant-design/icons';
 
 export {
-  Alert, App as AntApp, Badge, Button, Col, ConfigProvider, DatePicker, Drawer, Empty, Flex, Input, List, Rate, Row, Segmented, Select, Space, Spin, Tabs, Tag, Tooltip,
+  Alert, App as AntApp, Badge, Button, Col, ConfigProvider, DatePicker, Drawer, Empty, Flex, Input, List, Popconfirm, Rate, Row, Segmented, Select, Space, Spin, Tabs, Tag, Tooltip,
 } from 'antd';
 
 // <Icon name="…" /> names (the old sprite names first, then the extra action icons)

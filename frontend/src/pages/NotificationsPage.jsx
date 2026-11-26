@@ -1,13 +1,15 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Button, Empty, Input, Segmented, Space, Spin, Tag, Tooltip } from '../assets/antd';
+import { Button, Empty, Input, Popconfirm, Segmented, Space, Spin, Tag, Tooltip } from '../assets/antd';
 import PageHeader from '../components/common/PageHeader';
 import Icon from '../components/common/Icon';
-import { fmtTs, formatPhone } from '../utils/format';
+import { fmtTs, formatPhone, roleLabel } from '../utils/format';
 import {
   fetchNotifications,
   markNotificationAsRead,
   markAllNotificationsAsRead,
+  clearAllNotifications,
+  deleteNotification,
 } from '../utils/actions/notificationActions';
 
 export default function NotificationsPage() {
@@ -78,6 +80,19 @@ export default function NotificationsPage() {
         subtitle="Real-time alerts, auto-recording toggles (turned OFF & turned ON), and caller activity log"
       >
         <Space size="middle">
+          {list.length > 0 && (
+            <Popconfirm
+              title="Clear all notifications?"
+              description="This permanently deletes all notifications in your inbox."
+              okText="Clear all"
+              okButtonProps={{ danger: true }}
+              onConfirm={clearAllNotifications}
+            >
+              <Button danger icon={<Icon name="delete" size="sm" />}>
+                Clear all
+              </Button>
+            </Popconfirm>
+          )}
           {unreadCount > 0 && (
             <Button
               onClick={() => markAllNotificationsAsRead()}
@@ -329,6 +344,21 @@ export default function NotificationsPage() {
                         <Icon name="check" size="xs" /> Read
                       </span>
                     )}
+                    <Popconfirm
+                      title="Delete this notification?"
+                      okText="Delete"
+                      okButtonProps={{ danger: true }}
+                      onConfirm={() => itemId && deleteNotification(itemId)}
+                    >
+                      <Button
+                        type="text"
+                        danger
+                        size="small"
+                        icon={<Icon name="delete" size="sm" />}
+                        title="Delete notification"
+                        aria-label="Delete notification"
+                      />
+                    </Popconfirm>
                   </div>
                 </div>
 
@@ -351,7 +381,9 @@ export default function NotificationsPage() {
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <span style={{ color: '#587548', fontWeight: 600 }}>
-                      Caller: <strong>{item.senderName || 'Unknown Caller'}</strong>
+                      <span style={{ textTransform: 'capitalize' }}>
+                        {roleLabel(item.senderRole || 'caller')}: <strong>{item.senderName || 'Unknown Caller'}</strong>
+                      </span>
                     </span>
                     {item.senderPhone && (
                       <span style={{ color: '#767D6E' }}>
