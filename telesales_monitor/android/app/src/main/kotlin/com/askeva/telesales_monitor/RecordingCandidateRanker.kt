@@ -56,6 +56,11 @@ object RecordingCandidateRanker {
         val contactName: String,
         /** Latest acceptable creation time: end + slack, capped by the start of a following call. */
         val createdBeforeMs: Long = endMs + CREATED_AFTER_END_SLACK_MS,
+        /**
+         * Numbers of the calls just before / after this one. A file whose name carries one of them (and not
+         * this call's number) is that call's recording, never this one's (back-to-back calls).
+         */
+        val otherNumbers: List<String> = emptyList(),
     )
 
     /**
@@ -101,6 +106,13 @@ object RecordingCandidateRanker {
         return nameDigits.contains(num.takeLast(7))
     }
 
+    /** Strict form of [nameHasNumber] (all 10 digits), so a date in the name can never match by chance. */
+    fun nameHasFullNumber(displayName: String, phoneNumber: String): Boolean {
+        val num = digitsOnly(phoneNumber)
+        if (num.length < 10) return false
+        return digitsOnly(displayName).contains(num.takeLast(10))
+    }
+
     fun nameHasContact(displayName: String, contactName: String): Boolean {
         val c = normalise(contactName).filter { it.isLetterOrDigit() }
         if (c.length < 3 || c.all { it.isDigit() }) return false
@@ -129,6 +141,8 @@ object RecordingCandidateRanker {
         val recorderFolder = isCallRecorderFolder(c.folderPath)
         val genericFolder = !recorderFolder && isGenericRecorderFolder(c.folderPath)
         val hasNumber = nameHasNumber(c.displayName, call.phoneNumber)
+        // Named after another call's number: that call's recording (back-to-back calls)
+        if (!hasNumber && call.otherNumbers.any { nameHasFullNumber(c.displayName, it) }) return null
         val hasContact = nameHasContact(c.displayName, call.contactName)
 
         var s = 0

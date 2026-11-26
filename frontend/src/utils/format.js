@@ -101,3 +101,16 @@ export function validPickerDate(val) {
 export function plural(n, word, many = `${word}S`) {
   return n === 1 ? word : many;
 }
+
+// How long ago: "just now" / "5 min ago" / "3 h ago" / "2 days ago" ('' for a missing or bad date)
+export function timeAgo(d) {
+  if (!d) return '';
+  const t = (d instanceof Date ? d : new Date(d)).getTime();
+  if (Number.isNaN(t)) return '';
+  const min = Math.floor(Math.max(0, Date.now() - t) / 60000);
+  if (min < 1) return 'just now';
+  if (min < 60) return `${min} min ago`;
+  const h = Math.floor(min / 60);
+  if (h < 48) return `${h} h ago`;
+  return `${Math.floor(h / 24)} days ago`;
+}

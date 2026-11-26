@@ -203,7 +203,60 @@ void main() {
         ).map((c) => c.id),
         ['1', '2', '3'],
       );
-      expect(callsNewerThan(calls, t0.add(const Duration(hours: 1))), isEmpty);
+      // Replay window is 3 hours
+      expect(callsNewerThan(calls, t0.add(const Duration(hours: 1))).length, 3);
+      expect(callsNewerThan(calls, t0.add(const Duration(hours: 4))), isEmpty);
+      expect(
+        callsNewerThan(calls, t0.add(const Duration(hours: 1)), replayWindow: const Duration(minutes: 10)),
+        isEmpty,
+      );
+    });
+
+    test('a long call logged after a later call is still sent', () {
+      // 40-minute call started at 10:00, written to the log at 10:40; a short call at 10:30
+      // was already acknowledged
+      final long = call('long', '9825012349', t0);
+      final shortAck = t0.add(const Duration(minutes: 30));
+      final sent = {callSyncKey(call('s', '9825012348', shortAck)): callSyncSignature(call('s', '9825012348', shortAck))};
+      final list = [call('s', '9825012348', shortAck), long];
+      expect(callsToSync(list, shortAck, sent).map((c) => c.id), ['long']);
+    });
+
+    test('callsToSync skips calls the server has with the same facts, oldest first', () {
+      final sent = <String, String>{};
+      expect(callsToSync(calls, null, sent).map((c) => c.id), ['1', '2', '3']);
+      for (final c in calls) {
+        sent[callSyncKey(c)] = callSyncSignature(c);
+      }
+      expect(callsToSync(calls, t0.add(const Duration(minutes: 20)), sent), isEmpty);
+      // The device finished writing call 3 (longer talk time): it is sent again
+      final updated = CallLogModel(
+        id: '3',
+        contactName: 'C3',
+        phoneNumber: '9825012342',
+        type: CallType.outgoing,
+        duration: const Duration(seconds: 95),
+        timestamp: t0.add(const Duration(minutes: 20)),
+        simSlot: 1,
+      );
+      expect(
+        callsToSync([calls[0], calls[1], updated], t0.add(const Duration(minutes: 20)), sent).map((c) => c.id),
+        ['3'],
+      );
+      // Unordered input comes back oldest first
+      expect(callsToSync(calls.reversed.toList(), null, {}).map((c) => c.id), ['1', '2', '3']);
+    });
+
+    test('pruneSentCallSignatures forgets calls older than the window', () {
+      final old = call('o', '9825012340', t0.subtract(const Duration(hours: 5)));
+      final sent = {
+        callSyncKey(old): callSyncSignature(old),
+        callSyncKey(calls[0]): callSyncSignature(calls[0]),
+      };
+      pruneSentCallSignatures(sent, t0);
+      expect(sent.keys, [callSyncKey(calls[0])]);
+      pruneSentCallSignatures(sent, null); // nothing acknowledged yet: unchanged
+      expect(sent.length, 1);
     });
 
     test('newestTimestamp', () {
@@ -395,6 +448,55 @@ void main() {
       );
       expect(help, contains('Android emulator'));
       expect(help, contains('physical phone'));
+    });
+  });
+
+  group('live team board', () {
+    test('combines live status, breaks and recording off from /dashboard/stats', () {
+      final board = teamLiveBoardFromStats({
+        'callerLiveStatuses': [
+          {'id': 'a', 'name': 'Asha', 'status': 'ON CALL'},
+          {'id': 'b', 'name': 'Bala', 'status': 'ONLINE'},
+          {'id': 'c', 'name': 'Chitra', 'status': 'OFFLINE'},
+          {'id': 'd', 'name': 'Dev', 'status': 'ONLINE'},
+        ],
+        'teamMembers': [
+          {'id': 'a', 'name': 'Asha', 'online': true, 'onBreak': false, 'autoRecordEnabled': true},
+          {'id': 'b', 'name': 'Bala', 'online': true, 'onBreak': false, 'autoRecordEnabled': false},
+          {'id': 'c', 'name': 'Chitra', 'online': false, 'onBreak': false, 'autoRecordEnabled': true},
+          {'id': 'd', 'name': 'Dev', 'online': true, 'onBreak': true, 'breakType': 'Lunch', 'autoRecordEnabled': true},
+        ],
+        'disabledRecorders': [
+          {'id': 'b', 'name': 'Bala', 'phone': '9825012340'},
+        ],
+      })!;
+      expect(board.members.length, 4);
+      expect(board.inState(TeamLiveState.onCall).map((m) => m.name), ['Asha']);
+      expect(board.inState(TeamLiveState.available).map((m) => m.name), ['Bala']);
+      expect(board.inState(TeamLiveState.offline).map((m) => m.name), ['Chitra']);
+      final onBreak = board.inState(TeamLiveState.onBreak);
+      expect(onBreak.map((m) => m.name), ['Dev']);
+      expect(onBreak.single.breakType, 'Lunch');
+      expect(board.recordingOffNames, ['Bala']);
+    });
+
+    test('works with only callerLiveStatuses; null without any list', () {
+      final board = teamLiveBoardFromStats({
+        'callerLiveStatuses': [
+          {'id': 'a', 'name': 'Asha', 'status': 'ONLINE'},
+        ],
+      })!;
+      expect(board.inState(TeamLiveState.available).length, 1);
+      expect(board.recordingOffNames, isNull); // the server did not say
+      expect(teamLiveBoardFromStats({'totalCalls': 3}), isNull);
+      expect(teamLiveBoardFromStats(null), isNull);
+    });
+
+    test('team target needs a positive teamDailyTarget', () {
+      expect(teamTargetFromStats({'teamDailyTarget': 500, 'totalCalls': 120}), (target: 500, calls: 120));
+      expect(teamTargetFromStats({'teamDailyTarget': 0, 'totalCalls': 1}), isNull);
+      expect(teamTargetFromStats({'totalCalls': 1}), isNull);
+      expect(teamTargetFromStats(null), isNull);
     });
   });
 }

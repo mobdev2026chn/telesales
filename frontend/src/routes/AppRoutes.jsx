@@ -8,6 +8,7 @@ import LeadCallingPage from '../pages/LeadCallingPage';
 import LeaderboardPage from '../pages/LeaderboardPage';
 import LeadsPipelinePage from '../pages/LeadsPipelinePage';
 import NotificationsPage from '../pages/NotificationsPage';
+import PhoneHealthPage from '../pages/PhoneHealthPage';
 import ProfilePage from '../pages/ProfilePage';
 import RecordingsPage from '../pages/RecordingsPage';
 import UserDetailPage from '../pages/UserDetailPage';
@@ -25,6 +26,7 @@ export default function AppRoutes() {
         <Route path="users" element={<RoleRoute guard="users"><UserManagementPage /></RoleRoute>} />
         <Route path="leaderboard" element={<LeaderboardPage />} />
         <Route path="recordings" element={<RecordingsPage />} />
+        <Route path="phone-health" element={<RoleRoute guard="health"><PhoneHealthPage /></RoleRoute>} />
         <Route path="leads" element={<LeadsPipelinePage />} />
         <Route path="demos" element={<RoleRoute guard="demos"><DemoBookingsPage /></RoleRoute>} />
         <Route path="notifications" element={<NotificationsPage />} />

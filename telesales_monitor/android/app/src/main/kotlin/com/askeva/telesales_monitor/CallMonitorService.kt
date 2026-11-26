@@ -9,11 +9,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
-import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import android.provider.CallLog
-import android.provider.ContactsContract
 import android.telephony.SubscriptionManager
 import android.telephony.TelephonyManager
 import androidx.core.app.NotificationCompat
@@ -86,8 +84,6 @@ class CallMonitorService : Service() {
         private const val MIN_TALK_SECONDS_FOR_MISS = 5
         /** Server marks a user offline after 5 minutes without any request. */
         private const val HEARTBEAT_EVERY_SEC = 120L
-        /** Calls per /calls/sync request from the call monitor. */
-        private const val MAX_PUSH_BATCH = 200
         /** The dialer writes the call-log row a moment after the call ends. */
         private const val PUSH_DELAY_MS = 3000L
     }
@@ -140,6 +136,12 @@ class CallMonitorService : Service() {
     private var speakerReceiver: BroadcastReceiver? = null
     /** Start of the most recent call; read by the worker to bound the previous call's search. */
     @Volatile private var latestCallStartMs = 0L
+    /** Number of the most recent call (when known); its recording must not be taken for an earlier call. */
+    @Volatile private var latestCallNumber = ""
+    /** Recently handled calls (number, end time). Worker thread only. */
+    private val recentCalls = ArrayDeque<Pair<String, Long>>()
+    /** Catch-up / orphan recovery queued for this service instance. */
+    private var startupTasksQueued = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -165,6 +167,19 @@ class CallMonitorService : Service() {
         registerCallReceiver()
         isRunning = true
         RecordingUploader.schedule(this) // retry anything left from earlier
+        CallSyncWorker.schedule(this) // takes over call sync whenever this service is not running (e.g. after a reboot)
+        if (!startupTasksQueued) {
+            startupTasksQueued = true
+            val startedAt = System.currentTimeMillis()
+            try {
+                worker.execute {
+                    // Calls made while tracking was off (e.g. after a reboot): the phone's own recordings
+                    try { CallSync.catchUpBuiltInRecordings(this, startedAt) } catch (e: Exception) { e.printStackTrace() }
+                    // AskEVA recordings left behind when the app was killed after a call
+                    try { CallSync.recoverOrphanedRecordings(this, recordingsDir()) } catch (e: Exception) { e.printStackTrace() }
+                }
+            } catch (_: Exception) {}
+        }
         startHeartbeat()
         CallMonitorEvents.emit("onCallMonitorState", mapOf("running" to true))
         return START_STICKY
@@ -196,91 +211,8 @@ class CallMonitorService : Service() {
      * Missed / rejected calls are included: they never reach [endCall], but they are in the call log.
      */
     private fun pushRecentCalls() {
-        val session = CallMonitorStore.session(this) ?: return
-        if (!session.isCallerContext) return
-        if (session.token == CallMonitorStore.authFailedToken(this)) return
-        if (!CallMonitorStore.hasPermission(this, Manifest.permission.READ_CALL_LOG)) return
-        val loginMs = CallMonitorStore.loginSessionMs(this) ?: return
-        val ack = CallMonitorStore.callPushAck(this, session.userId)
-        // Re-send the last 10 minutes too: a long call is written to the log after shorter later ones
-        val since = maxOf(loginMs - 5000L, ack - 10 * 60_000L)
-        val calls = org.json.JSONArray()
-        var newest = ack
-        try {
-            val projection = arrayOf(
-                CallLog.Calls.NUMBER, CallLog.Calls.CACHED_NAME, CallLog.Calls.TYPE,
-                CallLog.Calls.DATE, CallLog.Calls.DURATION, CallLog.Calls.PHONE_ACCOUNT_ID
-            )
-            val sims = SimSlots.Resolver(this)
-            val simCount = SimSlots.activeSimCount(this)
-            contentResolver.query(
-                CallLog.Calls.CONTENT_URI, projection, "${CallLog.Calls.DATE} >= ?",
-                arrayOf(since.toString()), "${CallLog.Calls.DATE} ASC"
-            )?.use { c ->
-                while (c.moveToNext() && calls.length() < MAX_PUSH_BATCH) {
-                    val slot = sims.slotFor(c.getString(5))
-                    if (!CallMonitorStore.isWorkSim(slot, session.simMode, simCount)) continue // personal SIM: never leaves the phone
-                    val number = c.getString(0) ?: ""
-                    val date = c.getLong(3)
-                    val type = when (c.getInt(2)) {
-                        CallLog.Calls.OUTGOING_TYPE -> "outgoing"
-                        CallLog.Calls.MISSED_TYPE -> "missed"
-                        CallLog.Calls.REJECTED_TYPE, CallLog.Calls.BLOCKED_TYPE -> "rejected"
-                        else -> "incoming"
-                    }
-                    val cached = c.getString(1)
-                    val name = if (!cached.isNullOrEmpty() && cached != number) cached else (lookupContactName(number) ?: number.ifEmpty { "Unknown" })
-                    calls.put(JSONObject()
-                        .put("contactName", name)
-                        .put("phoneNumber", number)
-                        .put("type", type)
-                        .put("timestamp", isoUtc(date))
-                        .put("durationSeconds", c.getInt(4).coerceAtLeast(0))
-                        .put("simSlot", slot)
-                        .put("note", ""))
-                    if (date > newest) newest = date
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            return
-        }
-        if (calls.length() == 0) return
-
-        val body = JSONObject()
-            .put("callerId", session.userId)
-            .put("callerName", session.callerName)
-            .put("callerPhone", session.callerPhone)
-            .put("calls", calls)
-        var conn: java.net.HttpURLConnection? = null
-        try {
-            conn = (java.net.URL("${CallMonitorStore.baseUrl(this)}/calls/sync").openConnection() as java.net.HttpURLConnection).apply {
-                requestMethod = "POST"
-                connectTimeout = 15_000
-                readTimeout = 30_000
-                doOutput = true
-                setRequestProperty("Content-Type", "application/json")
-                setRequestProperty("Authorization", "Bearer ${session.token}")
-            }
-            conn.outputStream.use { it.write(body.toString().toByteArray()) }
-            val code = conn.responseCode
-            if (code in 200..299) {
-                CallMonitorStore.setCallPushAck(this, session.userId, newest)
-                CallMonitorEvents.emit("onCallsPushed", mapOf("count" to calls.length()))
-                // A full batch means more rows are waiting
-                if (calls.length() >= MAX_PUSH_BATCH) schedulePush(0)
-            }
-        } catch (_: Exception) {
-            // No internet: the next call end or heartbeat (2 min) retries
-        } finally {
-            conn?.disconnect()
-        }
-    }
-
-    private fun isoUtc(ms: Long): String {
-        val f = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
-        f.timeZone = java.util.TimeZone.getTimeZone("UTC")
-        return f.format(Date(ms))
+        // A full batch means more rows are waiting. No internet: the next call end or heartbeat (2 min) retries.
+        if (CallSync.pushRecentCalls(this)) schedulePush(0)
     }
 
     /** POST <base>/auth/heartbeat with the session token. Failures are ignored (next ping retries). */
@@ -320,7 +252,7 @@ class CallMonitorService : Service() {
     }
 
     private fun idleText(): String =
-        if (CallMonitorStore.nativeRecorderDetected(this)) "Uploading your phone's call recordings"
+        if (CallMonitorStore.builtInTrusted(this)) "Uploading your phone's call recordings"
         else "Work calls are recorded and uploaded"
 
     private fun goForeground(): Boolean {
@@ -410,9 +342,11 @@ class CallMonitorService : Service() {
                         callSlot = if (slot > 0) slot else if (recentDial) lastDialedSlot else 0
                     }
                     latestCallStartMs = callStartMs
+                    latestCallNumber = callNumber
                     maybeStartOwnRecording()
                 } else if (callNumber.isEmpty() && extraNumber.isNotEmpty()) {
                     callNumber = extraNumber
+                    latestCallNumber = callNumber
                 }
             }
             TelephonyManager.EXTRA_STATE_IDLE -> {
@@ -441,7 +375,7 @@ class CallMonitorService : Service() {
         // The SIM of an outgoing call is often unknown at this point: record unless it is positively the
         // personal SIM. The call-log row decides after the call, and a non-work recording is deleted then.
         if (!CallMonitorStore.isWorkSim(callSlot, session.simMode, 1)) return
-        val builtInTrusted = CallMonitorStore.nativeRecorderDetected(this) && CallMonitorStore.hasMediaPermission(this)
+        val builtInTrusted = CallMonitorStore.builtInTrusted(this)
         // Android 9 and older give the mic to one app at a time: leave it to the phone's own recorder
         if (builtInTrusted && Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
         if (!CallMonitorStore.hasPermission(this, Manifest.permission.RECORD_AUDIO)) return
@@ -505,6 +439,8 @@ class CallMonitorService : Service() {
                 try {
                     processEndedCall(ended)
                 } finally {
+                    // Calls up to here are handled: the background catch-up must not look at this one again
+                    CallMonitorStore.setLastHandledCallMs(this, ended.endMs)
                     // Call handled: the accessibility service goes off again (payment apps), unless another call started
                     mainHandler.post { if (!inCall) A11yGuard.onCallFinished(this) }
                 }
@@ -538,6 +474,12 @@ class CallMonitorService : Service() {
             row = findCallLogRow(call)
         }
         val number = row?.number?.ifEmpty { null } ?: call.number
+        // Calls just before and after this one: a file named after one of them is not this call's recording
+        val otherNumbers = (recentCalls.filter { call.startMs - it.second < 5 * 60_000L }.map { it.first } + latestCallNumber)
+            .filter { it.isNotEmpty() && last10(it) != last10(number) }
+            .distinct()
+        recentCalls.addLast(number to call.endMs)
+        while (recentCalls.size > 10) recentCalls.removeFirst()
         val slot = if (row != null && row.simSlot > 0) row.simSlot else call.simSlot
         if (!CallMonitorStore.isWorkSim(slot, session.simMode, SimSlots.activeSimCount(this))) {
             own?.file?.delete()
@@ -554,8 +496,10 @@ class CallMonitorService : Service() {
         val talkSec = if (row != null && row.durationSec > 0) row.durationSec else offhookSec
         val contact = row?.name?.ifEmpty { null } ?: lookupContactName(number) ?: number.ifEmpty { "Unknown" }
 
-        // Our recording of an outgoing call started at dialling: cut the ringing so it holds the conversation only
-        if (own != null && row != null && row.durationSec > 0) {
+        // Our recording of an outgoing call started at dialling: cut the ringing so it holds the conversation only.
+        // Not when a second call joined (call waiting): this row's talk time then does not match the recording,
+        // and cutting by it would remove real conversation.
+        if (own != null && row != null && row.durationSec > 0 && callLogRowsDuring(call) <= 1) {
             val answeredAtMs = call.endMs - row.durationSec * 1000L
             // Call-log seconds are rounded down, so keep a one second margin before the answer
             val leadInMs = answeredAtMs - call.recorder!!.startedAtMs - 1000L
@@ -576,14 +520,15 @@ class CallMonitorService : Service() {
                 val next = latestCallStartMs
                 var createdBefore = call.endMs + RecordingCandidateRanker.CREATED_AFTER_END_SLACK_MS
                 if (next > call.endMs && next < createdBefore) createdBefore = next
-                val info = RecordingCandidateRanker.CallInfo(call.startMs, call.endMs, talkSec, number, contact, createdBefore)
+                val info = RecordingCandidateRanker.CallInfo(call.startMs, call.endMs, talkSec, number, contact, createdBefore, otherNumbers)
                 found = try { BuiltInRecordingFinder.find(this, info, exclude) } catch (_: Exception) { null }
                 if (found != null) break
             }
         }
 
         if (found != null) {
-            own?.file?.delete()
+            // AskEVA's own recording is kept until the phone's file has uploaded: if that file disappears or
+            // is refused, ours is sent instead (RecordingUploader), and it is deleted once one of them is stored
             // The uploaded recording is the phone's own, with both voices: the last call was recorded with sound
             CallMonitorStore.setLastCapture(this, "ok", -1)
             CallMonitorStore.cancelNotification(this, CallMonitorStore.NOTIF_ID_RECORDING)
@@ -598,6 +543,8 @@ class CallMonitorService : Service() {
                     path = found.path, uri = found.uri, fileName = found.displayName,
                     callStartedAtMs = call.startMs, phoneNumber = number, contactName = contact, type = type,
                     simSlot = slot, durationSeconds = if (talkSec > 0) talkSec else found.durationSeconds,
+                    fallbackPath = own?.file?.absolutePath ?: "",
+                    fallbackSpeaker = if (own != null) call.speakerDiagnostic() else "",
                 )
             )
         } else {
@@ -707,6 +654,20 @@ class CallMonitorService : Service() {
         }
     }
 
+    /** Call-log rows that began during this call. More than one = call waiting joined a second call. */
+    private fun callLogRowsDuring(call: EndedCall): Int {
+        if (!CallMonitorStore.hasPermission(this, Manifest.permission.READ_CALL_LOG)) return 1
+        return try {
+            contentResolver.query(
+                CallLog.Calls.CONTENT_URI, arrayOf(CallLog.Calls._ID),
+                "${CallLog.Calls.DATE} >= ? AND ${CallLog.Calls.DATE} <= ?",
+                arrayOf((call.startMs - 5000L).toString(), call.endMs.toString()), null
+            )?.use { it.count } ?: 1
+        } catch (_: Exception) {
+            1 // cannot tell: trim as before
+        }
+    }
+
     private fun activeSubscriptions(): List<android.telephony.SubscriptionInfo> = SimSlots.activeSubscriptions(this)
 
     /** 1-based SIM slot of a call-log PHONE_ACCOUNT_ID (subscription id, ICCID or telecom account). 0 = unknown. */
@@ -727,17 +688,7 @@ class CallMonitorService : Service() {
         return if (subs.size == 1) subs[0].simSlotIndex + 1 else 0
     }
 
-    private fun lookupContactName(number: String): String? {
-        if (number.isEmpty() || !CallMonitorStore.hasPermission(this, Manifest.permission.READ_CONTACTS)) return null
-        return try {
-            val uri = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(number))
-            contentResolver.query(uri, arrayOf(ContactsContract.PhoneLookup.DISPLAY_NAME), null, null, null)?.use {
-                if (it.moveToFirst()) it.getString(0)?.ifEmpty { null } else null
-            }
-        } catch (_: Exception) {
-            null
-        }
-    }
+    private fun lookupContactName(number: String): String? = CallSync.lookupContactName(this, number)
 
     override fun onDestroy() {
         isRunning = false

@@ -15,7 +15,7 @@ import { CALL_RANGE_OPTIONS, CRIT, REC_FILTERS, REC_PAGE_SIZE } from '../data/co
 import { setRecFilter, setRecordingDraft, setRecPage } from '../redux/slices/recordingsSlice';
 import { selectRecsQueryKey, selectScope } from '../redux/selectors';
 import { recordingAudioUrl } from '../utils/api';
-import { currentAudioEl, handoffToDock, onAnyAudioPlay, setPlaylist, syncAudioControls } from '../utils/audioController';
+import { currentAudioEl, handoffToDock, onAnyAudioPlay, retryExpiredAudio, setPlaylist, syncAudioControls } from '../utils/audioController';
 import { exportRows } from '../utils/excel';
 import { fmtClock, fmtDur, fmtIstFull, fmtTs, formatPhone, istDateStr, roleLabel } from '../utils/format';
 import { newRecMeta } from '../utils/mappers';
@@ -156,6 +156,10 @@ export default function RecordingsPage() {
 
 function RecordingCard({ rec: c, meta, users }) {
   const audioRef = useRef(null);
+  // Built once per card (cards are keyed by recording id): the link carries a short-lived media token,
+  // and a new link on every render would reload the player. The audio controller swaps in a fresh
+  // link at play time when this one has gone out of date.
+  const [audioSrc] = useState(() => recordingAudioUrl(c.id));
   const [clock, setClock] = useState({ cur: 0, total: c.dur });
   const agentUser = users.find(u => u.id === c.callerId) || null;
   const mgrUser = agentUser ? users.find(m => m.id === agentUser.mgr) : null;
@@ -215,8 +219,9 @@ function RecordingCard({ rec: c, meta, users }) {
             controls
             preload="metadata"
             aria-label={`Recording: ${c.agent} and ${c.client || formatPhone(c.phone)}`}
-            src={recordingAudioUrl(c.id)}
+            src={audioSrc}
             onPlay={(e) => onAnyAudioPlay(e.currentTarget)}
+            onError={(e) => retryExpiredAudio(e.currentTarget)}
             onPause={syncAudioControls}
             onEnded={syncAudioControls}
             onLoadedMetadata={(e) => updateClock(e.currentTarget)}
@@ -304,7 +309,7 @@ function RecordingProblems({ range, queryKey }) {
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <Badge tone={kind.tone}>{kind.label}</Badge>
                   <UserLink user={{ id: i.callerId, name: i.callerName }} label={i.callerName || '—'} />
-                  <span className="muted">{fmtTs(i.at)} · {fmtDur(i.talkSeconds)}{i.phone ? ` · ${i.phone}` : ''}{i.android ? ` · Android ${i.android}` : ''}</span>
+                  <span className="muted">{fmtTs(i.at)} · {fmtDur(i.talkSeconds)}{i.phone ? ` · ${i.phone}` : ''}{i.android ? ` · Android ${i.android}` : ''}{i.appVersion ? ` · app ${i.appVersion}` : ''}</span>
                 </div>
                 <div style={{ fontSize: 'var(--ds-fs-sm)', marginTop: 4 }}>{i.reason}</div>
               </div>

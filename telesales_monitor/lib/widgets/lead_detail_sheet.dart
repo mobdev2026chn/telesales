@@ -4,6 +4,7 @@ import '../theme/app_theme.dart';
 import 'neo_button.dart';
 import '../providers/tele_provider.dart';
 import '../models/lead_model.dart';
+import '../services/lead_outbox.dart';
 
 class LeadDetailSheet extends StatefulWidget {
   final Map<String, dynamic> leadData;
@@ -309,7 +310,7 @@ class _LeadDetailSheetState extends State<LeadDetailSheet> {
               onTap: () async {
                 final newStatus = _parseStatus(_selectedStatus);
                 final noteText = _noteCtrl.text.trim();
-                await tele.updateLeadStatus(
+                var result = await tele.updateLeadStatus(
                   leadId,
                   newStatus,
                   phone: phone,
@@ -317,7 +318,7 @@ class _LeadDetailSheetState extends State<LeadDetailSheet> {
                   note: noteText.isNotEmpty ? noteText : null,
                 );
                 if (noteText.isNotEmpty) {
-                  await tele.addLeadNote(leadId, noteText);
+                  result = combineSaveResults(result, await tele.addLeadNote(leadId, noteText));
                 }
                 if (context.mounted) {
                   Navigator.of(context).pop();
@@ -325,7 +326,8 @@ class _LeadDetailSheetState extends State<LeadDetailSheet> {
                     SnackBar(
                       backgroundColor: AppTheme.ink900,
                       content: Text(
-                        'Lead status updated to $_selectedStatus',
+                        // Only "updated" when the server has it; offline saves sync later
+                        leadSaveMessage(result, saved: 'Lead status updated to $_selectedStatus'),
                         style: AppTheme.bodyBold(size: 12, color: AppTheme.limeYellow),
                       ),
                     ),

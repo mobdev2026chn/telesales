@@ -12,6 +12,8 @@ export const authService = {
     body: { identifier, email: identifier, password },
   }),
   logout: () => apiFetch(ENDPOINTS.logout, { method: 'POST', body: {} }),
+  // Never signs the user out: an older server answers 404 and the portal keeps using ?token= links
+  mediaToken: () => apiFetch(ENDPOINTS.mediaToken, { noSessionExpiry: true }),
 };
 
 export const userService = {
@@ -49,6 +51,8 @@ export const recordingService = {
   issues: (qs) => apiFetch(ENDPOINTS.recordingIssues(qs)),
   review: (id, body) => apiFetch(ENDPOINTS.recordingReview(id), { method: 'POST', body }),
   pin: (id, pinned) => apiFetch(ENDPOINTS.recordingPin(id), { method: 'POST', body: { pinned } }),
+  // Per agent: is the phone recording calls? qs: "?days=7&callerIds=…&employeeType=…"
+  phoneHealth: (qs) => apiFetch(ENDPOINTS.phoneHealth(qs)),
 };
 
 export const demoService = {

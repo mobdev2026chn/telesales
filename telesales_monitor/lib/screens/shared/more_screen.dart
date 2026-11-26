@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -345,7 +346,13 @@ class _MoreScreenState extends State<MoreScreen> {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             backgroundColor: AppTheme.paper,
-                            content: Text('ℹ Admin Web Portal (http://localhost:8080) handles role provisioning.', style: AppTheme.body(size: 12, color: AppTheme.limeYellow)),
+                            content: Text(
+                              // The local address is a developer hint: debug builds only
+                              kDebugMode
+                                  ? 'ℹ Admin Web Portal (http://localhost:8080) handles role provisioning.'
+                                  : 'ℹ The Admin Web Portal handles role provisioning.',
+                              style: AppTheme.body(size: 12, color: AppTheme.limeYellow),
+                            ),
                           ),
                         );
                       },

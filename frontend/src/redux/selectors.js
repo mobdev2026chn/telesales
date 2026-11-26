@@ -38,13 +38,19 @@ export const selectScopedLeads = createSelector(
   (leads, scope) => leads.filter(scope.isLeadInScope),
 );
 
+// "&employeeType=…" for a chosen Type filter ('' for ALL)
+const employeeTypeParam = (typeFilter) => (typeFilter && typeFilter !== 'ALL'
+  ? `&employeeType=${encodeURIComponent(typeFilter)}`
+  : '');
+
 // Request keys: the server numbers are cached per period + scope
 export const selectDashKey = (s) => {
-  const typeParam = s.dashboard.typeFilter && s.dashboard.typeFilter !== 'ALL'
-    ? `&employeeType=${encodeURIComponent(s.dashboard.typeFilter)}`
-    : '';
+  const typeParam = employeeTypeParam(s.dashboard.typeFilter);
   return `?${whenParam(s.dashboard.period, s.dashboard.customDate)}${selectScope(s).scopeParam}${typeParam}`;
 };
+// Phone health: days + the same scope / type params as the dashboard
+export const selectPhKey = (s) =>
+  `?days=${encodeURIComponent(s.phoneHealth.days)}${selectScope(s).scopeParam}${employeeTypeParam(s.phoneHealth.typeFilter)}`;
 export const selectLbKey = (s) => `?${whenParam(s.leaderboard.period, s.leaderboard.customDate)}${selectScope(s).scopeParam}`;
 export const selectUdKey = (s) => `${s.userDetail.userId}|${s.userDetail.date || s.userDetail.period}`;
 

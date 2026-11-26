@@ -9,6 +9,7 @@ import '../../widgets/top_header.dart';
 import '../../widgets/notifications_sheet.dart';
 import '../../providers/tele_provider.dart';
 import '../login_screen.dart';
+import 'scheduled_callbacks_screen.dart';
 
 class CallerProfileScreen extends StatefulWidget {
   const CallerProfileScreen({super.key});
@@ -532,6 +533,59 @@ class _CallerProfileScreenState extends State<CallerProfileScreen> {
           ),
           const SizedBox(height: 14),
 
+          // Follow-up callbacks (full list with filters, call now / reschedule)
+          NeoCard(
+            backgroundColor: AppTheme.white,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            onTap: () => _openScheduledCallbacks(context),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppTheme.greenNeon.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: AppTheme.greenDark, width: 1.2),
+                        ),
+                        child: const Icon(Icons.event_repeat_rounded, size: 18, color: AppTheme.greenDark),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('FOLLOW-UP CALLBACKS', style: AppTheme.label(size: 10, color: AppTheme.ink900)),
+                            const SizedBox(height: 2),
+                            Text(
+                              tele.callbacks.isEmpty
+                                  ? 'No callbacks scheduled'
+                                  : '${tele.callbacks.length} scheduled callback(s)',
+                              style: AppTheme.body(size: 11, color: AppTheme.muted),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppTheme.ink900,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text('VIEW →', style: AppTheme.label(size: 9.5, color: AppTheme.limeYellow)),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+
           // Live Metrics Card
           NeoCard(
             backgroundColor: AppTheme.white,
@@ -592,6 +646,25 @@ class _CallerProfileScreenState extends State<CallerProfileScreen> {
       ),
     ),
   );
+  }
+
+  /// Follow-up callbacks list as its own page (the screen itself is built as a tab body).
+  void _openScheduledCallbacks(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          backgroundColor: AppTheme.paper,
+          appBar: AppBar(
+            backgroundColor: AppTheme.paper,
+            foregroundColor: AppTheme.ink900,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            toolbarHeight: 44, // back arrow only: the screen's own header shows the title
+          ),
+          body: const ScheduledCallbacksScreen(),
+        ),
+      ),
+    );
   }
 
   void _showCallerLogoutConfirmDialog(BuildContext context, TeleProvider tele) {

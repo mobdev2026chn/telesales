@@ -62,7 +62,8 @@ export async function apiFetch(path, opts = {}) {
 
     let json = null;
     try { json = await res.json(); } catch { json = null; }
-    if (res.status === 401 && !opts.noAuth && (!json || json.code === 'AUTH_REQUIRED')) {
+    // noSessionExpiry: a 401 is just an error for this call and never signs the user out (media token)
+    if (res.status === 401 && !opts.noAuth && !opts.noSessionExpiry && (!json || json.code === 'AUTH_REQUIRED')) {
       if (onSessionExpired) onSessionExpired('Your session has expired — please sign in again.');
       throw new ApiError('Session expired', 401, json);
     }
@@ -76,7 +77,47 @@ export async function apiFetch(path, opts = {}) {
   throw new ApiError('Could not reach the server — check your connection.', 0, null, true);
 }
 
-// <audio> cannot send headers, so the token rides in the query string
+// ---- Short-lived recording links ----
+// GET /auth/media-token gives a token (about 2 hours) that only plays recording audio, so a copied
+// audio link no longer carries the 30-day login. Kept in memory only: authActions fetches it when a
+// session starts, renews it before it runs out and clears it on sign-out.
+const MEDIA_TOKEN_SLACK_MS = 2 * 60 * 1000;   // stop handing out a media token 2 minutes before it expires
+let mediaToken = null;                        // { token, expiresAt }
+let onMediaTokenNeeded = null;
+
+export function setMediaToken(token, expiresInSeconds) {
+  const secs = Number(expiresInSeconds);
+  mediaToken = token && typeof token === 'string' && secs > 0 ? { token, expiresAt: Date.now() + secs * 1000 } : null;
+}
+export function clearMediaToken() { mediaToken = null; }
+// authActions registers what to do when a link is built without a fresh media token (fetch one)
+export function setMediaTokenNeededHandler(fn) { onMediaTokenNeeded = fn; }
+
+function freshMediaToken() {
+  return mediaToken && Date.now() < mediaToken.expiresAt - MEDIA_TOKEN_SLACK_MS ? mediaToken.token : '';
+}
+
+// <audio> cannot send headers, so a token rides in the query string: the short-lived media token
+// (?mt=) when a fresh one is cached, otherwise the login token (?token=) — an older server, or the
+// media token could not be fetched — so playback never breaks
 export function recordingAudioUrl(id) {
-  return `${API_BASE}${ENDPOINTS.recordingAudio(id)}?token=${encodeURIComponent(getToken())}`;
+  const url = `${API_BASE}${ENDPOINTS.recordingAudio(id)}`;
+  const mt = freshMediaToken();
+  if (mt) return `${url}?mt=${encodeURIComponent(mt)}`;
+  if (onMediaTokenNeeded) onMediaTokenNeeded();
+  return `${url}?token=${encodeURIComponent(getToken())}`;
+}
+
+// A recording link built earlier whose token is no longer the one to use (the media token was renewed
+// or ran out, or the link still carries the login token while a media token is now available) →
+// the same recording's link built again; null when the link is still good or is not a recording link
+export function renewAudioUrl(url) {
+  const m = /\/recordings\/([^/?#]+)\/audio\?(?:[^#]*&)?(mt|token)=([^&#]*)/.exec(String(url || ''));
+  if (!m) return null;
+  let id;
+  let value;
+  try { id = decodeURIComponent(m[1]); value = decodeURIComponent(m[3]); } catch { return null; }
+  const mt = freshMediaToken();
+  if (m[2] === 'mt' ? value === mt : !mt) return null;
+  return recordingAudioUrl(id);
 }

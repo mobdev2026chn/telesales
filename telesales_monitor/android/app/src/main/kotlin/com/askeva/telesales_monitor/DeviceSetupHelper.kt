@@ -5,6 +5,8 @@ import android.app.Activity
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
@@ -77,12 +79,22 @@ object DeviceSetupHelper {
     /** OEM "autostart" / background-launch managers; falls back to this app's info page. */
     /** Settings > Accessibility, where the user switches on "AskEVA Call Recording". */
     fun openAccessibilitySettings(activity: Activity): Boolean {
-        // Android 11+ can deep-link to our own service's page on many builds
+        val service = ComponentName(activity, CallAccessibilityService::class.java).flattenToString()
+        // Android 11+: straight to our own service's page, where the phone allows it
         val details = Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
-            .putExtra(Intent.EXTRA_COMPONENT_NAME, ComponentName(activity, CallAccessibilityService::class.java).flattenToString())
+            .putExtra(Intent.EXTRA_COMPONENT_NAME, service)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && tryStart(activity, details)) return true
-        return tryStart(activity, Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        // Otherwise the Accessibility list, scrolled to "AskEVA Call Recording" and highlighted (stock Android
+        // Settings: Pixel, Motorola, Nokia, ...). Other phones ignore these extras and open the list as before.
+        val highlighted = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+            .putExtra(EXTRA_FRAGMENT_ARG_KEY, service)
+            .putExtra(EXTRA_SHOW_FRAGMENT_ARGUMENTS, android.os.Bundle().apply { putString(EXTRA_FRAGMENT_ARG_KEY, service) })
+        return tryStart(activity, highlighted) || tryStart(activity, Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
     }
+
+    /** Settings app extras that scroll to and highlight one entry (its preference key). */
+    private const val EXTRA_FRAGMENT_ARG_KEY = ":settings:fragment_args_key"
+    private const val EXTRA_SHOW_FRAGMENT_ARGUMENTS = ":settings:show_fragment_args"
 
     /** App info page (for Android 13+ "Allow restricted settings" when the APK was sideloaded). */
     /** Settings > Apps > Default apps, where the user picks the phone's own dialer as the Phone app. */
@@ -118,6 +130,40 @@ object DeviceSetupHelper {
         (ctx.getSystemService(Context.TELECOM_SERVICE) as TelecomManager).defaultDialerPackage ?: ""
     } catch (_: Exception) {
         ""
+    }
+
+    /** "Phone by Google": keeps its call recordings in its own private storage, out of AskEVA's reach. */
+    const val GOOGLE_DIALER = "com.google.android.dialer"
+
+    data class DialerApp(val packageName: String, val label: String)
+
+    /**
+     * The phone maker's own Phone app (Samsung, vivo, OPPO, ...) installed next to "Phone by Google".
+     * It saves its recordings where AskEVA can read them, so making it the default Phone app fixes
+     * recording. Counted: a system app, other than Phone by Google and AskEVA, that opens the dial pad
+     * and has an in-call screen (what Android requires of a default Phone app). Null when there is
+     * none: Pixel, Motorola, Nokia, and phones that ship only Phone by Google.
+     */
+    fun builtInDialer(ctx: Context): DialerApp? = try {
+        val pm = ctx.packageManager
+        @Suppress("DEPRECATION")
+        pm.queryIntentActivities(Intent(Intent.ACTION_DIAL, Uri.parse("tel:")), 0)
+            .asSequence()
+            .mapNotNull { it.activityInfo?.applicationInfo }
+            .distinctBy { it.packageName }
+            .filter { it.packageName != GOOGLE_DIALER && it.packageName != ctx.packageName }
+            .filter { it.enabled && (it.flags and ApplicationInfo.FLAG_SYSTEM) != 0 }
+            .filter { hasInCallScreen(pm, it.packageName) }
+            .map { DialerApp(it.packageName, pm.getApplicationLabel(it).toString()) }
+            .firstOrNull()
+    } catch (_: Exception) {
+        null
+    }
+
+    private fun hasInCallScreen(pm: PackageManager, pkg: String): Boolean {
+        @Suppress("DEPRECATION")
+        val services = pm.queryIntentServices(Intent("android.telecom.InCallService").setPackage(pkg), PackageManager.GET_META_DATA)
+        return services.any { it.serviceInfo?.metaData?.getBoolean(TelecomManager.METADATA_IN_CALL_SERVICE_UI, false) == true }
     }
 
     fun deviceInfo(): Map<String, Any?> = mapOf(

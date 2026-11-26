@@ -1515,3 +1515,49 @@ select.form-control, .select { cursor: pointer; padding-right: 8px; }
 .mgr-filter-ant.ant-select.is-active { background: var(--ds-lime-bg); border-color: var(--ds-lime-400); }
 .mgr-filter-popup { max-width: calc(100vw - 32px); }
 .mgr-filter-popup .ant-select-item-option-content { white-space: normal; }
+
+/* ---------- 17. DASHBOARD: TEAM RIGHT NOW · TEAM TARGET ---------- */
+.team-now-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--ds-space-3); }
+.team-now-tile {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0;
+  padding: 12px 14px; border: 1px solid var(--ds-border); border-radius: var(--ds-radius-md);
+  background: var(--ds-surface-muted); color: var(--ds-text); font: inherit; text-align: left; cursor: pointer;
+  transition: border-color var(--ds-transition), background var(--ds-transition), box-shadow var(--ds-transition);
+}
+.team-now-tile:hover { border-color: var(--ds-border-strong); background: var(--ds-surface); }
+.team-now-tile.is-active { border-color: var(--ds-green-500); background: var(--ds-surface); box-shadow: var(--ds-ring); }
+.team-now-tile:focus-visible, .team-now-recoff:focus-visible { outline: none; box-shadow: var(--ds-ring); }
+.team-now-label {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--ds-fs-2xs); font-weight: 700; letter-spacing: var(--ds-tracking-label); text-transform: uppercase;
+}
+.team-now-swatch { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.team-now-count { font-size: 28px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.team-now-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--ds-space-3); flex-wrap: wrap; margin-top: var(--ds-space-3); }
+.team-now-recoff {
+  display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 12px;
+  border: 1px solid var(--ds-border); border-radius: var(--ds-radius-pill); background: var(--ds-neutral-bg); color: var(--ds-neutral-text);
+  font: inherit; font-size: var(--ds-fs-sm); font-weight: 600; cursor: pointer;
+}
+.team-now-recoff strong { font-variant-numeric: tabular-nums; }
+.team-now-recoff.has-off { background: var(--ds-danger-bg); border-color: transparent; color: var(--ds-danger); }
+.team-now-recoff.is-active { box-shadow: var(--ds-ring); }
+.team-now-names {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px;
+  margin-top: var(--ds-space-3); padding-top: var(--ds-space-3); border-top: 1px solid var(--ds-border); font-size: var(--ds-fs-sm);
+}
+.team-now-names-title { flex-basis: 100%; font-size: var(--ds-fs-2xs); font-weight: 700; letter-spacing: var(--ds-tracking-label); text-transform: uppercase; }
+.team-now-name { font-weight: 600; overflow-wrap: anywhere; }
+.team-now-note { font-size: var(--ds-fs-xs); font-weight: 400; color: var(--ds-text-3); }
+.team-target-figure { display: flex; align-items: baseline; gap: 4px; margin-bottom: var(--ds-space-3); font-size: var(--ds-fs-md); }
+.team-target-figure strong { font-size: 30px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+@media (max-width: 640px) {
+  .team-now-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .team-now-count { font-size: 24px; }
+}
+
+/* ---------- 18. PHONE HEALTH ---------- */
+.ph-reasons { margin: 6px 0 0; padding-left: 16px; font-size: var(--ds-fs-xs); line-height: 1.45; overflow-wrap: anywhere; }
+.ph-alert { color: var(--ds-danger); font-weight: 600; }
+.ph-note { margin: 0; padding: 10px var(--ds-space-5); font-size: var(--ds-fs-sm); background: var(--ds-surface-muted); border-bottom: 1px solid var(--ds-border); }
+.ph-section { margin-top: var(--ds-space-4); }

@@ -1,0 +1,51 @@
+<!doctype html>
+<!-- Play Store feature graphic source (1024 x 500). Re-render with store_listing/source/render.ps1. -->
+<html>
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@500;600&family=Playfair+Display:ital,wght@1,600&display=block" rel="stylesheet">
+<style>
+  :root {
+    --ink: #10180C;
+    --paper: #EFECE3;
+    --green: #3DC838;
+    --lime: #C8FF4A;
+    --gradient: linear-gradient(135deg, #3DC838 0%, #7FD63B 55%, #C8FF4A 100%);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1024px; height: 500px; overflow: hidden; background: var(--ink); }
+  body { position: relative; font-family: 'Archivo', 'Segoe UI', sans-serif; color: var(--paper); }
+
+  .logo {
+    position: absolute; left: 96px; top: 108px;
+    width: 264px; height: 264px; border-radius: 32px;
+    background: url('../../assets/images/ask_eva_logo.png') center / cover;
+    border: 2px solid var(--ink);
+    box-shadow: 10px 10px 0 var(--lime);
+  }
+
+  .copy { position: absolute; left: 432px; top: 104px; width: 520px; }
+  .eyebrow {
+    display: flex; align-items: center; gap: 12px;
+    font-weight: 600; font-size: 17px; letter-spacing: 0.18em; text-transform: uppercase;
+  }
+  .eyebrow::before { content: ''; width: 12px; height: 12px; background: var(--green); }
+  h1 { margin-top: 18px; line-height: 0.95; font-weight: 400; }
+  .caps { display: block; font-family: 'Anton', sans-serif; font-size: 112px; text-transform: uppercase; }
+  .accent { display: block; font-family: 'Playfair Display', serif; font-style: italic; font-weight: 600; font-size: 100px; color: var(--lime); }
+  .accent i { color: var(--green); font-style: normal; }
+  .sub { margin-top: 22px; font-size: 22px; font-weight: 500; line-height: 1.35; color: rgba(239, 236, 227, 0.82); }
+
+  .band { position: absolute; left: 0; right: 0; bottom: 0; height: 12px; background: var(--gradient); }
+</style>
+</head>
+<body>
+  <div class="logo"></div>
+  <div class="copy">
+    <div class="eyebrow">AskEVA · Telesales</div>
+    <h1><span class="caps">Every call</span><span class="accent">counts<i>.</i></span></h1>
+    <p class="sub">Leads, calls, follow-ups and recordings for your sales team, in one app.</p>
+  </div>
+  <div class="band"></div>
+</body>
+</html>

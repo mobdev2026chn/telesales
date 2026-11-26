@@ -9,6 +9,7 @@ import leaderboardReducer from './slices/leaderboardSlice';
 import leadsReducer from './slices/leadsSlice';
 import recordingsReducer from './slices/recordingsSlice';
 import notificationsReducer from './slices/notificationsSlice';
+import phoneHealthReducer from './slices/phoneHealthSlice';
 import uiReducer from './slices/uiSlice';
 import userDetailReducer from './slices/userDetailSlice';
 import usersReducer from './slices/usersSlice';
@@ -25,6 +26,7 @@ export const store = configureStore({
     leaderboard: leaderboardReducer,
     demos: demosReducer,
     userDetail: userDetailReducer,
+    phoneHealth: phoneHealthReducer,
     ui: uiReducer,
   },
   // No thunk middleware: only plain actions reach the store.

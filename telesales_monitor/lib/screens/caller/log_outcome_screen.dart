@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/tele_provider.dart';
 import '../../models/lead_model.dart';
+import '../../services/lead_outbox.dart';
 import '../../widgets/book_demo_sheet.dart';
 import 'call_session_screen.dart';
 
@@ -133,7 +134,8 @@ class _LogOutcomeScreenState extends State<LogOutcomeScreen> {
     if (status == null || _saving) return;
     setState(() => _saving = true);
     final navigator = Navigator.of(context);
-    await tele.saveCallOutcomeAndNext(
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final result = await tele.saveCallOutcomeAndNext(
       status: status,
       note: _notesCtrl.text.trim(),
       sendBrochure: _sendWhatsAppBrochure,
@@ -141,6 +143,19 @@ class _LogOutcomeScreenState extends State<LogOutcomeScreen> {
       takeBreak: takeBreak,
       dialNext: dialNext,
     );
+    // Whether the server has the outcome or it waits on this phone until the server can be reached
+    if (result != null) {
+      messenger?.showSnackBar(
+        SnackBar(
+          backgroundColor: AppTheme.ink900,
+          duration: const Duration(seconds: 3),
+          content: Text(
+            leadSaveMessage(result, saved: 'Outcome saved'),
+            style: AppTheme.bodyBold(size: 12, color: AppTheme.limeYellow),
+          ),
+        ),
+      );
+    }
     if (!mounted) return;
     if (dialNext && tele.activeCallLead != null) {
       navigator.pushReplacement(MaterialPageRoute(builder: (_) => CallSessionScreen(lead: tele.activeCallLead)));

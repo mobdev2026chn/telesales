@@ -8,9 +8,11 @@ import android.database.ContentObserver
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.CallLog
+import android.view.WindowManager
 import android.provider.ContactsContract
 import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
@@ -36,6 +38,11 @@ import java.util.concurrent.Executors
  * [CallMonitorService] + [RecordingUploader] so they keep working without this Activity.
  */
 class MainActivity : FlutterActivity() {
+    companion object {
+        /** Number from a tel: link / dial pad request (AskEVA as the Phone app), until Flutter takes it. */
+        @Volatile var pendingDialNumber: String? = null
+    }
+
     private val CHANNEL = "com.askeva.telesales/telephony"
     private val DIALER_CHANNEL = "com.askeva.telesales/dialer"
     private val CALL_EVENTS_CHANNEL = "com.askeva.telesales/call_events"
@@ -105,17 +112,8 @@ class MainActivity : FlutterActivity() {
                     makeDirectCall(phone, slot)
                     result.success(true)
                 }
-                // Any phone call going on (dialling, ringing, active or on hold), whichever app shows it.
-                // Null when the phone does not say (no phone permission).
-                "isInCall" -> {
-                    val inCall = try {
-                        if (CallManager.hasCalls) true
-                        else (getSystemService(Context.TELECOM_SERVICE) as TelecomManager).isInCall
-                    } catch (_: SecurityException) {
-                        null
-                    }
-                    result.success(inCall)
-                }
+<<<<<<<<< Temporary merge branch 1
+=========
                 "showNotification" -> {
                     val title = call.argument<String>("title") ?: "Alert"
                     val message = call.argument<String>("message") ?: ""
@@ -123,11 +121,13 @@ class MainActivity : FlutterActivity() {
                     CallMonitorStore.postAlert(this, id, title, message)
                     result.success(true)
                 }
+>>>>>>>>> Temporary merge branch 2
                 // ---- Call monitor (foreground service) ----
                 "startCallMonitor" -> {
                     val baseUrl = call.argument<String>("baseUrl") ?: ""
                     CallMonitorStore.setBaseUrl(this, baseUrl)
                     CallMonitorStore.cancelNotification(this, CallMonitorStore.NOTIF_ID_LOGIN)
+                    CallSyncWorker.schedule(this) // keeps call sync going whenever the service cannot run
                     result.success(CallMonitorService.start(this))
                 }
                 "stopCallMonitor" -> {
@@ -139,6 +139,20 @@ class MainActivity : FlutterActivity() {
                 "retryUploads" -> {
                     RecordingUploader.schedule(this)
                     result.success(true)
+                }
+                // ---- Follow-up reminders (CallbackReminders) ----
+                "scheduleCallbackReminder" -> {
+                    val id = call.argument<String>("id") ?: ""
+                    val atMs = (call.argument<Number>("atMs"))?.toLong() ?: 0L
+                    val title = call.argument<String>("title") ?: ""
+                    val body = call.argument<String>("body") ?: ""
+                    result.success(CallbackReminders.schedule(this, id, atMs, title, body))
+                }
+                "cancelCallbackReminder" -> {
+                    result.success(CallbackReminders.cancel(this, call.argument<String>("id") ?: ""))
+                }
+                "cancelAllCallbackReminders" -> {
+                    result.success(CallbackReminders.cancelAll(this))
                 }
                 "getPendingUploadCount" -> {
                     val userId = call.argument<String>("userId") ?: ""
@@ -192,6 +206,11 @@ class MainActivity : FlutterActivity() {
                         status["nativeRecorderDetected"] = CallMonitorStore.nativeRecorderDetected(this)
                         status["accessibilityEnabled"] = CallAccessibilityService.isEnabled(this)
                         status["dialerPackage"] = DeviceSetupHelper.defaultDialerPackage(this)
+                        val ownDialer = DeviceSetupHelper.builtInDialer(this)
+                        status["builtInDialerPackage"] = ownDialer?.packageName ?: ""
+                        status["builtInDialerLabel"] = ownDialer?.label ?: ""
+                        status["askevaIsDialer"] = DialerRoleManager.isDefaultDialer(this)
+                        status["dialerRoleAvailable"] = DialerRoleManager.isRoleAvailable(this)
                         status["lastCaptureStatus"] = CallMonitorStore.lastCaptureStatus(this)
                         status["lastCaptureAt"] = CallMonitorStore.lastCaptureAt(this)
                         status["lastCaptureA11y"] = CallMonitorStore.lastCaptureA11y(this)
@@ -264,13 +283,37 @@ class MainActivity : FlutterActivity() {
                     result.success(DialerRoleManager.getStatus(this))
                 }
                 "requestDefaultDialerRole" -> {
-                    val intent = DialerRoleManager.createRequestRoleIntent(this)
-                    if (intent != null) {
-                        pendingRoleResult = result
-                        startActivityForResult(intent, DialerRoleManager.REQUEST_CODE_DIALER_ROLE)
+                    if (DialerRoleManager.isDefaultDialer(this)) {
+                        result.success(true)
                     } else {
-                        result.success(DialerRoleManager.isDefaultDialer(this))
+                        // Android offers a Phone app only with its DIAL filters on: switch them on first,
+                        // and give the package manager a moment before asking
+                        DialerRoleManager.setDialerEntryEnabled(this, true)
+                        mainHandler.postDelayed({
+                            val intent = DialerRoleManager.createRequestRoleIntent(this)
+                            if (intent != null) {
+                                pendingRoleResult?.success(false)
+                                pendingRoleResult = result
+                                startActivityForResult(intent, DialerRoleManager.REQUEST_CODE_DIALER_ROLE)
+                            } else {
+                                DialerRoleManager.syncDialerEntry(this)
+                                result.success(false)
+                            }
+                        }, 400)
                     }
+                }
+                "holdCall" -> result.success(CallManager.holdCall())
+                "unholdCall" -> result.success(CallManager.unholdCall())
+                "swapCalls" -> result.success(CallManager.swapCalls())
+                "playDtmf" -> {
+                    val digit = call.argument<String>("digit") ?: ""
+                    result.success(digit.length == 1 && CallManager.playDtmf(digit[0]))
+                }
+                "stopDtmf" -> result.success(CallManager.stopDtmf())
+                "selectSim" -> result.success(CallManager.selectSim(call.argument<Int>("index") ?: -1))
+                "takePendingDial" -> {
+                    result.success(pendingDialNumber)
+                    pendingDialNumber = null
                 }
                 "answerCall" -> {
                     result.success(CallManager.answerCall())
@@ -616,15 +659,72 @@ class MainActivity : FlutterActivity() {
         } catch (_: Exception) {}
     }
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        CallManager.onCallsChanged = { hasCalls -> if (!hasCalls) showOverLockScreen(false) }
+        handleCallIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleCallIntent(intent)
+    }
+
+    /**
+     * While AskEVA is the Phone app: the call screen (over the lock screen during a call), the
+     * notification's Answer button, and tel: links / the dial pad opened from other apps.
+     */
+    private fun handleCallIntent(intent: Intent?) {
+        intent ?: return
+        if (intent.getBooleanExtra(CallUi.EXTRA_SHOW_CALL, false)) {
+            if (CallManager.hasCalls) showOverLockScreen(true)
+            // Only our own notification's Answer button carries the token: other apps cannot answer calls
+            if (intent.getBooleanExtra(CallUi.EXTRA_ANSWER, false) &&
+                CallUi.isAnswerTokenValid(intent.getStringExtra(CallUi.EXTRA_ANSWER_TOKEN))
+            ) CallManager.answerCall()
+            // Handled once: a later recreation of the activity must not answer again
+            intent.removeExtra(CallUi.EXTRA_ANSWER)
+            intent.removeExtra(CallUi.EXTRA_ANSWER_TOKEN)
+            intent.removeExtra(CallUi.EXTRA_SHOW_CALL)
+            return
+        }
+        val action = intent.action
+        if (action == Intent.ACTION_DIAL || action == Intent.ACTION_VIEW) {
+            val data = intent.data
+            if (action == Intent.ACTION_VIEW && data?.scheme != "tel") return
+            pendingDialNumber = if (data?.scheme == "tel") data.schemeSpecificPart ?: "" else ""
+            intent.action = Intent.ACTION_MAIN
+            intent.data = null
+            dialerMethodChannel?.invokeMethod("dialRequested", null)
+        }
+    }
+
+    private fun showOverLockScreen(show: Boolean) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                setShowWhenLocked(show)
+                setTurnScreenOn(show)
+            } else {
+                @Suppress("DEPRECATION")
+                val flags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                if (show) window.addFlags(flags) else window.clearFlags(flags)
+            }
+        } catch (_: Exception) {}
+    }
+
     override fun onResume() {
         super.onResume()
         // The recording accessibility service is NOT switched on here: it stays off outside calls so payment
         // apps (GPay, PhonePe) work. A11yGuard switches it on when a call starts.
+        // tel: links go to AskEVA only while it is the Phone app (the user may have switched back in Settings)
+        DialerRoleManager.syncDialerEntry(this)
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == DialerRoleManager.REQUEST_CODE_DIALER_ROLE) {
+            DialerRoleManager.syncDialerEntry(this)
             val isDefault = DialerRoleManager.isDefaultDialer(this)
             pendingRoleResult?.success(isDefault)
             pendingRoleResult = null
@@ -636,6 +736,7 @@ class MainActivity : FlutterActivity() {
         if (CallMonitorEvents.listener === eventListener) CallMonitorEvents.listener = null
         eventListener = null
         CallManager.setEventSink(null)
+        CallManager.onCallsChanged = null
         dialerMethodChannel?.setMethodCallHandler(null)
         dialerMethodChannel = null
         callEventChannel?.setStreamHandler(null)
@@ -687,6 +788,22 @@ class MainActivity : FlutterActivity() {
         CallMonitorService.noteDialed(clean, slotIndex + 1)
         // A head start for the recording accessibility service (on only during calls)
         A11yGuard.onCallStarting(this)
+
+        // AskEVA is the Phone app: place the call itself (Android then hands it to AskEvaInCallService,
+        // and only the Phone app may place emergency calls this way)
+        if (DialerRoleManager.isDefaultDialer(this) &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED
+        ) {
+            try {
+                val extras = Bundle()
+                phoneAccountForSlot(slotIndex)?.let { extras.putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, it) }
+                (getSystemService(Context.TELECOM_SERVICE) as TelecomManager)
+                    .placeCall(Uri.fromParts("tel", clean, null), extras)
+                return
+            } catch (e: Exception) {
+                e.printStackTrace() // falls through to the call intent
+            }
+        }
 
         try {
             val hasCallPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED
