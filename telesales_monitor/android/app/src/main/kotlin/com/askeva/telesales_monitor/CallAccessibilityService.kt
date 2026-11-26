@@ -43,6 +43,9 @@ class CallAccessibilityService : AccessibilityService() {
     /** Id (deadline) of the last speaker request received, so a repeated broadcast is ignored. */
     private var lastRequestUntilMs = 0L
     private var verifyPending = false
+    /** When the open request started, and whether the call screen was already brought to the front for it. */
+    private var requestOpenedAtMs = 0L
+    private var callScreenShown = false
     private val attempt = Runnable { trySpeaker() }
     private val verify = Runnable {
         verifyPending = false
@@ -111,6 +114,8 @@ class CallAccessibilityService : AccessibilityService() {
         lastRequestUntilMs = untilMs
         val now = System.currentTimeMillis()
         speakerUntilMs = if (untilMs > now) untilMs else now + 30_000L
+        requestOpenedAtMs = now
+        callScreenShown = false
         verifyPending = false
         main.removeCallbacks(verify)
         main.removeCallbacks(attempt)
@@ -141,7 +146,17 @@ class CallAccessibilityService : AccessibilityService() {
             finish("already_on")
             return
         }
-        val (label, target) = findSpeakerButton() ?: return // not on screen yet: the next attempt retries
+        val found = findSpeakerButton()
+        if (found == null) {
+            // Not on screen yet: the next attempt retries. Still missing after a moment = the call was
+            // answered from the notification, or the caller switched app: bring the call screen up, once.
+            if (!callScreenShown && System.currentTimeMillis() - requestOpenedAtMs >= SHOW_CALL_SCREEN_AFTER_MS) {
+                callScreenShown = true
+                showCallScreen()
+            }
+            return
+        }
+        val (label, target) = found
         val checked = checkedState(target) ?: checkedState(label)
         if (checked == true) {
             finish("already_on")
@@ -153,6 +168,19 @@ class CallAccessibilityService : AccessibilityService() {
         Log.i(TAG, "speaker button tapped (ok=$ok)")
         verifyPending = true
         main.postDelayed(verify, 1500)
+    }
+
+    /** Brings the phone app's call screen to the front (needs the phone permission AskEVA already has). */
+    @android.annotation.SuppressLint("MissingPermission")
+    private fun showCallScreen() {
+        try {
+            val telecom = getSystemService(Context.TELECOM_SERVICE) as TelecomManager
+            if (!telecom.isInCall) return
+            telecom.showInCallScreen(false)
+            Log.i(TAG, "speaker button not visible: call screen brought to the front")
+        } catch (e: Exception) {
+            Log.w(TAG, "could not bring the call screen to the front", e)
+        }
     }
 
     private fun finish(result: String) {
@@ -267,6 +295,8 @@ class CallAccessibilityService : AccessibilityService() {
         const val ACTION_DISABLE = "com.askeva.telesales_monitor.A11Y_DISABLE"
         private const val MAX_NODES = 600
         private val RETRY_DELAYS_MS = longArrayOf(300, 800, 1500, 2500, 4000, 6000, 9000, 13000, 18000, 24000)
+        /** Speaker button still not visible this long after the request: bring the call screen to the front. */
+        private const val SHOW_CALL_SCREEN_AFTER_MS = 2_000L
 
         /** In-call screens: Samsung "com.samsung.android.incallui", AOSP / Xiaomi / Oppo / Vivo "com.android.incallui", Google "...dialer". */
         private val CALL_PACKAGE_HINTS = listOf("incallui", "dialer", "telecom", "contacts", ".phone", "phone.")

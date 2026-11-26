@@ -15,6 +15,8 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
+    <!-- Incoming-call screen over the lock screen while AskEVA is the Phone app -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
     <!-- Optional, granted once from a computer (adb): lets the app switch its recording
          accessibility service back on when the phone turns it off. Unused unless granted. -->
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" tools:ignore="ProtectedPermissions"/>
@@ -43,6 +45,17 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+        </activity>
+        <!-- AskEVA as the phone's Phone app (DialerRoleManager, AskEvaInCallService, CallManager): the DIAL /
+             tel: filters Android requires of a Phone app. Disabled here; DialerRoleManager switches them on
+             only while AskEVA is (or is becoming) the Phone app, so tel: links otherwise go to the phone's
+             own Phone app. Being the Phone app stops the phone maker's call recorder (which records both
+             voices): the Call recording screen warns and asks first on those phones. -->
+        <activity-alias
+            android:name=".DialerEntry"
+            android:targetActivity=".MainActivity"
+            android:enabled="false"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.DIAL" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -58,7 +71,11 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="tel" />
             </intent-filter>
-        </activity>
+        </activity-alias>
+        <!-- Decline / Hang up on the call notifications -->
+        <receiver
+            android:name=".CallActionReceiver"
+            android:exported="false" />
         <service
             android:name=".AskEvaInCallService"
             android:permission="android.permission.BIND_INCALL_SERVICE"

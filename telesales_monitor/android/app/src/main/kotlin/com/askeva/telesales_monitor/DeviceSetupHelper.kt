@@ -5,6 +5,8 @@ import android.app.Activity
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
@@ -118,6 +120,40 @@ object DeviceSetupHelper {
         (ctx.getSystemService(Context.TELECOM_SERVICE) as TelecomManager).defaultDialerPackage ?: ""
     } catch (_: Exception) {
         ""
+    }
+
+    /** "Phone by Google": keeps its call recordings in its own private storage, out of AskEVA's reach. */
+    const val GOOGLE_DIALER = "com.google.android.dialer"
+
+    data class DialerApp(val packageName: String, val label: String)
+
+    /**
+     * The phone maker's own Phone app (Samsung, vivo, OPPO, ...) installed next to "Phone by Google".
+     * It saves its recordings where AskEVA can read them, so making it the default Phone app fixes
+     * recording. Counted: a system app, other than Phone by Google and AskEVA, that opens the dial pad
+     * and has an in-call screen (what Android requires of a default Phone app). Null when there is
+     * none: Pixel, Motorola, Nokia, and phones that ship only Phone by Google.
+     */
+    fun builtInDialer(ctx: Context): DialerApp? = try {
+        val pm = ctx.packageManager
+        @Suppress("DEPRECATION")
+        pm.queryIntentActivities(Intent(Intent.ACTION_DIAL, Uri.parse("tel:")), 0)
+            .asSequence()
+            .mapNotNull { it.activityInfo?.applicationInfo }
+            .distinctBy { it.packageName }
+            .filter { it.packageName != GOOGLE_DIALER && it.packageName != ctx.packageName }
+            .filter { it.enabled && (it.flags and ApplicationInfo.FLAG_SYSTEM) != 0 }
+            .filter { hasInCallScreen(pm, it.packageName) }
+            .map { DialerApp(it.packageName, pm.getApplicationLabel(it).toString()) }
+            .firstOrNull()
+    } catch (_: Exception) {
+        null
+    }
+
+    private fun hasInCallScreen(pm: PackageManager, pkg: String): Boolean {
+        @Suppress("DEPRECATION")
+        val services = pm.queryIntentServices(Intent("android.telecom.InCallService").setPackage(pkg), PackageManager.GET_META_DATA)
+        return services.any { it.serviceInfo?.metaData?.getBoolean(TelecomManager.METADATA_IN_CALL_SERVICE_UI, false) == true }
     }
 
     fun deviceInfo(): Map<String, Any?> = mapOf(

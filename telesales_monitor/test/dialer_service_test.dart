@@ -134,5 +134,67 @@ void main() {
         'setSpeaker',
       ]));
     });
+
+    test('call screen controls send their arguments', () async {
+      final service = DialerService(methodChannel: dialerChannel);
+      await service.holdCall();
+      await service.unholdCall();
+      await service.swapCalls();
+      await service.playDtmf('5');
+      await service.stopDtmf();
+      await service.selectSim(1);
+      expect(log.map((c) => c.method), ['holdCall', 'unholdCall', 'swapCalls', 'playDtmf', 'stopDtmf', 'selectSim']);
+      expect(log[3].arguments, {'digit': '5'});
+      expect(log[5].arguments, {'index': 1});
+    });
+  });
+
+  group('CallEvent for the call screen', () {
+    test('reads the full call snapshot', () {
+      final e = CallEvent.fromMap({
+        'event': 'callStateChanged',
+        'callId': 'c2',
+        'state': 'ACTIVE',
+        'phoneNumber': '9944446953',
+        'isIncoming': false,
+        'connectTimeMillis': 1794913210000,
+        'canHold': true,
+        'muted': true,
+        'audioRoute': 'speaker',
+        'otherCalls': 1,
+        'heldCalls': 1,
+        'simChoices': ['SIM 1 · Jio', 'SIM 2 · Airtel'],
+      });
+      expect(e.callId, 'c2');
+      expect(e.isLive, isTrue);
+      expect(e.isRingingIn, isFalse);
+      expect(e.connectTimeMillis, 1794913210000);
+      expect(e.canHold, isTrue);
+      expect(e.muted, isTrue);
+      expect(e.speakerOn, isTrue);
+      expect(e.heldCalls, 1);
+      expect(e.simChoices, hasLength(2));
+    });
+
+    test('older / partial events still parse', () {
+      final e = CallEvent.fromMap({'state': 'SELECT_SIM'});
+      expect(e.state, CallState.selectSim);
+      expect(e.simChoices, isEmpty);
+      expect(e.speakerOn, isFalse);
+      expect(CallEvent.fromMap({'state': 'NEW'}).state, CallState.dialing);
+      expect(CallEvent.fromMap({'state': 'DISCONNECTED'}).isLive, isFalse);
+    });
+
+    test('status line', () {
+      final now = DateTime.fromMillisecondsSinceEpoch(1794913252000);
+      String status(Map<String, dynamic> m) => callStatusText(CallEvent.fromMap(m), now);
+      expect(status({'state': 'RINGING'}), 'Incoming call');
+      expect(status({'state': 'DIALING'}), 'Calling…');
+      expect(status({'state': 'SELECT_SIM'}), 'Choose a SIM');
+      expect(status({'state': 'ACTIVE', 'connectTimeMillis': 1794913210000}), '00:42');
+      expect(status({'state': 'ACTIVE'}), 'Connected');
+      expect(status({'state': 'HOLDING'}), 'On hold');
+      expect(formatCallTimer(const Duration(hours: 1, minutes: 2, seconds: 5)), '1:02:05');
+    });
   });
 }

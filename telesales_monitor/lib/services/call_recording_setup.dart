@@ -95,9 +95,21 @@ class RecordingSetupStatus {
   final bool speakerFallbackActive;
   /// Phone state + call log: needed to follow calls and match them to recordings.
   final bool phonePermissions;
+  /// The phone maker's own Phone app when it is installed next to "Phone by Google" (package / name
+  /// shown to the caller), "" when there is none (Pixel, Motorola, Nokia, phones shipping only Google's).
+  final String builtInDialerPackage;
+  final String builtInDialerLabel;
+  /// AskEVA itself is the phone's Phone app (its own call screen; no phone recorder then).
+  final bool askevaIsDialer;
+  /// Android lets apps become the Phone app on this phone.
+  final bool dialerRoleAvailable;
 
-  /// The phone's own recorder was found working, and AskEVA may read its files.
-  bool get builtInTrusted => nativeRecorderDetected && mediaPermission;
+  static const String googleDialerPackage = 'com.google.android.dialer';
+
+  /// The phone's own recorder was found working, AskEVA may read its files, and calls still go through
+  /// that Phone app (not "Phone by Google", whose recordings are private, nor AskEVA itself). Same rule
+  /// as the native CallMonitorStore.builtInTrusted.
+  bool get builtInTrusted => nativeRecorderDetected && mediaPermission && !usesGoogleDialer && !askevaIsDialer;
 
   /// AskEVA records calls itself here, which needs the Accessibility service (in-call mic + loudspeaker).
   /// Not when the app may switch it on per call by itself ([a11ySelfRepair]): then it stays off between
@@ -111,12 +123,23 @@ class RecordingSetupStatus {
   bool get recordingReady => permissionsGranted && (!needsAccessibility || accessibilityEnabled);
 
   /// "Phone by Google" keeps its recordings inside its own private storage, where AskEVA cannot
-  /// read them. On phones whose maker ships its own dialer, that dialer saves readable recordings.
-  bool get usesGoogleDialerOnOemPhone {
-    if (dialerPackage != 'com.google.android.dialer') return false;
-    final m = '${manufacturer.toLowerCase()} ${brand.toLowerCase()}';
-    return !(m.contains('google') || m.contains('motorola') || m.contains('nokia') || m.contains('hmd'));
-  }
+  /// read them: AskEVA can only record the call through the microphone (+ loudspeaker).
+  bool get usesGoogleDialer => dialerPackage == googleDialerPackage;
+
+  /// The phone also has its maker's own Phone app, which saves readable recordings (both voices):
+  /// making it the default Phone app fixes recording.
+  bool get canSwitchFromGoogleDialer => usesGoogleDialer && builtInDialerPackage.isNotEmpty;
+
+  /// Name of the phone's own Phone app for the caller ("Phone" is what most makers call it).
+  String get builtInDialerName => builtInDialerLabel.isNotEmpty ? builtInDialerLabel : 'Phone';
+
+  /// "Use AskEVA as Phone app" (AskEVA's own call screen). Not offered where Phone by Google is used but
+  /// the maker's Phone app exists: switching to that one is better (it records both voices).
+  bool get canOfferAskEvaDialer => !askevaIsDialer && dialerRoleAvailable && !canSwitchFromGoogleDialer;
+
+  /// Becoming the Phone app stops the current Phone app's recorder (Samsung, vivo, ...): calls are then
+  /// recorded only through AskEVA's microphone + loudspeaker. Not the case for Phone by Google (private).
+  bool get askevaDialerStopsPhoneRecorder => !askevaIsDialer && !usesGoogleDialer;
 
   const RecordingSetupStatus({
     required this.manufacturer,
@@ -137,6 +160,10 @@ class RecordingSetupStatus {
     this.dialerPackage = '',
     this.speakerFallbackActive = false,
     this.phonePermissions = false,
+    this.builtInDialerPackage = '',
+    this.builtInDialerLabel = '',
+    this.askevaIsDialer = false,
+    this.dialerRoleAvailable = false,
   });
 
   factory RecordingSetupStatus.fromMap(Map<String, dynamic> m) => RecordingSetupStatus(
@@ -160,7 +187,44 @@ class RecordingSetupStatus {
         dialerPackage: asString(m['dialerPackage']),
         speakerFallbackActive: m['speakerFallbackActive'] == true,
         phonePermissions: m['phonePermissions'] == true,
+        builtInDialerPackage: asString(m['builtInDialerPackage']),
+        builtInDialerLabel: asString(m['builtInDialerLabel']),
+        askevaIsDialer: m['askevaIsDialer'] == true,
+        dialerRoleAvailable: m['dialerRoleAvailable'] == true,
       );
+}
+
+/// What the dashboard banner says when calls are not recorded properly.
+class RecordingProblem {
+  final String title;
+  final String text;
+  const RecordingProblem(this.title, this.text);
+}
+
+/// Why calls are probably not recorded properly, most urgent first; null when recording looks fine.
+/// A phone that only has "Phone by Google" gets no banner: there is nothing the caller can change
+/// (AskEVA already uses the loudspeaker there).
+RecordingProblem? recordingProblemFor(RecordingSetupStatus? s, {required bool autoRecordEnabled}) {
+  if (s == null || !autoRecordEnabled) return null;
+  if (!s.recordingReady) {
+    return const RecordingProblem('CALLS ARE NOT BEING RECORDED', 'Call recording is off. Tap once to turn it on.');
+  }
+  // Silent even though everything was on during the call: a real problem. A silent call made while
+  // Accessibility was off is fixed now that it is on (the next call shows whether recording works).
+  if (!s.builtInTrusted && s.lastCaptureStatus == 'silent' && s.lastCaptureA11y) {
+    return const RecordingProblem(
+      'CALLS ARE NOT BEING RECORDED',
+      'Your last call was recorded without sound. Tap to check call recording.',
+    );
+  }
+  if (s.canSwitchFromGoogleDialer) {
+    return RecordingProblem(
+      'CUSTOMER VOICE MAY BE MISSING',
+      '"Phone by Google" hides its call recordings. Tap to switch to your phone\'s own '
+          '"${s.builtInDialerName}" app so calls are recorded with both voices.',
+    );
+  }
+  return null;
 }
 
 /// Whether the call monitor should run: a signed-in caller (or manager in caller mode) with a
