@@ -105,6 +105,17 @@ class MainActivity : FlutterActivity() {
                     makeDirectCall(phone, slot)
                     result.success(true)
                 }
+                // Any phone call going on (dialling, ringing, active or on hold), whichever app shows it.
+                // Null when the phone does not say (no phone permission).
+                "isInCall" -> {
+                    val inCall = try {
+                        if (CallManager.hasCalls) true
+                        else (getSystemService(Context.TELECOM_SERVICE) as TelecomManager).isInCall
+                    } catch (_: SecurityException) {
+                        null
+                    }
+                    result.success(inCall)
+                }
                 "showNotification" -> {
                     val title = call.argument<String>("title") ?: "Alert"
                     val message = call.argument<String>("message") ?: ""
