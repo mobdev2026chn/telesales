@@ -17,6 +17,8 @@ const initialState = {
   filter: 'ALL',
   agent: 'ALL',         // one agent's recordings (loaded from the server for that agent)
   range: 'today',       // same choices and default as the Call Log
+  customFrom: '',       // optional YYYY-MM-DD override
+  customTo: '',         // optional YYYY-MM-DD override
   page: 1,
 };
 
@@ -77,6 +79,15 @@ const recordingsSlice = createSlice({
     setRecPage(state, { payload }) { state.page = Math.max(1, payload); },
     recRangeChanged(state, { payload }) {
       state.range = CALL_RANGE_DAYS[payload] !== undefined ? payload : 'today';
+      state.customFrom = '';
+      state.customTo = '';
+      state.page = 1;
+      state.list = [];
+      state.loaded = false;
+    },
+    recCustomRangeChanged(state, { payload }) {
+      state.customFrom = (payload && payload.from) || '';
+      state.customTo = (payload && payload.to) || '';
       state.page = 1;
       state.list = [];
       state.loaded = false;
@@ -95,6 +106,6 @@ const recordingsSlice = createSlice({
 
 export const {
   recsRequested, recsLoaded, recsFailed, recMetaMerged, recordingUpdated, recordingUpserted, recMetaPatched, setRecordingDraft,
-  setRecFilter, setRecPage, recRangeChanged, recAgentChanged,
+  setRecFilter, setRecPage, recRangeChanged, recCustomRangeChanged, recAgentChanged,
 } = recordingsSlice.actions;
 export default recordingsSlice.reducer;

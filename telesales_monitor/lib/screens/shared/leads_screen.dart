@@ -230,31 +230,12 @@ class _LeadsScreenState extends State<LeadsScreen> {
                   if (isManager) ...[
                     Expanded(
                       flex: 5,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: AppTheme.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppTheme.ink900, width: 1.5),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: managerTeamCallers.contains(_selectedTeamMember) ? _selectedTeamMember : 'ALL',
-                            isExpanded: true,
-                            dropdownColor: AppTheme.white,
-                            icon: const Icon(Icons.arrow_drop_down, color: AppTheme.ink900),
-                            style: AppTheme.bodyBold(size: 11, color: AppTheme.ink900),
-                            onChanged: (v) {
-                              if (v != null) setState(() => _selectedTeamMember = v);
-                            },
-                            items: managerTeamCallers.map((m) {
-                              return DropdownMenuItem(
-                                value: m,
-                                child: Text(m == 'ALL' ? '👥 ALL MEMBERS' : '👤 $m', overflow: TextOverflow.ellipsis),
-                              );
-                            }).toList(),
-                          ),
-                        ),
+                      child: _NeoFilterDropdown(
+                        value: managerTeamCallers.contains(_selectedTeamMember) ? _selectedTeamMember : 'ALL',
+                        options: managerTeamCallers,
+                        labelOf: (m) => m == 'ALL' ? '👥 ALL MEMBERS' : '👤 $m',
+                        trailingIcon: Icons.keyboard_arrow_down_rounded,
+                        onChanged: (v) => setState(() => _selectedTeamMember = v),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -263,31 +244,12 @@ class _LeadsScreenState extends State<LeadsScreen> {
                   // 7 Categories Dropdown (Both Caller & Manager)
                   Expanded(
                     flex: 6,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: AppTheme.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppTheme.ink900, width: 1.5),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _categoryOptions.contains(_selectedCategory) ? _selectedCategory : 'ALL',
-                          isExpanded: true,
-                          dropdownColor: AppTheme.white,
-                          icon: const Icon(Icons.filter_alt_outlined, size: 16, color: AppTheme.ink900),
-                          style: AppTheme.bodyBold(size: 11, color: AppTheme.ink900),
-                          onChanged: (v) {
-                            if (v != null) setState(() => _selectedCategory = v);
-                          },
-                          items: _categoryOptions.map((c) {
-                            return DropdownMenuItem(
-                              value: c,
-                              child: Text(c == 'ALL' ? '🏷️ ALL CATEGORIES' : c, overflow: TextOverflow.ellipsis),
-                            );
-                          }).toList(),
-                        ),
-                      ),
+                    child: _NeoFilterDropdown(
+                      value: _categoryOptions.contains(_selectedCategory) ? _selectedCategory : 'ALL',
+                      options: _categoryOptions,
+                      labelOf: (c) => c == 'ALL' ? '🏷️ ALL CATEGORIES' : c,
+                      trailingIcon: Icons.filter_alt_outlined,
+                      onChanged: (v) => setState(() => _selectedCategory = v),
                     ),
                   ),
 
@@ -757,6 +719,95 @@ class _LeadsScreenState extends State<LeadsScreen> {
             child: Text('CLOSE', style: AppTheme.label(size: 11, color: AppTheme.ink900)),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _NeoFilterDropdown extends StatelessWidget {
+  final String value;
+  final List<String> options;
+  final String Function(String) labelOf;
+  final IconData trailingIcon;
+  final ValueChanged<String> onChanged;
+
+  const _NeoFilterDropdown({
+    required this.value,
+    required this.options,
+    required this.labelOf,
+    required this.trailingIcon,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<String>(
+      initialValue: value,
+      onSelected: onChanged,
+      offset: const Offset(0, 48),
+      color: AppTheme.white,
+      elevation: 6,
+      constraints: const BoxConstraints(minWidth: 190, maxWidth: 260, maxHeight: 340),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: AppTheme.ink900, width: 1.5),
+      ),
+      itemBuilder: (ctx) => options.map((opt) {
+        final selected = opt == value;
+        return PopupMenuItem<String>(
+          value: opt,
+          height: 42,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: selected ? AppTheme.limeYellow.withValues(alpha: 0.45) : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    labelOf(opt),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTheme.bodyBold(
+                      size: 11.5,
+                      color: AppTheme.ink900,
+                    ),
+                  ),
+                ),
+                if (selected) ...[
+                  const SizedBox(width: 6),
+                  const Icon(Icons.check_rounded, size: 15, color: AppTheme.greenDark),
+                ],
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        decoration: BoxDecoration(
+          color: AppTheme.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppTheme.ink900, width: 1.5),
+          boxShadow: AppTheme.neoShadowSm(color: AppTheme.ink900),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                labelOf(value),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTheme.bodyBold(size: 11, color: AppTheme.ink900),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Icon(trailingIcon, size: 17, color: AppTheme.ink900),
+          ],
+        ),
       ),
     );
   }

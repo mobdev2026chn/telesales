@@ -22,12 +22,14 @@ import { DASH_TEAM_PAGE_SIZE, LEADERBOARD_TYPE_OPTIONS, PERIOD_OPTIONS } from '.
 import { userPath } from '../data/navigation';
 import { setDashDate, setDashMgrFilter, setDashPeriod, setDashTeamPage, setDashTypeFilter } from '../redux/slices/dashboardSlice';
 import { selectDashKey, selectScope } from '../redux/selectors';
-import { fmtDur, fmtTalk, fmtTs, formatPhone, validPickerDate } from '../utils/format';
+import { fmtDur, fmtTalk, fmtTs, formatPhone, istDateStr, istMidnight, validPickerDate } from '../utils/format';
+import { mapRecording } from '../utils/mappers';
 import { notify } from '../utils/notify';
 import { paginate } from '../utils/table';
 import { periodLabel, periodTargetDays, periodWindow } from '../utils/periods';
 import { managerChainText, mgrFilterOptions, mgrFilterSet, statsFor } from '../utils/scope';
 import { appPresence, demoHourCounts, hourCounts, presenceTitle } from '../utils/stats';
+import { recordingService } from '../utils/services';
 import { fetchDemos } from '../utils/actions/demoActions';
 import { fetchDashboard } from '../utils/actions/statsActions';
 
@@ -333,30 +335,193 @@ function TeamNowCard({ server, failed, error, usersError, callers, typeFilter = 
   );
 }
 
-// Team target: calls in the period against the team's daily target × days in the period
+const TARGET_VIEWS = [{ value: 'target', label: 'Team target' }, { value: 'recordings', label: 'Recordings' }];
+
+// Team target: calls in the period against the team's daily target × days in the period,
+// or (toggle) today's recordings breakdown (viewed / unviewed / non-recorded) + overall & today counts
 function TeamTargetCard({ calls, dailyTarget, days, label }) {
+  const [view, setView] = useState('target');
+  const authUser = useSelector(s => s.auth.authUser);
+  const [recStats, setRecStats] = useState({ loaded: false, overall: 0, today: 0, viewed: 0, unviewed: 0 });
+
+  useEffect(() => {
+    if (view !== 'recordings') return undefined;
+    let live = true;
+    const todayStr = istDateStr(new Date());
+    const from = istMidnight(todayStr);
+    const to = new Date();
+    const qsToday = `?limit=500&from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`;
+
+    let viewedIds = new Set();
+    try {
+      const raw = localStorage.getItem(`rec_viewed_${(authUser && authUser.id) || 'default'}`);
+      const arr = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(arr)) viewedIds = new Set(arr.map(String));
+    } catch { /* ignore */ }
+
+    Promise.all([
+      recordingService.list('?limit=1'),
+      recordingService.list(qsToday),
+    ]).then(([allJson, todayJson]) => {
+      if (!live) return;
+      const todayRecs = (todayJson && Array.isArray(todayJson.recordings) ? todayJson.recordings : [])
+        .map(mapRecording)
+        .filter(r => r.id && r.dur > 1);
+      const viewed = todayRecs.filter(r =>
+        viewedIds.has(String(r.id)) ||
+        (r.review && (r.review.status !== 'PENDING' || (r.review.comments && r.review.comments.length > 0))),
+      ).length;
+      const unviewed = Math.max(0, todayRecs.length - viewed);
+      const overall = Number(allJson && allJson.total) || 0;
+      const todayTotal = Number(todayJson && todayJson.total) || todayRecs.length;
+      setRecStats({ loaded: true, overall, today: todayTotal, viewed, unviewed });
+    }).catch(() => {
+      if (live) setRecStats(prev => ({ ...prev, loaded: true }));
+    });
+    return () => { live = false; };
+  }, [view, authUser]);
+
   const target = dailyTarget * days;
   const pct = target > 0 ? Math.round((calls / target) * 100) : 0;
   const left = Math.max(0, target - calls);
+
+  const pieItems = [
+    ['Viewed', recStats.viewed, 'var(--ds-ink-900)'],
+    ['Unviewed', recStats.unviewed, 'var(--ds-green-500)'],
+  ];
+
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-title">Team target</div>
-        <span className="card-subtitle">{label}</span>
-      </div>
-      <div className="team-target-figure">
-        <strong>{calls}</strong><span> / {target} calls</span>
-      </div>
-      <Progress lg pct={Math.min(100, pct)} caption={<strong>{pct}%</strong>} />
-      <div className="stat-list">
-        <div className="stat-row">
-          <span>{left > 0 ? 'Still to go' : 'Status'}</span>
-          <strong>{left > 0 ? `${left} to go` : 'Target reached'}</strong>
+        <div className="card-title">
+          {view === 'target' ? 'Team target' : 'Recordings'}
+          <span className="card-subtitle" style={{ marginLeft: 8 }}>{view === 'target' ? label : 'TODAY'}</span>
         </div>
-        <div className="stat-row">
-          <span>Daily team target</span>
-          <strong>{dailyTarget}{days > 1 ? ` × ${days} days` : ''}</strong>
-        </div>
+        <FilterChips options={TARGET_VIEWS} value={view} onChange={setView} />
+      </div>
+      {view === 'target' ? (
+        <>
+          <div className="team-target-figure">
+            <strong>{calls}</strong><span> / {target} calls</span>
+          </div>
+          <Progress lg pct={Math.min(100, pct)} caption={<strong>{pct}%</strong>} />
+          <div className="stat-list">
+            <div className="stat-row">
+              <span>{left > 0 ? 'Still to go' : 'Status'}</span>
+              <strong>{left > 0 ? `${left} to go` : 'Target reached'}</strong>
+            </div>
+            <div className="stat-row">
+              <span>Daily team target</span>
+              <strong>{dailyTarget}{days > 1 ? ` × ${days} days` : ''}</strong>
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          <RecordingsMiniPie items={pieItems} loaded={recStats.loaded} />
+          <div className="stat-list" style={{ marginTop: 10 }}>
+            <div className="stat-row">
+              <span>Overall records</span>
+              <strong>{recStats.loaded ? recStats.overall : '—'}</strong>
+            </div>
+            <div className="stat-row">
+              <span>Today records</span>
+              <strong>{recStats.loaded ? recStats.today : '—'}</strong>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function RecordingsMiniPie({ items, loaded }) {
+  const [hovered, setHovered] = useState(null);
+  const total = items.reduce((s, [, n]) => s + n, 0);
+  const nonZero = items.filter(([, n]) => n > 0);
+  const cx = 70;
+  const cy = 70;
+  const r = 60;
+
+  let angle = -Math.PI / 2;
+  const slices = nonZero.map(([label, n, color]) => {
+    const frac = n / total;
+    const sweep = frac * Math.PI * 2;
+    const start = angle;
+    const end = angle + sweep;
+    angle = end;
+    const x1 = cx + r * Math.cos(start);
+    const y1 = cy + r * Math.sin(start);
+    const x2 = cx + r * Math.cos(end);
+    const y2 = cy + r * Math.sin(end);
+    const largeArc = sweep > Math.PI ? 1 : 0;
+    return {
+      label,
+      n,
+      color,
+      pct: Math.round(frac * 100),
+      d: `M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z`,
+    };
+  });
+
+  return (
+    <div className="funnel-pie-wrap" style={{ gap: 16, padding: '4px 0' }}>
+      <svg style={{ width: 136, height: 136 }} className="funnel-pie-svg" viewBox="0 0 140 140" role="img" aria-label="Recordings breakdown pie chart">
+        {!loaded || total === 0 ? (
+          <circle cx={cx} cy={cy} r={r} fill="var(--ds-surface-muted)" stroke="var(--ds-border)" strokeWidth="2" />
+        ) : slices.length === 1 ? (
+          <circle
+            cx={cx}
+            cy={cy}
+            r={r}
+            fill={slices[0].color}
+            stroke="#ffffff"
+            strokeWidth="2"
+            onMouseEnter={() => setHovered(slices[0].label)}
+            onMouseLeave={() => setHovered(null)}
+          >
+            <title>{`${slices[0].label}: ${slices[0].n} (100%)`}</title>
+          </circle>
+        ) : (
+          slices.map(s => (
+            <path
+              key={s.label}
+              d={s.d}
+              fill={s.color}
+              stroke="#ffffff"
+              strokeWidth="2"
+              style={{
+                transformOrigin: `${cx}px ${cy}px`,
+                transform: hovered === s.label ? 'scale(1.05)' : 'scale(1)',
+                opacity: hovered && hovered !== s.label ? 0.65 : 1,
+                transition: 'transform 0.2s ease, opacity 0.18s ease',
+                cursor: 'pointer',
+              }}
+              onMouseEnter={() => setHovered(s.label)}
+              onMouseLeave={() => setHovered(null)}
+            >
+              <title>{`${s.label}: ${s.n} (${s.pct}%)`}</title>
+            </path>
+          ))
+        )}
+      </svg>
+      <div className="funnel-pie-legend" style={{ flex: '1 1 130px', gap: 6 }}>
+        {items.map(([label, n, color]) => {
+          const pct = total > 0 ? Math.round((n / total) * 100) : 0;
+          return (
+            <div
+              key={label}
+              className={`funnel-pie-row${hovered === label ? ' is-active' : ''}`}
+              onMouseEnter={() => setHovered(label)}
+              onMouseLeave={() => setHovered(null)}
+            >
+              <span className="funnel-pie-swatch" style={{ background: color }} aria-hidden="true" />
+              <span className="funnel-pie-label">{label}</span>
+              <span className="funnel-pie-val tabular">{loaded ? n : '—'}</span>
+              <span className="funnel-pie-pct tabular">{loaded ? `${pct}%` : ''}</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

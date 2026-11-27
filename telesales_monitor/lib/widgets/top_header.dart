@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import 'notifications_sheet.dart';
-import 'profile_menu_sheet.dart';
 import '../providers/tele_provider.dart';
 
 class TopHeader extends StatelessWidget {
@@ -138,9 +137,12 @@ class TopHeader extends StatelessWidget {
             ),
             const SizedBox(width: 5),
 
-            // User Profile Photo Avatar (Opens Profile Menu: View Profile, Settings, Sign Out)
+            // User Profile Photo Avatar (Navigates directly to Profile page)
             GestureDetector(
-              onTap: () => ProfileMenuSheet.show(context),
+              onTap: () {
+                tele.selectEmployee(null);
+                tele.setTabIndex(4);
+              },
               child: Container(
                 width: 30,
                 height: 30,

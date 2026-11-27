@@ -171,6 +171,12 @@ export function handoffToDock(recId, time) {
 // The card element that is currently driven by the dock controls (or null)
 export function currentAudioEl() { return Q.el; }
 
+export function seekCurrentAudio(time) {
+  const el = Q.el;
+  if (!el || !Number.isFinite(time)) return;
+  try { el.currentTime = Math.max(0, time); } catch { /* ignore */ }
+}
+
 export function stopAllAudio() {
   document.querySelectorAll('audio').forEach(a => {
     try { a.pause(); } catch { /* ignore */ }

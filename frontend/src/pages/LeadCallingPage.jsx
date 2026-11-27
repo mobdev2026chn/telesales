@@ -117,7 +117,6 @@ export default function LeadCallingPage() {
     ['Interested', worked.filter(l => LEAD_INTEREST_STATUSES.has(l.status)).length, 'var(--ds-green-400)'],
     ['Converted', worked.filter(l => l.status === 'won').length, 'var(--ds-lime-400)'],
   ];
-  const maxF = Math.max(1, ...fCounts.map(c => c[1]));
   const funnelLabel = funnelDate
     ? `· ${istMidnight(funnelDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }).toUpperCase()}`
     : `· ${PERIOD_LABEL[funnelPeriod] || 'TODAY'}`;
@@ -266,20 +265,12 @@ export default function LeadCallingPage() {
         <Col xs={24} lg={12}>
           <div className="card">
             <div className="card-header">
-              <div className="card-title">Conversion funnel <span className="card-subtitle">{funnelLabel}</span></div>
+              <div className="card-title">Conversion<span className="card-subtitle">{funnelLabel}</span></div>
               <FilterChips id="funnelPeriodChips" options={PERIOD_OPTIONS} value={funnelDate ? null : funnelPeriod} onChange={(p) => dispatch(setFunnelPeriod(p))}>
                 <DateField id="funnelDateInput" value={funnelDate} onChange={onFunnelDate} label="Conversion funnel date" title="Show one day (2020-2030)" />
               </FilterChips>
             </div>
-            <div className="funnel">
-              {fCounts.map(([label, n, color]) => (
-                <div className="funnel-row" key={label}>
-                  <span className="funnel-label">{label}</span>
-                  <div className="funnel-track"><div className="funnel-fill" style={{ width: `${n ? Math.max(4, Math.round(n / maxF * 100)) : 0}%`, background: color }} /></div>
-                  <span className="funnel-value">{n}</span>
-                </div>
-              ))}
-            </div>
+            <ConversionPieChart items={fCounts} />
           </div>
         </Col>
 
@@ -335,5 +326,92 @@ export default function LeadCallingPage() {
         <Pager label={`PAGE ${pg.page} / ${pg.totalPages} · ${list.length} LEADS`} page={pg.page} totalPages={pg.totalPages} onPage={(p) => dispatch(setUlPage(p))} />
       </div>
     </>
+  );
+}
+
+function ConversionPieChart({ items }) {
+  const [hovered, setHovered] = useState(null);
+  const total = items.reduce((sum, [, n]) => sum + n, 0);
+  const nonZero = items.filter(([, n]) => n > 0);
+  const cx = 90;
+  const cy = 90;
+  const r = 82;
+  const animKey = items.map(([, n]) => n).join('-');
+
+  let angle = -Math.PI / 2;
+  const slices = nonZero.map(([label, n, color]) => {
+    const frac = n / total;
+    const sweep = frac * Math.PI * 2;
+    const start = angle;
+    const end = angle + sweep;
+    angle = end;
+    const x1 = cx + r * Math.cos(start);
+    const y1 = cy + r * Math.sin(start);
+    const x2 = cx + r * Math.cos(end);
+    const y2 = cy + r * Math.sin(end);
+    const largeArc = sweep > Math.PI ? 1 : 0;
+    const d = `M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z`;
+    return { label, n, color, pct: Math.round(frac * 100), d };
+  });
+
+  return (
+    <div className="funnel-pie-wrap">
+      <svg key={animKey} className="funnel-pie-svg" viewBox="0 0 180 180" role="img" aria-label="Conversion funnel pie chart">
+        {total === 0 ? (
+          <circle cx={cx} cy={cy} r={r} fill="var(--ds-surface-muted)" stroke="var(--ds-border)" strokeWidth="2" />
+        ) : slices.length === 1 ? (
+          <circle
+            cx={cx}
+            cy={cy}
+            r={r}
+            fill={slices[0].color}
+            stroke="#ffffff"
+            strokeWidth="2"
+            className={`funnel-pie-slice${hovered === slices[0].label ? ' is-active' : ''}`}
+            onMouseEnter={() => setHovered(slices[0].label)}
+            onMouseLeave={() => setHovered(null)}
+          >
+            <title>{`${slices[0].label}: ${slices[0].n} (100%)`}</title>
+          </circle>
+        ) : (
+          slices.map((s) => {
+            const isAct = hovered === s.label;
+            const isDim = hovered && hovered !== s.label;
+            return (
+              <path
+                key={s.label}
+                d={s.d}
+                fill={s.color}
+                stroke="#ffffff"
+                strokeWidth="2"
+                className={`funnel-pie-slice${isAct ? ' is-active' : ''}${isDim ? ' is-dim' : ''}`}
+                onMouseEnter={() => setHovered(s.label)}
+                onMouseLeave={() => setHovered(null)}
+              >
+                <title>{`${s.label}: ${s.n} (${s.pct}%)`}</title>
+              </path>
+            );
+          })
+        )}
+      </svg>
+      <div className="funnel-pie-legend">
+        {items.map(([label, n, color]) => {
+          const pct = total > 0 ? Math.round((n / total) * 100) : 0;
+          return (
+            <div
+              className={`funnel-pie-row${hovered === label ? ' is-active' : ''}`}
+              key={label}
+              onMouseEnter={() => setHovered(label)}
+              onMouseLeave={() => setHovered(null)}
+            >
+              <span className="funnel-pie-swatch" style={{ background: color }} aria-hidden="true" />
+              <span className="funnel-pie-label">{label}</span>
+              <span className="funnel-pie-val tabular">{n}</span>
+              <span className="funnel-pie-pct tabular">{pct}%</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }

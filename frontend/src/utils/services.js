@@ -20,6 +20,8 @@ export const userService = {
   list: () => apiFetch(ENDPOINTS.users),
   create: (payload) => apiFetch(ENDPOINTS.users, { method: 'POST', body: payload }),
   update: (id, payload) => apiFetch(ENDPOINTS.user(id), { method: 'PUT', body: payload }),
+  approve: (id) => apiFetch(ENDPOINTS.userApprove(id), { method: 'POST', body: {} }),
+  reject: (id) => apiFetch(ENDPOINTS.userReject(id), { method: 'POST', body: {} }),
   remove: (id) => apiFetch(ENDPOINTS.user(id), { method: 'DELETE' }),
   uploadPhoto: (body) => apiFetch(ENDPOINTS.userPhoto, { method: 'POST', body }),
 };

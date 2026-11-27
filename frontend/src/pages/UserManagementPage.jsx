@@ -4,10 +4,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { Alert, Button, Input, Segmented, Select } from '../assets/antd';
+import { Alert, Button, Input, Modal, Segmented, Select } from '../assets/antd';
 import ActionIcon from '../components/common/ActionIcon';
 import Avatar from '../components/common/Avatar';
-import { PresenceDot, RoleBadge } from '../components/common/Badge';
+import { Badge, PresenceDot, RoleBadge } from '../components/common/Badge';
 import DataTable, { Heads, TableRow } from '../components/common/DataTable';
 import EmptyState from '../components/common/EmptyState';
 import Icon from '../components/common/Icon';
@@ -24,9 +24,9 @@ import { byRankThenName, isHead, roleRank, statsFor } from '../utils/scope';
 import { appPresence, presenceTitle } from '../utils/stats';
 import { paginate } from '../utils/table';
 import { viewAsUser } from '../utils/actions/syncActions';
-import { deleteUser, saveUser } from '../utils/actions/userActions';
+import { approveUser, deleteUser, rejectUser, saveUser } from '../utils/actions/userActions';
 
-const LIST_COLS = '1fr 1.5fr 1.1fr 0.9fr 1.1fr 1fr 0.8fr 0.7fr 0.8fr 1.4fr';
+const LIST_COLS = '1fr 1.45fr 1.05fr 0.85fr 1fr 1fr 0.75fr 0.7fr 1.05fr 1.35fr';
 
 export default function UserManagementPage() {
   const dispatch = useDispatch();
@@ -97,13 +97,24 @@ export default function UserManagementPage() {
               : `${todayCallsText(u)} calls`)}
           </span>
           <span>
-            {!isAgent || !statsReady ? <span className="muted">—</span> : (
+            {(!u.isActive || u.isBlocked) ? (
+              <span style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
+                <Badge tone="danger" dot title={u.deactivationReason || 'Deactivated due to 10+ days inactivity'}>Blocked</Badge>
+                {u.reactivationRequestedAt && <Badge tone="warning">Approval pending</Badge>}
+              </span>
+            ) : (!isAgent || !statsReady ? <span className="muted">—</span> : (
               <span className={`status-text ${online ? 'text-success' : 'text-danger'}`} title={statusTitle}>
                 <PresenceDot online={online} />{online ? 'Signed in' : 'Not signed in'}
               </span>
-            )}
+            ))}
           </span>
           <div className="cell-actions">
+            {admin && (!u.isActive || u.isBlocked) && u.reactivationRequestedAt && (
+              <>
+                <ActionIcon icon="check-plain" tone="call" label={`Approve ${u.name}`} onClick={() => approveUser(u)} />
+                <ActionIcon icon="x" tone="delete" label={`Reject ${u.name}`} onClick={() => rejectUser(u)} />
+              </>
+            )}
             {canViewAs && <ActionIcon icon="eye" tone="view" label={`View the portal as ${u.name}`} onClick={() => viewAs(u.id)} />}
             {canEdit && <ActionIcon icon="edit" tone="edit" label={`Edit ${u.name}`} onClick={() => dispatch(toggleUserForm(u.id))} />}
             {canDelete && <ActionIcon icon="delete" tone="delete" label={`Delete ${u.name}`} onClick={() => onDelete(u)} />}
@@ -158,7 +169,45 @@ export default function UserManagementPage() {
         )}
       </div>
 
-      {userForm.open && <UserForm key={userForm.seq} editingId={userForm.editingId} scope={scope} />}
+      {userForm.open && !userForm.editingId && <UserForm key={userForm.seq} editingId={null} scope={scope} />}
+
+      <Modal
+        open={Boolean(userForm.open && userForm.editingId)}
+        title={(() => {
+          const eu = userForm.editingId ? users.find(x => x.id === userForm.editingId) : null;
+          return eu ? `EDIT ${eu.name.toUpperCase()}` : 'EDIT USER';
+        })()}
+        onCancel={() => dispatch(closeUserForm())}
+        footer={null}
+        width={720}
+        destroyOnHidden
+      >
+        {userForm.open && userForm.editingId && (
+          <UserForm key={userForm.seq} editingId={userForm.editingId} scope={scope} inModal />
+        )}
+      </Modal>
+
+      {admin && visible.some(u => (!u.isActive || u.isBlocked) && u.reactivationRequestedAt) && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 'var(--ds-space-4)' }}
+          title={`${visible.filter(u => (!u.isActive || u.isBlocked) && u.reactivationRequestedAt).length} deactivated user(s) requested reactivation approval`}
+          description={
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 6 }}>
+              {visible.filter(u => (!u.isActive || u.isBlocked) && u.reactivationRequestedAt).map(u => (
+                <div key={u.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                  <span><strong>{u.name}</strong> ({formatPhone(u.phone)})</span>
+                  <span style={{ display: 'flex', gap: 8 }}>
+                    <Button size="small" type="primary" icon={<Icon name="check-plain" size="sm" />} onClick={() => approveUser(u)}>Approve</Button>
+                    <Button size="small" danger icon={<Icon name="x" size="sm" />} onClick={() => rejectUser(u)}>Reject</Button>
+                  </span>
+                </div>
+              ))}
+            </div>
+          }
+        />
+      )}
 
       {userView === 'list' && (
         <div style={{ marginBottom: 'var(--ds-space-5)' }}>
@@ -211,7 +260,7 @@ export default function UserManagementPage() {
 }
 
 // Add / Edit form
-function UserForm({ editingId, scope }) {
+function UserForm({ editingId, scope, inModal = false }) {
   const dispatch = useDispatch();
   const { users, visible, me, isRealAdmin: admin, realRole } = scope;
   const editUser = editingId ? users.find(x => x.id === editingId) : null;
@@ -279,10 +328,9 @@ function UserForm({ editingId, scope }) {
 
   const roleDisabled = (value) => (value === 'ADMIN' && !admin) || (value === 'MANAGER' && !(admin || realRole === 'MANAGER'));
 
-  return (
-    <div className="card" style={{ marginBottom: 'var(--ds-space-4)', animation: 'fadeUp 0.25s ease both' }}>
-      <div className="card-header"><div className="card-title">{editUser ? `EDIT ${editUser.name.toUpperCase()}` : 'ADD NEW TEAM MEMBER'}</div></div>
-      <div className="user-form-grid">
+  const formBody = (
+    <>
+      <div className={inModal ? 'user-form-grid is-modal' : 'user-form-grid'}>
         <div>
           <label className="user-form-label" htmlFor="fUserName">Name *</label>
           <Input id="fUserName" ref={nameRef} placeholder="Full name" autoComplete="off" value={form.name} onChange={ev('name')} />
@@ -323,9 +371,25 @@ function UserForm({ editingId, scope }) {
           <label className="user-form-label" htmlFor="fUserTarget">Target / day</label>
           <Input type="number" id="fUserTarget" min="0" max="1000" step="1" value={form.target} onChange={ev('target')} />
         </div>
-        <Button type="primary" icon={<Icon name="save" size="sm" />} onClick={save} loading={busy}>{busy ? 'Saving…' : 'Save user'}</Button>
+        {inModal ? (
+          <div className="user-form-modal-actions">
+            <Button onClick={() => dispatch(closeUserForm())} disabled={busy}>Cancel</Button>
+            <Button type="primary" icon={<Icon name="save" size="sm" />} onClick={save} loading={busy}>{busy ? 'Saving…' : 'Save user'}</Button>
+          </div>
+        ) : (
+          <Button type="primary" icon={<Icon name="save" size="sm" />} onClick={save} loading={busy}>{busy ? 'Saving…' : 'Save user'}</Button>
+        )}
       </div>
       {error && <Alert className="form-alert" type="error" showIcon role="alert" title={error} />}
+    </>
+  );
+
+  if (inModal) return formBody;
+
+  return (
+    <div className="card" style={{ marginBottom: 'var(--ds-space-4)', animation: 'fadeUp 0.25s ease both' }}>
+      <div className="card-header"><div className="card-title">{editUser ? `EDIT ${editUser.name.toUpperCase()}` : 'ADD NEW TEAM MEMBER'}</div></div>
+      {formBody}
     </div>
   );
 }

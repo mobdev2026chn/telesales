@@ -3,8 +3,9 @@
 // ==========================================
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Button, Input, Rate, Select } from '../assets/antd';
+import { Button, Input, Popover, Radio, Rate, Select } from '../assets/antd';
 import { Badge, DirBadge } from '../components/common/Badge';
+import DateField from '../components/common/DateField';
 import EmptyState from '../components/common/EmptyState';
 import FilterChips, { Chip } from '../components/common/FilterChips';
 import Icon from '../components/common/Icon';
@@ -15,16 +16,18 @@ import { CALL_RANGE_OPTIONS, CRIT, REC_FILTERS, REC_PAGE_SIZE } from '../data/co
 import { setRecFilter, setRecordingDraft, setRecPage } from '../redux/slices/recordingsSlice';
 import { selectRecsQueryKey, selectScope } from '../redux/selectors';
 import { recordingAudioUrl } from '../utils/api';
-import { currentAudioEl, handoffToDock, onAnyAudioPlay, retryExpiredAudio, setPlaylist, syncAudioControls } from '../utils/audioController';
+import { currentAudioEl, handoffToDock, onAnyAudioPlay, playCallAudioDirect, retryExpiredAudio, setPlaylist, syncAudioControls } from '../utils/audioController';
 import { exportRows } from '../utils/excel';
 import { fmtClock, fmtDur, fmtIstFull, fmtTs, formatPhone, istDateStr, roleLabel } from '../utils/format';
 import { newRecMeta } from '../utils/mappers';
-import { rangeBounds } from '../utils/periods';
 import { isShortRecording, reviewAverage } from '../utils/recordings';
 import { callBelongsTo } from '../utils/scope';
 import { recordingService } from '../utils/services';
 import { paginate } from '../utils/table';
-import { changeRecAgent, changeRecRange, fetchRecordings, reviewRecording, saveRecordingFeedback, setRecordingStar, toggleRecordingPin } from '../utils/actions/recordingActions';
+import {
+  changeRecAgent, changeRecCustomRange, changeRecRange, effectiveRangeBounds, fetchRecordings, reviewRecording,
+  saveRecordingFeedback, setRecordingOutcome, setRecordingStar, toggleRecordingPin,
+} from '../utils/actions/recordingActions';
 
 export default function RecordingsPage() {
   const dispatch = useDispatch();
@@ -42,22 +45,53 @@ export default function RecordingsPage() {
 
   const isPinned = (c) => !!(rs.recMeta[c.id] && rs.recMeta[c.id].pinned);
 
+  const viewedStorageKey = `rec_viewed_${(authUser && authUser.id) || 'default'}`;
+  const [viewedIds, setViewedIds] = useState(() => {
+    try {
+      const raw = localStorage.getItem(viewedStorageKey);
+      const arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? new Set(arr.map(String)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+  const markViewed = (id) => {
+    const key = String(id);
+    setViewedIds(prev => {
+      if (prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.add(key);
+      try { localStorage.setItem(viewedStorageKey, JSON.stringify(Array.from(next))); } catch { /* ignore */ }
+      return next;
+    });
+  };
+  const isViewed = (c) => {
+    if (viewedIds.has(String(c.id))) return true;
+    const m = rs.recMeta[c.id];
+    return !!(m && (m.status !== 'PENDING' || (m.comments && m.comments.length > 0)));
+  };
+
   // Recordings in view before the chip filter: scope, date range and agent
   const base = useMemo(() => {
-    const { from } = rangeBounds(rs.range, 0);
-    let recs = rs.list.filter(isCallInScope).filter(c => !isShortRecording(c)).filter(c => c.ts && c.ts >= from);
+    const { from, to } = effectiveRangeBounds(rs);
+    let recs = rs.list.filter(isCallInScope).filter(c => !isShortRecording(c)).filter(c => c.ts && c.ts >= from && (!to || c.ts < to));
     if (rs.agent !== 'ALL') {
       const agent = users.find(u => u.id === rs.agent);
       recs = agent ? recs.filter(c => callBelongsTo(c, agent)) : [];
     }
+    if (rs.customFrom && rs.customTo) {
+      recs = recs.slice().sort((a, b) => (a.ts ? a.ts.getTime() : 0) - (b.ts ? b.ts.getTime() : 0));
+    }
     return recs;
-  }, [rs.list, rs.range, rs.agent, isCallInScope, users]);
+  }, [rs, isCallInScope, users]);
 
   const recs = useMemo(() => {
     const f = rs.filter;
     let list = base;
     if (f === 'PINNED') list = list.filter(isPinned);
     if (f === 'UNPINNED') list = list.filter(c => !isPinned(c));
+    if (f === 'VIEWED') list = list.filter(isViewed);
+    if (f === 'UNVIEWED') list = list.filter(c => !isViewed(c));
     if (f === 'IN') list = list.filter(c => c.dir === 'IN');
     if (f === 'OUT') list = list.filter(c => c.dir === 'OUT');
     if (f === '5+') list = list.filter(c => c.dur >= 300);
@@ -65,21 +99,25 @@ export default function RecordingsPage() {
     if (['PENDING', 'APPROVED', 'FLAGGED'].includes(f)) list = list.filter(c => (rs.recMeta[c.id] ? rs.recMeta[c.id].status : 'PENDING') === f);
     return list;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [base, rs.filter, rs.recMeta]);
+  }, [base, rs.filter, rs.recMeta, viewedIds]);
 
   const recIds = useMemo(() => recs.map(c => c.id), [recs]);
   useEffect(() => { setPlaylist('rec', recIds); }, [recIds]);
 
   const pinnedCount = base.filter(isPinned).length;
+  const viewedCount = base.filter(isViewed).length;
+  const unviewedCount = Math.max(0, base.length - viewedCount);
   const pg = paginate(recs, rs.page, REC_PAGE_SIZE);
 
   // Only part of the list is loaded at a time: unfiltered, show the server's full count for this scope
   // (the server's count includes the hidden 1-second files, so those loaded are taken off)
   const shortLoaded = rs.list.filter(c => isCallInScope(c) && isShortRecording(c)).length;
-  const recTotal = rs.filter === 'ALL' && rs.scopeKey === `${queryKey}|${rs.range}` ? Math.max((rs.total || 0) - shortLoaded, recs.length) : recs.length;
+  const recTotal = rs.filter === 'ALL' && rs.scopeKey === `${queryKey}|${rs.range}|${rs.customFrom || ''}|${rs.customTo || ''}` ? Math.max((rs.total || 0) - shortLoaded, recs.length) : recs.length;
 
   const filters = [
     ...REC_FILTERS,
+    { value: 'UNVIEWED', label: <>Unviewed · <span>{unviewedCount}</span></> },
+    { value: 'VIEWED', label: <>Viewed · <span>{viewedCount}</span></> },
     { value: 'PINNED', label: <>Pinned · <span>{pinnedCount}</span></>, title: 'Recordings pinned for the app' },
     { value: 'UNPINNED', label: <>Unpinned · <span>{base.length - pinnedCount}</span></> },
   ];
@@ -118,14 +156,23 @@ export default function RecordingsPage() {
     else if (!rs.loaded) msg = 'LOADING RECORDINGS…';
     listBody = <div className="card"><EmptyState error={!!rs.error}>{msg}</EmptyState></div>;
   } else {
-    listBody = pg.rows.map(c => <RecordingCard key={c.id} rec={c} meta={rs.recMeta[c.id] || newRecMeta()} users={users} />);
+    listBody = pg.rows.map(c => (
+      <RecordingCard
+        key={c.id}
+        rec={c}
+        meta={rs.recMeta[c.id] || newRecMeta()}
+        users={users}
+        viewed={isViewed(c)}
+        onView={() => markViewed(c.id)}
+      />
+    ));
   }
 
   return (
     <div ref={topRef}>
       <PageHeader
         title="Call Recordings"
-        subtitle={`${recTotal} recording${recTotal === 1 ? '' : 's'}${recTotal > recs.length ? ` (${recs.length} loaded)` : ''} · review, score and coach`}
+        subtitle={`${recTotal} total recording${recTotal === 1 ? '' : 's'} · ${viewedCount} viewed · ${unviewedCount} unviewed${recTotal > recs.length ? ` (${recs.length} loaded)` : ''}`}
       >
         <span className="muted" style={{ fontSize: 'var(--ds-fs-sm)' }}>Reviewer</span>
         <span className="badge badge-outline badge-lg">{(authUser && authUser.name ? authUser.name : '—').toUpperCase()}</span>
@@ -135,9 +182,7 @@ export default function RecordingsPage() {
       <div className="toolbar">
         <FilterChips id="recFilterChips" options={filters} value={rs.filter} onChange={(v) => dispatch(setRecFilter(v))} />
         <div className="pill-group toolbar-spacer">
-          <label htmlFor="recRangeSelect" className="visually-hidden">Date range</label>
-          <Select id="recRangeSelect" className="toolbar-ant-select" value={rs.range} onChange={(v) => changeRecRange(v)}
-            options={CALL_RANGE_OPTIONS} suffixIcon={<Icon name="calendar" size="sm" />} />
+          <RangeCalendarControl range={rs.range} customFrom={rs.customFrom} customTo={rs.customTo} />
           <label htmlFor="recAgentFilter" className="visually-hidden">Agent</label>
           <Select id="recAgentFilter" className="toolbar-ant-select" value={agentValid ? rs.agent : 'ALL'} onChange={(v) => changeRecAgent(v)}
             showSearch optionFilterProp="label" popupMatchSelectWidth={false}
@@ -145,7 +190,7 @@ export default function RecordingsPage() {
         </div>
       </div>
 
-      <RecordingProblems range={rs.range} queryKey={queryKey} />
+      <RecordingProblems range={rs.range} customFrom={rs.customFrom} customTo={rs.customTo} queryKey={queryKey} />
       <div className="stack" style={{ gap: 'var(--ds-space-4)' }}>{listBody}</div>
       <Pager className="pager-bar" label={`PAGE ${pg.page} / ${pg.totalPages} · ${recs.length} RECORDINGS`} page={pg.page} totalPages={pg.totalPages} onPage={changePage}>
         {rs.hasMore && <Chip icon={<Icon name="history" size="sm" />} onClick={() => fetchRecordings(true)}>Load older</Chip>}
@@ -154,13 +199,14 @@ export default function RecordingsPage() {
   );
 }
 
-function RecordingCard({ rec: c, meta, users }) {
+function RecordingCard({ rec: c, meta, users, viewed, onView }) {
   const audioRef = useRef(null);
   // Built once per card (cards are keyed by recording id): the link carries a short-lived media token,
   // and a new link on every render would reload the player. The audio controller swaps in a fresh
   // link at play time when this one has gone out of date.
   const [audioSrc] = useState(() => recordingAudioUrl(c.id));
   const [clock, setClock] = useState({ cur: 0, total: c.dur });
+  const [playing, setPlaying] = useState(false);
   const agentUser = users.find(u => u.id === c.callerId) || null;
   const mgrUser = agentUser ? users.find(m => m.id === agentUser.mgr) : null;
   const teamName = mgrUser ? mgrUser.name.toUpperCase() : 'MANAGEMENT';
@@ -189,7 +235,7 @@ function RecordingCard({ rec: c, meta, users }) {
   }, [c.id]);
 
   return (
-    <div className={`card rec-card${open ? ' is-open' : ''}`}>
+    <div className={`card rec-card${open ? ' is-open' : ''}${!viewed ? ' is-unviewed' : ''}`}>
       <div className="rec-card-top">
         <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 12 }}>
           <span className="kpi-icon" style={{ width: 38, height: 38 }}><Icon name="headphones" /></span>
@@ -211,24 +257,39 @@ function RecordingCard({ rec: c, meta, users }) {
           </span>
         </div>
         <div className="rec-audio-wrap">
+          <Button
+            shape="circle"
+            className="play-btn"
+            icon={<Icon name={playing ? 'pause' : 'caret-right'} />}
+            onClick={() => {
+              const el = audioRef.current;
+              if (el && !el.paused && !el.ended) el.pause();
+              else { onView(); playCallAudioDirect(c.id, 'rec'); }
+            }}
+            aria-label={playing ? `Pause recording: ${c.agent}` : `Play recording: ${c.agent}`}
+            title={playing ? 'Pause' : 'Play'}
+          />
           <span className="rec-timer"><Icon name="clock" size="sm" /><span aria-label="Played / total length">{fmtClock(clock.cur)} / {fmtClock(clock.total)}</span></span>
           <audio
             ref={audioRef}
             data-rec-id={c.id}
             data-dur={c.dur}
-            controls
             preload="metadata"
+            style={{ display: 'none' }}
             aria-label={`Recording: ${c.agent} and ${c.client || formatPhone(c.phone)}`}
             src={audioSrc}
-            onPlay={(e) => onAnyAudioPlay(e.currentTarget)}
+            onPlay={(e) => { setPlaying(true); onView(); onAnyAudioPlay(e.currentTarget); }}
             onError={(e) => retryExpiredAudio(e.currentTarget)}
-            onPause={syncAudioControls}
-            onEnded={syncAudioControls}
+            onPause={() => { setPlaying(false); syncAudioControls(); }}
+            onEnded={() => { setPlaying(false); syncAudioControls(); }}
             onLoadedMetadata={(e) => updateClock(e.currentTarget)}
             onTimeUpdate={(e) => updateClock(e.currentTarget)}
           />
-          <Button className="rec-toggle" aria-expanded={open} aria-controls={detailsId} onClick={() => setOpen(v => !v)}
+          <Button className="rec-toggle" aria-expanded={open} aria-controls={detailsId} onClick={() => { if (!open) onView(); setOpen(v => !v); }}
             title={open ? 'Hide details' : 'Show source file and quality audit'}>
+            {meta.outcome && (
+              <Badge tone={meta.outcome === 'SUCCESSFUL' ? 'success' : 'danger'}>{meta.outcome}</Badge>
+            )}
             <Badge tone={st === 'APPROVED' ? 'success' : (st === 'FLAGGED' ? 'danger' : 'neutral')}>{st}</Badge>
             Details<Icon name="down" size="sm" className="rec-toggle-chevron" />
           </Button>
@@ -274,18 +335,18 @@ const ISSUE_KINDS = {
 
 // Calls whose recording is missing or may lack the customer's voice, reported by the phones.
 // Same date range and agent as the list below; hidden when there are none (or on an older server).
-function RecordingProblems({ range, queryKey }) {
+function RecordingProblems({ range, customFrom, customTo, queryKey }) {
   const [issues, setIssues] = useState([]);
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
     let live = true;
-    const { from, to } = rangeBounds(range, 0);
+    const { from, to } = effectiveRangeBounds({ range, customFrom, customTo });
     recordingService.issues(`?limit=200${queryKey}&from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`)
       .then(json => { if (live) setIssues(Array.isArray(json && json.issues) ? json.issues : []); })
       .catch(() => { if (live) setIssues([]); });
     return () => { live = false; };
-  }, [range, queryKey]);
+  }, [range, customFrom, customTo, queryKey]);
 
   if (issues.length === 0) return null;
   const lost = issues.filter(i => i.kind === 'lost').length;
@@ -352,8 +413,18 @@ function ReviewSection({ id, meta }) {
           );
         })}
       </div>
-      <div className="rec-review-foot">
-        <span className="fw-600" style={{ fontSize: 'var(--ds-fs-sm)' }}>Overall · <span className="text-2">{overallText}</span></span>
+      <div className="rec-review-foot" style={{ flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+          <span className="fw-600" style={{ fontSize: 'var(--ds-fs-sm)' }}>Overall · <span className="text-2">{overallText}</span></span>
+          <Radio.Group
+            value={meta.outcome || ''}
+            onChange={(e) => setRecordingOutcome(id, e.target.value)}
+            aria-label="Call outcome"
+          >
+            <Radio value="SUCCESSFUL">Successful</Radio>
+            <Radio value="UNSUCCESSFUL">Unsuccessful</Radio>
+          </Radio.Group>
+        </div>
         <div className="cell-actions">
           <Button type="primary" size="small" icon={<Icon name="check" size="sm" />} onClick={() => reviewRecording(id, 'APPROVED')}>Approve</Button>
           <Button danger size="small" icon={<Icon name="flag" size="sm" />} onClick={() => reviewRecording(id, 'FLAGGED')}>Flag for coaching</Button>
@@ -372,5 +443,96 @@ function ReviewSection({ id, meta }) {
         <Button className="btn-ink" icon={<Icon name="send" size="sm" />} onClick={() => saveRecordingFeedback(id)}>Send feedback</Button>
       </div>
     </>
+  );
+}
+
+function RangeCalendarControl({ range, customFrom, customTo }) {
+  const [open, setOpen] = useState(false);
+  const [fromVal, setFromVal] = useState(customFrom || '');
+  const [toVal, setToVal] = useState(customTo || '');
+
+  const onOpenChange = (next) => {
+    if (next) {
+      setFromVal(customFrom || '');
+      setToVal(customTo || '');
+    }
+    setOpen(next);
+  };
+
+  const presetLabel = (CALL_RANGE_OPTIONS.find(o => o.value === range) || CALL_RANGE_OPTIONS[0]).label;
+  const activeLabel = (customFrom && customTo)
+    ? `${customFrom} → ${customTo}`
+    : (customFrom || customTo || presetLabel);
+
+  const content = (
+    <div style={{ width: 290, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div>
+        <div className="muted" style={{ fontSize: 'var(--ds-fs-xs)', fontWeight: 700, marginBottom: 6 }}>QUICK RANGES</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {CALL_RANGE_OPTIONS.map(o => {
+            const active = !(customFrom || customTo) && range === o.value;
+            return (
+              <Button
+                key={o.value}
+                size="small"
+                type={active ? 'primary' : 'default'}
+                onClick={() => {
+                  setOpen(false);
+                  changeRecRange(o.value);
+                }}
+              >
+                {o.label}
+              </Button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={{ borderTop: '1px solid var(--ds-border)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div className="muted" style={{ fontSize: 'var(--ds-fs-xs)', fontWeight: 700 }}>CUSTOM DATE RANGE</div>
+        <div>
+          <label htmlFor="recCustomFrom" className="user-form-label">From date</label>
+          <DateField id="recCustomFrom" value={fromVal} onChange={setFromVal} label="From date" disableFuture />
+        </div>
+        <div>
+          <label htmlFor="recCustomTo" className="user-form-label">To date</label>
+          <DateField id="recCustomTo" value={toVal} onChange={setToVal} label="To date" disableFuture />
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+          {(customFrom || customTo || fromVal || toVal) && (
+            <Button
+              size="small"
+              onClick={() => {
+                setFromVal('');
+                setToVal('');
+                setOpen(false);
+                changeRecRange(range || 'today');
+              }}
+            >
+              Clear
+            </Button>
+          )}
+          <Button
+            size="small"
+            type="primary"
+            disabled={!fromVal && !toVal}
+            onClick={() => {
+              setOpen(false);
+              changeRecCustomRange(fromVal, toVal);
+            }}
+          >
+            Apply
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <Popover open={open} onOpenChange={onOpenChange} content={content} trigger="click" placement="bottomRight">
+      <Button id="recRangeSelect" icon={<Icon name="calendar" size="sm" />} className={(customFrom || customTo) ? 'btn-lime-ant' : ''}>
+        {activeLabel}
+      </Button>
+    </Popover>
   );
 }

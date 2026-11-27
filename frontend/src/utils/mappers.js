@@ -19,6 +19,11 @@ export function mapUser(u) {
     mgr: u.managerId ? String(u.managerId) : null,
     photoBase64: safeImage(u.photoBase64 || ''),
     avatarUrl: safeImage(u.avatarUrl || ''),
+    isActive: u.isActive !== false,
+    isBlocked: !!u.isBlocked,
+    deactivatedAt: u.deactivatedAt || null,
+    deactivationReason: u.deactivationReason || '',
+    reactivationRequestedAt: u.reactivationRequestedAt || null,
   };
 }
 
@@ -114,6 +119,7 @@ export function mapRecording(r) {
     review: {
       criteria: Object.assign(EMPTY_CRIT(), r.criteria || {}),
       status: String(r.status || 'PENDING').toUpperCase(),
+      outcome: ['SUCCESSFUL', 'UNSUCCESSFUL'].includes(String(r.outcome || '').toUpperCase()) ? String(r.outcome).toUpperCase() : '',
       comments: Array.isArray(r.comments) ? r.comments : (r.comment ? [{ text: r.comment, by: r.commentedBy || '' }] : []),
       pinned: !!r.pinned,
     },
@@ -121,7 +127,7 @@ export function mapRecording(r) {
 }
 
 export function newRecMeta() {
-  return { crit: EMPTY_CRIT(), status: 'PENDING', comments: [], draft: '', saveState: '', dirty: false, pinned: false, pinBusy: false };
+  return { crit: EMPTY_CRIT(), status: 'PENDING', outcome: '', comments: [], draft: '', saveState: '', dirty: false, pinned: false, pinBusy: false };
 }
 
 // Server review fields merged over the local state: unsaved star clicks and a pin being saved win
@@ -130,6 +136,7 @@ export function recMetaFrom(review, prev) {
   return {
     crit: p.dirty ? p.crit : review.criteria,
     status: review.status,
+    outcome: review.outcome || '',
     comments: review.comments,
     draft: p.draft || '',
     saveState: p.saveState || '',

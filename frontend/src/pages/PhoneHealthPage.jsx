@@ -2,7 +2,7 @@
 // PHONE HEALTH: is every agent's phone recording calls? (server numbers per agent)
 // Admins, managers, junior managers and team leaders only (RoleRoute guard="health")
 // ==========================================
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Button, Select } from '../assets/antd';
 import { Badge, PresenceDot } from '../components/common/Badge';
@@ -12,6 +12,7 @@ import FilterChips from '../components/common/FilterChips';
 import { KpiGrid } from '../components/common/Kpi';
 import PageHeader from '../components/common/PageHeader';
 import Progress from '../components/common/Progress';
+import SearchField from '../components/common/SearchField';
 import UserLink from '../components/common/UserLink';
 import { LEADERBOARD_TYPE_OPTIONS } from '../data/constants';
 import { selectPhKey } from '../redux/selectors';
@@ -50,6 +51,7 @@ export default function PhoneHealthPage() {
   const dispatch = useDispatch();
   const ph = useSelector(s => s.phoneHealth);
   const key = useSelector(selectPhKey);
+  const [search, setSearch] = useState('');
 
   const data = ph.data && ph.dataKey === key ? ph.data : null;
   const failed = ph.errorKey === key;
@@ -73,13 +75,21 @@ export default function PhoneHealthPage() {
   const waitMeta = failed ? 'Could not load' : 'Loading…';
   const val = (v) => (data ? v : '—');
 
+  const q = search.trim().toLowerCase();
+  const filteredAgents = q
+    ? agents.filter(a => [a.name, a.phone, a.managerName, a.team, a.role, a.device && a.device.phone]
+      .some(v => v && String(v).toLowerCase().includes(q)))
+    : agents;
+
   let body;
   if (!data) {
     body = <EmptyState error={failed}>{failed ? `COULD NOT LOAD PHONE HEALTH — ${ph.error || ''}` : 'LOADING PHONE HEALTH…'}</EmptyState>;
   } else if (!agents.length) {
     body = <EmptyState>NO AGENTS IN THIS VIEW</EmptyState>;
+  } else if (!filteredAgents.length) {
+    body = <EmptyState>NO AGENTS MATCH YOUR SEARCH</EmptyState>;
   } else {
-    body = sortAgents(agents).map((a, i) => <AgentRow key={a.id || `${a.phone || a.name || 'agent'}-${i}`} a={a} />);
+    body = sortAgents(filteredAgents).map((a, i) => <AgentRow key={a.id || `${a.phone || a.name || 'agent'}-${i}`} a={a} />);
   }
 
   return (
@@ -122,12 +132,23 @@ export default function PhoneHealthPage() {
       ]} />
 
       <div className="neo-table-card">
-        <div className="card-header">
-          <div className="card-title">Agents</div>
-          <span className="card-subtitle">
-            Problems first, then warnings, then OK{data && data.since ? ` · since ${fmtTs(data.since)}` : ''}
-            {data && failed && <span className="ph-alert"> · Could not refresh — {ph.error}</span>}
-          </span>
+        <div className="card-header" style={{ gap: 12, flexWrap: 'wrap' }}>
+          <div>
+            <div className="card-title">Agents</div>
+            <span className="card-subtitle">
+              Problems first, then warnings, then OK{data && data.since ? ` · since ${fmtTs(data.since)}` : ''}
+              {data && failed && <span className="ph-alert"> · Could not refresh — {ph.error}</span>}
+            </span>
+          </div>
+          <SearchField
+            id="phAgentSearch"
+            label="Search agents"
+            placeholder="Search agent, phone…"
+            value={search}
+            onChange={setSearch}
+            onClear={() => setSearch('')}
+            style={{ width: 240, maxWidth: '100%' }}
+          />
         </div>
         <DataTable
           cols={COLS}

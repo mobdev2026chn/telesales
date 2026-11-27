@@ -110,7 +110,6 @@ class _MainShellState extends State<MainShell> {
             _FooterDestination('BOARD', 1, AntIcons.teamOutlined),
             _FooterDestination('LEADS', 2, AntIcons.solutionOutlined),
             _FooterDestination('RECS', 3, AntIcons.fileTextOutlined),
-            _FooterDestination('MORE', 4, AntIcons.appstoreOutlined),
           ]
         : const [
             _FooterDestination('HOME', 0, AntIcons.homeOutlined),

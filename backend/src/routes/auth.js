@@ -2,8 +2,10 @@ const express = require('express');
 const crypto = require('crypto');
 const router = express.Router();
 const Employee = require('../models/Employee');
+const Notification = require('../models/Notification');
 const { signToken, signMediaToken, MEDIA_TOKEN_TTL_SECONDS, verifyAndUpgradePassword, requireAuth, MANAGERS } = require('../middleware/auth');
 const presence = require('../services/presence');
+const { isInactiveOverTenDays, deactivateEmployee } = require('../services/accountInactivity');
 const { publishForEmployee } = require('../services/realtime');
 
 const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -57,6 +59,51 @@ async function login(req, res, { allowedRoles, wrongRoleMessage }) {
   const role = (emp.role || 'caller').toLowerCase();
   if (allowedRoles && !allowedRoles.includes(role)) {
     return res.status(403).json({ success: false, message: wrongRoleMessage(role) });
+  }
+
+  const io = req.app.get('io');
+  const inactiveBlocked = isInactiveOverTenDays(emp);
+  if (emp.isActive === false || emp.isBlocked === true || inactiveBlocked) {
+    if (inactiveBlocked && emp.isActive !== false) {
+      await deactivateEmployee(emp, 'Inactive for more than 10 days', io);
+    }
+    const now = new Date();
+    const prevReq = emp.reactivationRequestedAt ? new Date(emp.reactivationRequestedAt).getTime() : 0;
+    const shouldNotify = !prevReq || (now.getTime() - prevReq > 24 * 60 * 60 * 1000);
+    if (shouldNotify) {
+      await Employee.updateOne({ id: emp.id }, { $set: { reactivationRequestedAt: now } });
+      try {
+        const notif = await Notification.create({
+          id: `notif_reactivate_${emp.id}_${Date.now()}`,
+          recipientId: 'ADMIN',
+          senderName: emp.name,
+          senderRole: role,
+          title: 'Account Reactivation Request',
+          message: `${emp.name} (${emp.phone || 'No Phone'}) tried to log in after being deactivated for 10+ days of inactivity. Please review and approve in User Management.`,
+          comment: emp.deactivationReason || 'Inactive for more than 10 days',
+          isRead: false,
+        });
+        if (io) {
+          const payload = notif.toObject ? notif.toObject() : notif;
+          io.to('admin:global').emit('notificationCreated', payload);
+          io.to('admin:global').emit('accountApprovalRequested', {
+            userId: emp.id,
+            name: emp.name,
+            phone: emp.phone || '',
+            role,
+            requestedAt: now,
+          });
+        }
+      } catch (notifErr) {
+        console.error(`[auth] reactivation notification failed userId=${emp.id}: ${notifErr.message}`);
+      }
+    }
+    return res.status(403).json({
+      success: false,
+      code: 'ACCOUNT_DEACTIVATED',
+      approvalPending: true,
+      message: 'Your account was deactivated after 10+ days of inactivity. An approval request has been sent to the Admin.',
+    });
   }
 
   const sessionId = crypto.randomUUID();

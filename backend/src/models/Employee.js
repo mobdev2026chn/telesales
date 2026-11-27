@@ -37,6 +37,12 @@ const EmployeeSchema = new mongoose.Schema({
   // Auto-recording state reported by caller's phone
   autoRecordEnabled: { type: Boolean, default: true },
   autoRecordDisabledAt: { type: Date, default: null },
+  // Account activation / 10-day inactivity block & admin approval state
+  isActive: { type: Boolean, default: true },
+  isBlocked: { type: Boolean, default: false },
+  deactivatedAt: { type: Date, default: null },
+  deactivationReason: { type: String, default: '' },
+  reactivationRequestedAt: { type: Date, default: null },
   // The phone's latest recording diagnostics (routes/diagnostics.js), for the Phone health page.
   // Never holds customer data: phone model, Android / app version, Phone app, accessibility state.
   deviceInfo: { type: mongoose.Schema.Types.Mixed, default: null },

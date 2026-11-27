@@ -17,7 +17,7 @@ const { resolveScope, recordingQueryFor, ownerInScope, findEmployeeByRef } = req
 const { pickClosestCall, recordingStartMs, parseRange, LINK_WINDOW_MS } = require('../services/matching');
 const { applyRecordingToLead } = require('../services/callStats');
 const { getCloudName, decodeBase64, uploadBuffer, deleteAsset } = require('../services/cloudinary');
-const { publishForEmployee } = require('../services/realtime');
+const { employeeRoom, publishForEmployee } = require('../services/realtime');
 
 const router = express.Router();
 const uploadsDir = path.join(__dirname, '../../uploads/recordings');
@@ -59,6 +59,7 @@ function toRecordingDTO(r, extra = {}) {
     cloudinaryUrl: r.cloudinarySecureUrl || '',
     createdAt: r.createdAt || null,
     status: STATUSES.includes(r.status) ? r.status : 'PENDING',
+    outcome: ['SUCCESSFUL', 'UNSUCCESSFUL'].includes(r.outcome) ? r.outcome : '',
     criteria,
     rating: Math.round((Number(r.rating) || 0) * 10) / 10,
     comments,
@@ -625,13 +626,13 @@ router.post(['/api/recordings', '/api/user/recordings/upload', '/api/admin/recor
 });
 
 // ---- Reviews -----------------------------------------------------------------------------------
-async function notifyCaller(rec, { author, role, comment, rating }) {
+async function notifyCaller(rec, { author, role, comment, rating, io = null }) {
   let emp = null;
   if (rec.callerId) emp = await Employee.findOne({ id: rec.callerId }).lean();
   if (!emp && rec.callerName) emp = await Employee.findOne({ name: exactNameRegex(rec.callerName) }).lean();
   const starsStr = rating > 0 ? ` (${rating} stars)` : '';
   const client = rec.contactName || rec.phoneNumber || 'a client';
-  await Notification.create({
+  const notif = await Notification.create({
     id: `notif_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
     recipientId: emp ? emp.id : (rec.callerId || ''),
     // The caller's own number — never the customer's
@@ -647,6 +648,9 @@ async function notifyCaller(rec, { author, role, comment, rating }) {
     rating: rating || 0,
     isRead: false,
   });
+  if (io && emp && emp.id) {
+    io.to(employeeRoom(emp.id)).emit('notificationCreated', notif.toObject ? notif.toObject() : notif);
+  }
 }
 
 // Reviewer identity: token (managers only, enforced by ROUTE_RULES); legacy clients must claim a manager role
@@ -709,11 +713,15 @@ router.post(['/api/recordings/:id/review', '/api/admin/recordings/:id/review'], 
   try {
     const reviewer = reviewerFor(req);
     if (!reviewer) return res.status(403).json({ success: false, message: 'You do not have permission for this action.' });
-    const { criteria, status } = req.body || {};
+    const { criteria, status, outcome } = req.body || {};
     const comment = typeof req.body.comment === 'string' ? req.body.comment.trim().slice(0, 2000) : '';
 
     if (status !== undefined && status !== null && !STATUSES.includes(status)) {
       return res.status(400).json({ success: false, message: `status must be one of ${STATUSES.join(', ')}` });
+    }
+    const OUTCOMES = ['SUCCESSFUL', 'UNSUCCESSFUL', ''];
+    if (outcome !== undefined && outcome !== null && !OUTCOMES.includes(outcome)) {
+      return res.status(400).json({ success: false, message: 'outcome must be SUCCESSFUL, UNSUCCESSFUL, or empty' });
     }
     let cleanCriteria = null;
     if (criteria !== undefined && criteria !== null) {
@@ -742,6 +750,7 @@ router.post(['/api/recordings/:id/review', '/api/admin/recordings/:id/review'], 
       rec.rating = scored.length ? Math.round((scored.reduce((a, b) => a + b, 0) / scored.length) * 10) / 10 : 0;
     }
     if (status) rec.status = status;
+    if (outcome !== undefined && outcome !== null) rec.outcome = outcome;
     if (comment) {
       rec.comment = comment;
       rec.commentedBy = reviewer.name;
@@ -753,7 +762,7 @@ router.post(['/api/recordings/:id/review', '/api/admin/recordings/:id/review'], 
 
     if (comment) {
       try {
-        await notifyCaller(rec, { author: reviewer.name, role: reviewer.role, comment, rating: rec.rating });
+        await notifyCaller(rec, { author: reviewer.name, role: reviewer.role, comment, rating: rec.rating, io: req.app.get('io') });
       } catch (notifErr) {
         console.error('Error creating notification:', notifErr.message);
       }

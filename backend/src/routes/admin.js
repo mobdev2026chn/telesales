@@ -458,6 +458,74 @@ router.put('/users/:id', async (req, res) => {
   }
 });
 
+// POST /api/admin/users/:id/approve — admin only: reactivate a deactivated/blocked user
+router.post('/users/:id/approve', async (req, res) => {
+  try {
+    if (!req.user || req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Only an admin can approve deactivated accounts.' });
+    }
+    const target = await Employee.findOne(byIdQuery(req.params.id)).lean();
+    if (!target) return res.status(404).json({ success: false, message: 'User not found' });
+
+    const now = new Date();
+    const updated = await Employee.findOneAndUpdate(
+      { _id: target._id },
+      {
+        $set: {
+          isActive: true,
+          isBlocked: false,
+          deactivatedAt: null,
+          deactivationReason: '',
+          reactivationRequestedAt: null,
+          lastSeenAt: now,
+        },
+      },
+      { new: true },
+    );
+    forgetProfile(target.id);
+    const io = req.app.get('io');
+    if (io) {
+      io.to('admin:global').emit('accountApproved', { userId: target.id, name: target.name });
+    }
+    res.json({ success: true, user: updated, message: `${target.name} has been approved and reactivated.` });
+  } catch (err) {
+    serverError(res, err, 'admin.users.approve');
+  }
+});
+
+// POST /api/admin/users/:id/reject — admin only: reject a reactivation request (keep blocked)
+router.post('/users/:id/reject', async (req, res) => {
+  try {
+    if (!req.user || req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Only an admin can reject reactivation requests.' });
+    }
+    const target = await Employee.findOne(byIdQuery(req.params.id)).lean();
+    if (!target) return res.status(404).json({ success: false, message: 'User not found' });
+
+    const updated = await Employee.findOneAndUpdate(
+      { _id: target._id },
+      {
+        $set: {
+          isActive: false,
+          isBlocked: true,
+          deactivatedAt: target.deactivatedAt || new Date(),
+          deactivationReason: 'Reactivation request rejected by admin',
+          reactivationRequestedAt: null,
+        },
+      },
+      { new: true },
+    );
+    forgetProfile(target.id);
+    const io = req.app.get('io');
+    if (io) {
+      io.to('admin:global').emit('accountRejected', { userId: target.id, name: target.name });
+    }
+    res.json({ success: true, user: updated, message: `${target.name}'s reactivation request was rejected.` });
+  } catch (err) {
+    serverError(res, err, 'admin.users.reject');
+  }
+});
+
 // DELETE /api/admin/users/:id — admin only (ROUTE_RULES)
 router.delete('/users/:id', async (req, res) => {
   try {

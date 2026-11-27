@@ -60,6 +60,26 @@ export async function deleteUser(user) {
   }
 }
 
+export async function approveUser(user) {
+  try {
+    await userService.approve(user.id);
+    await fetchUsers();
+    notify(`✓ ${user.name.toUpperCase()} APPROVED & ACTIVATED`);
+  } catch (e) {
+    notify(`⚠️ APPROVAL FAILED: ${e.message}`);
+  }
+}
+
+export async function rejectUser(user) {
+  try {
+    await userService.reject(user.id);
+    await fetchUsers();
+    notify(`✓ ${user.name.toUpperCase()} REACTIVATION REJECTED`);
+  } catch (e) {
+    notify(`⚠️ REJECT FAILED: ${e.message}`);
+  }
+}
+
 // Profile page: reports-to / daily target
 export async function updateUserFields(user, fields, okMsg) {
   try {
@@ -85,7 +105,7 @@ export async function uploadUserPhoto(userId, photoBase64, isSelf) {
     const result = await userService.uploadPhoto(body);
     const avatarUrl = (result.user && result.user.avatarUrl) || '';
     dispatch(userPatched({ id: userId, fields: { photoBase64: '', avatarUrl: safeImage(avatarUrl) } }));
-    notify('PROFILE PHOTO UPDATED');
+    notify(photoBase64 === '' ? 'PROFILE PHOTO REMOVED' : 'PROFILE PHOTO UPDATED');
   } catch (err) {
     notify(`⚠️ PHOTO NOT SAVED: ${err.message}`);
   }

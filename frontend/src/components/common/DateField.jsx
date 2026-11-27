@@ -6,7 +6,8 @@ import Icon from './Icon';
 const MIN_DATE = dayjs('2020-01-01');
 const MAX_DATE = dayjs('2030-12-31');
 
-export default function DateField({ value, onChange, label, title, id, allowClear = true, placement = 'bottomRight' }) {
+export default function DateField({ value, onChange, label, title, id, allowClear = true, placement = 'bottomRight', disableFuture = false }) {
+  const effectiveMax = disableFuture ? dayjs().endOf('day') : MAX_DATE;
   const picker = (
     <DatePicker
       id={id}
@@ -14,7 +15,8 @@ export default function DateField({ value, onChange, label, title, id, allowClea
       aria-label={label}
       value={value ? dayjs(value) : null}
       minDate={MIN_DATE}
-      maxDate={MAX_DATE}
+      maxDate={effectiveMax}
+      disabledDate={disableFuture ? (d) => !!d && d.isAfter(dayjs(), 'day') : undefined}
       allowClear={allowClear}
       format="DD MMM YYYY"
       placeholder="Pick a date"

@@ -12,6 +12,8 @@ export const ENDPOINTS = {
   // Users
   users: '/admin/users',
   user: (id) => `/admin/users/${enc(id)}`,
+  userApprove: (id) => `/admin/users/${enc(id)}/approve`,
+  userReject: (id) => `/admin/users/${enc(id)}/reject`,
   userPhoto: '/users/photo',
 
   // Numbers

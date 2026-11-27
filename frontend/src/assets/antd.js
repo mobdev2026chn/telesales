@@ -1,19 +1,19 @@
 // Every Ant Design piece the portal uses, imported once here so pages and components import from one place
 // (same idea as assets/image.js). Also holds the theme and the icon-name → antd icon map behind <Icon name="…" />.
 import {
-  ApartmentOutlined, AimOutlined, ArrowDownOutlined, ArrowLeftOutlined, ArrowUpOutlined, BarChartOutlined, BellOutlined, CalendarOutlined,
+  ApartmentOutlined, AimOutlined, ArrowDownOutlined, ArrowLeftOutlined, ArrowUpOutlined, AudioMutedOutlined, BarChartOutlined, BellOutlined, CalendarOutlined,
   CaretRightOutlined, CheckCircleOutlined, CheckOutlined, ClockCircleOutlined, CloseCircleOutlined, CloseOutlined,
   CloudUploadOutlined, CrownFilled, CustomerServiceOutlined, DashboardOutlined, DeleteOutlined, DownloadOutlined, DownOutlined,
   EditOutlined, EllipsisOutlined, ExclamationCircleOutlined, EyeOutlined, FileExcelOutlined, FileOutlined, FlagOutlined,
   FunnelPlotOutlined, HistoryOutlined, InboxOutlined, LeftOutlined, LineChartOutlined, LoginOutlined, LogoutOutlined,
   MenuOutlined, MobileOutlined, PauseOutlined, PhoneOutlined, PlayCircleOutlined, PlusOutlined, PushpinFilled, PushpinOutlined,
-  RightOutlined, RiseOutlined, SaveOutlined, SearchOutlined, SendOutlined, SolutionOutlined, StarOutlined,
+  RightOutlined, RiseOutlined, SaveOutlined, SearchOutlined, SendOutlined, SolutionOutlined, SoundOutlined, StarOutlined,
   StepBackwardOutlined, StepForwardOutlined, StopOutlined, SwapOutlined, TeamOutlined, TrophyOutlined, UnorderedListOutlined,
   UploadOutlined, UserOutlined,
 } from '@ant-design/icons';
 
 export {
-  Alert, App as AntApp, Badge, Button, Col, ConfigProvider, DatePicker, Drawer, Empty, Flex, Input, List, Popconfirm, Rate, Row, Segmented, Select, Space, Spin, Tabs, Tag, Tooltip,
+  Alert, App as AntApp, Badge, Button, Col, ConfigProvider, DatePicker, Drawer, Empty, Flex, Input, List, Modal, Popconfirm, Popover, Radio, Rate, Row, Segmented, Select, Space, Spin, Tabs, Tag, Tooltip,
 } from 'antd';
 
 // <Icon name="…" /> names (the old sprite names first, then the extra action icons)
@@ -46,6 +46,8 @@ export const ICONS = {
   plus: PlusOutlined,
   search: SearchOutlined,
   slash: StopOutlined,
+  sound: SoundOutlined,
+  'sound-off': AudioMutedOutlined,
   star: StarOutlined,
   target: AimOutlined,
   trend: RiseOutlined,

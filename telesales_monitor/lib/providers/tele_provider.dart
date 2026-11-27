@@ -620,6 +620,11 @@ class TeleProvider extends ChangeNotifier {
           title: title,
           message: msg,
         );
+        unawaited(showSystemNotification(
+          title: title,
+          message: msg,
+          id: 9200 + (DateTime.now().millisecondsSinceEpoch % 10000),
+        ));
       }
     }
   }
@@ -2625,11 +2630,22 @@ class TeleProvider extends ChangeNotifier {
     }
 
     if (scheduleDefaultCallback &&
-        (newStatus == LeadStatus.followUp || newStatus == LeadStatus.bookDemo || newStatus == LeadStatus.demoReschedule)) {
+        (newStatus == LeadStatus.followUp ||
+            newStatus == LeadStatus.newFollowUp ||
+            newStatus == LeadStatus.renewalFollowUp ||
+            newStatus == LeadStatus.bookDemo ||
+            newStatus == LeadStatus.demoReschedule)) {
+      final now = DateTime.now();
+      final isFollowUp = newStatus == LeadStatus.followUp ||
+          newStatus == LeadStatus.newFollowUp ||
+          newStatus == LeadStatus.renewalFollowUp;
+      final scheduledAt = isFollowUp
+          ? DateTime(now.year, now.month, now.day + 1, 10, 30)
+          : defaultCallbackTime(now);
       addScheduledCallback(
         name: targetLead.name.isNotEmpty && targetLead.name != 'Unknown' ? targetLead.name : targetLead.phone,
         phone: targetLead.phone,
-        scheduledTime: defaultCallbackTime(DateTime.now()),
+        scheduledTime: scheduledAt,
         note: (note != null && note.isNotEmpty) ? note : 'Lead moved to ${targetLead.statusLabel}',
       );
     }

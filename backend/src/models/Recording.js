@@ -55,6 +55,7 @@ const RecordingSchema = new mongoose.Schema({
   speaker: { type: String, default: '' },
   // Review
   status: { type: String, enum: ['PENDING', 'APPROVED', 'FLAGGED'], default: 'PENDING' },
+  outcome: { type: String, enum: ['SUCCESSFUL', 'UNSUCCESSFUL', ''], default: '' },
   criteria: { type: CriteriaSchema, default: () => ({}) },
   rating: { type: Number, min: 0, max: 5, default: 0 },
   comments: { type: [CommentSchema], default: [] },

@@ -222,7 +222,7 @@ class ApiService {
     String path,
     String tokenAtSend,
   ) {
-    if (res.statusCode != 401) return;
+    if (res.statusCode != 401 && res.statusCode != 403) return;
     final cleanPath = path.split('?').first;
     if (_publicAuthPaths.contains(cleanPath) || cleanPath == '/auth/logout') {
       return;
@@ -232,7 +232,7 @@ class ApiService {
     }
     try {
       final data = jsonDecode(res.body);
-      if (data is Map && data['code'] == 'AUTH_REQUIRED') {
+      if (data is Map && (data['code'] == 'AUTH_REQUIRED' || data['code'] == 'ACCOUNT_DEACTIVATED')) {
         onAuthRequired?.call();
       }
     } catch (_) {}

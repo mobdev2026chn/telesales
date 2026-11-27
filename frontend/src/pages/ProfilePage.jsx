@@ -18,6 +18,7 @@ export default function ProfilePage() {
   const dispatch = useDispatch();
   const { users, visible, me, isRealAdmin: admin, realRole, authId } = useSelector(selectScope);
   const editable = admin || (['MANAGER', 'JR_MANAGER', 'TEAM_LEADER'].includes(realRole) && me.role !== 'ADMIN');
+  const hasPhoto = Boolean(safeImage(me.photoBase64) || safeImage(me.avatarUrl));
   const mgr = users.find(u => u.id === me.mgr);
   const mgrChoices = (admin ? users : visible).filter(u => u.id !== me.id && isHead(u));
 
@@ -71,6 +72,11 @@ export default function ProfilePage() {
     reader.readAsDataURL(file);
   };
 
+  const onRemovePhoto = () => {
+    if (!editable || !hasPhoto) return;
+    uploadUserPhoto(me.id, '', !me.id || me.id === authId);
+  };
+
   return (
     <>
       <PageHeader title="My Profile" subtitle="Account, reporting line and daily call target" actionsClass="">
@@ -91,8 +97,11 @@ export default function ProfilePage() {
             <div className="profile-name">{me.name}</div>
             <span className="badge badge-lime badge-lg">{roleLabel(me.role)}</span>
             {editable && (
-              <div style={{ marginTop: 'var(--ds-space-5)' }}>
+              <div style={{ marginTop: 'var(--ds-space-5)', display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <Button className="btn-ink" icon={<Icon name="upload-plain" size="sm" />} onClick={() => document.getElementById('pfPhotoInput').click()}>Change photo</Button>
+                {hasPhoto && (
+                  <Button danger icon={<Icon name="delete" size="sm" />} onClick={onRemovePhoto}>Remove</Button>
+                )}
                 <input id="pfPhotoInput" type="file" accept="image/*" style={{ display: 'none' }} onChange={onPhoto} />
               </div>
             )}

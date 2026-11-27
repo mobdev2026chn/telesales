@@ -90,7 +90,7 @@ const profileCache = new Map(); // id -> { at, emp | null }
 async function currentProfile(id) {
   const hit = profileCache.get(id);
   if (hit && Date.now() - hit.at < PROFILE_TTL_MS) return hit.emp;
-  const emp = await Employee.findOne({ id }).select('id role team name phone managerId managerName').lean();
+  const emp = await Employee.findOne({ id }).select('id role team name phone managerId managerName isActive isBlocked').lean();
   profileCache.set(id, { at: Date.now(), emp: emp || null });
   if (profileCache.size > 5000) profileCache.delete(profileCache.keys().next().value);
   return emp || null;
@@ -106,6 +106,9 @@ async function verifySocketToken(token) {
   if (!payload.sub) throw new Error('Invalid authentication token');
   const emp = await currentProfile(String(payload.sub));
   if (!emp) throw new Error('Account no longer exists');
+  if (emp.isActive === false || emp.isBlocked === true) {
+    throw new Error('Account is deactivated and awaiting admin approval');
+  }
   return {
     id: emp.id,
     sessionId: payload.sid || null,
@@ -150,6 +153,10 @@ async function authenticate(req, res, next) {
         // Account deleted: the token no longer signs anyone in
         req.user = null;
         req.tokenInvalid = true;
+      } else if (emp.isActive === false || emp.isBlocked === true) {
+        req.user = null;
+        req.tokenInvalid = true;
+        req.accountBlocked = true;
       } else {
         req.user.role = normalizeRole(emp.role);
         req.user.team = emp.team || '';
@@ -195,6 +202,13 @@ function requireAuth({ roles = null, legacy = false } = {}) {
         return res.status(403).json({ success: false, message: 'You do not have permission for this action.' });
       }
       return next();
+    }
+    if (req.accountBlocked) {
+      return res.status(403).json({
+        success: false,
+        code: 'ACCOUNT_DEACTIVATED',
+        message: 'Your account has been deactivated due to inactivity. Admin approval is required.',
+      });
     }
     if (legacy && !req.tokenInvalid && legacyGraceEnabled()) {
       req.legacyClient = true;

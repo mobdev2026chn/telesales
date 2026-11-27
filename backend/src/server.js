@@ -32,6 +32,7 @@ const diagnosticsRoutes = require('./routes/diagnostics');
 const demoRoutes = require('./routes/demos');
 const { initializeRealtime } = require('./services/realtime');
 const { startInactivityChecker } = require('./services/inactivityAlerts');
+const { startAccountInactivityChecker } = require('./services/accountInactivity');
 
 // Connect to MongoDB, then create the first admin if (and only if) there is none
 connectDB().then((connected) => {
@@ -210,6 +211,7 @@ const io = new Server(server, {
 app.set('io', io);
 initializeRealtime(io);
 startInactivityChecker(io);
+startAccountInactivityChecker(io);
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Telesales Backend API running on ${PORT}`);

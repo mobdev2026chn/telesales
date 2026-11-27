@@ -429,7 +429,7 @@ class _MoreScreenState extends State<MoreScreen> {
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: AppTheme.greenNeon,
+                              color: AppTheme.ink900,
                               borderRadius: BorderRadius.circular(999),
                               border: Border.all(
                                 color: AppTheme.ink900,
@@ -459,11 +459,11 @@ class _MoreScreenState extends State<MoreScreen> {
                               content: Text(
                                 // The local address is a developer hint: debug builds only
                                 kDebugMode
-                                    ? 'ℹ Admin Web Portal (http://localhost:8080) handles role provisioning.'
+                                    ? 'ℹ Admin Web Portal handles role provisioning.'
                                     : 'ℹ The Admin Web Portal handles role provisioning.',
                                 style: AppTheme.body(
                                   size: 12,
-                                  color: AppTheme.limeYellow,
+                                  color: AppTheme.ink900,
                                 ),
                               ),
                             ),
@@ -710,112 +710,7 @@ class _MoreScreenState extends State<MoreScreen> {
                   const SizedBox(height: 12),
                 ],
 
-                // Card 3: RECORDING STORAGE
-                Builder(
-                  builder: (ctx) {
-                    final count = tele.recordings.length;
-                    final pending = tele.pendingUploadCount;
-
-                    return NeoCard(
-                      backgroundColor: AppTheme.white,
-                      shadowColor: AppTheme.ink900,
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'RECORDING STORAGE',
-                                style: AppTheme.label(
-                                  size: 9,
-                                  color: AppTheme.ink900,
-                                  letterSpacing: 0.18,
-                                ),
-                              ),
-                              Text(
-                                '$count ON SERVER',
-                                style: AppTheme.mono(
-                                  size: 9,
-                                  color: AppTheme.greenDark,
-                                  weight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            pending > 0
-                                ? '$pending recording(s) on this device waiting to upload — retried automatically.'
-                                : 'No recordings waiting to upload.',
-                            style: AppTheme.mono(
-                              size: 10,
-                              color: AppTheme.muted,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 12),
-
-                // Card 4: Sync device call log
-                NeoCard(
-                  backgroundColor: AppTheme.white,
-                  shadowColor: AppTheme.ink900,
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Sync device call log',
-                            style: AppTheme.bodyBold(
-                              size: 15,
-                              color: AppTheme.ink900,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            tele.lastCallSyncAt != null
-                                ? 'Last synced ${DateFormat("h:mm a").format(tele.lastCallSyncAt!)}'
-                                : 'Not synced yet',
-                            style: AppTheme.body(
-                              size: 12,
-                              color: AppTheme.muted,
-                            ),
-                          ),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: const BoxDecoration(
-                              color: AppTheme.greenNeon,
-                              shape: BoxShape.rectangle,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            '• LIVE',
-                            style: AppTheme.label(
-                              size: 9.5,
-                              color: AppTheme.greenNeon,
-                              letterSpacing: 0.1,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 8),
 
                 // Card 5: Centered Compact Logout Button
                 Center(
